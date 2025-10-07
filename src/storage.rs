@@ -43,6 +43,8 @@ mod tests {
         env::temp_dir().join(filename)
     }
 
+    // Storageインスタンスの作成テスト
+    // 指定したパスでStorageが正しく初期化されることを確認
     #[test]
     fn test_storage_new() {
         let test_path = get_test_path("test_gtd.toml");
@@ -50,6 +52,8 @@ mod tests {
         assert_eq!(storage.file_path, test_path);
     }
 
+    // 存在しないファイルの読み込みテスト
+    // ファイルが存在しない場合、空のGtdDataが返されることを確認
     #[test]
     fn test_storage_load_nonexistent_file() {
         let test_path = get_test_path("nonexistent_test_gtd.toml");
@@ -66,6 +70,8 @@ mod tests {
         assert!(data.contexts.is_empty());
     }
 
+    // 空データの保存と読み込みテスト
+    // 空のGtdDataを保存し、読み込んでも空のままであることを確認
     #[test]
     fn test_storage_save_and_load_empty_data() {
         let test_path = get_test_path("test_empty_gtd.toml");
@@ -90,6 +96,8 @@ mod tests {
         let _ = fs::remove_file(&test_path);
     }
 
+    // タスクを含むデータの保存と読み込みテスト
+    // タスクを含むGtdDataを保存し、読み込んで全フィールドが正確に復元されることを確認
     #[test]
     fn test_storage_save_and_load_with_tasks() {
         let test_path = get_test_path("test_tasks_gtd.toml");
@@ -133,6 +141,8 @@ mod tests {
         let _ = fs::remove_file(&test_path);
     }
 
+    // プロジェクトを含むデータの保存と読み込みテスト
+    // プロジェクトを含むGtdDataを保存し、読み込んで全フィールドが正確に復元されることを確認
     #[test]
     fn test_storage_save_and_load_with_projects() {
         let test_path = get_test_path("test_projects_gtd.toml");
@@ -170,6 +180,8 @@ mod tests {
         let _ = fs::remove_file(&test_path);
     }
 
+    // コンテキストを含むデータの保存と読み込みテスト
+    // コンテキストを含むGtdDataを保存し、読み込んで正確に復元されることを確認
     #[test]
     fn test_storage_save_and_load_with_contexts() {
         let test_path = get_test_path("test_contexts_gtd.toml");
@@ -201,6 +213,8 @@ mod tests {
         let _ = fs::remove_file(&test_path);
     }
 
+    // 包括的なデータの保存と読み込みテスト
+    // タスク、プロジェクト、コンテキストを含む完全なGtdDataを保存し、読み込んですべて正確に復元されることを確認
     #[test]
     fn test_storage_save_and_load_comprehensive() {
         let test_path = get_test_path("test_comprehensive_gtd.toml");
@@ -259,6 +273,8 @@ mod tests {
         let _ = fs::remove_file(&test_path);
     }
 
+    // 既存ファイルの上書きテスト
+    // 既存のファイルに新しいデータを保存し、古いデータが上書きされることを確認
     #[test]
     fn test_storage_overwrite_existing_file() {
         let test_path = get_test_path("test_overwrite_gtd.toml");
@@ -305,6 +321,8 @@ mod tests {
         let _ = fs::remove_file(&test_path);
     }
 
+    // 不正なTOMLファイルの読み込みテスト
+    // 無効なTOML形式のファイルを読み込もうとするとエラーが返されることを確認
     #[test]
     fn test_storage_invalid_toml() {
         let test_path = get_test_path("test_invalid_gtd.toml");
@@ -321,6 +339,8 @@ mod tests {
         let _ = fs::remove_file(&test_path);
     }
 
+    // 異なるタスクステータス値の保存と読み込みテスト
+    // 6種類のタスクステータスすべてが正しく保存・読み込みされることを確認
     #[test]
     fn test_storage_different_status_values() {
         let test_path = get_test_path("test_status_gtd.toml");

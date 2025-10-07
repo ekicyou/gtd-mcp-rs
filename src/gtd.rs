@@ -62,6 +62,8 @@ mod tests {
     use super::*;
     use chrono::{Datelike, NaiveDate};
 
+    // GtdDataの新規作成テスト
+    // 空のタスク、プロジェクト、コンテキストのHashMapが初期化されることを確認
     #[test]
     fn test_gtd_data_new() {
         let data = GtdData::new();
@@ -70,6 +72,8 @@ mod tests {
         assert!(data.contexts.is_empty());
     }
 
+    // GtdDataへのタスク挿入テスト
+    // タスクを1つ追加し、正しく格納・取得できることを確認
     #[test]
     fn test_gtd_data_insert_task() {
         let mut data = GtdData::new();
@@ -88,6 +92,8 @@ mod tests {
         assert_eq!(data.tasks.get("task-1").unwrap().title, "Test Task");
     }
 
+    // 複数タスクの挿入テスト
+    // 5つのタスクを追加し、すべて正しく格納されることを確認
     #[test]
     fn test_gtd_data_insert_multiple_tasks() {
         let mut data = GtdData::new();
@@ -108,6 +114,8 @@ mod tests {
         assert_eq!(data.tasks.len(), 5);
     }
 
+    // タスクステータスの更新テスト
+    // タスクのステータスをInboxからNextActionに更新し、正しく反映されることを確認
     #[test]
     fn test_gtd_data_update_task_status() {
         let mut data = GtdData::new();
@@ -135,6 +143,8 @@ mod tests {
         ));
     }
 
+    // タスクの削除テスト
+    // タスクを追加後、削除して正しく削除されることを確認
     #[test]
     fn test_gtd_data_remove_task() {
         let mut data = GtdData::new();
@@ -156,6 +166,8 @@ mod tests {
         assert_eq!(data.tasks.len(), 0);
     }
 
+    // プロジェクトとコンテキスト付きタスクのテスト
+    // プロジェクト、コンテキスト、ノートが正しく設定されることを確認
     #[test]
     fn test_task_with_project_and_context() {
         let task = Task {
@@ -173,6 +185,8 @@ mod tests {
         assert_eq!(task.notes.as_ref().unwrap(), "Test notes");
     }
 
+    // 開始日付付きタスクのテスト
+    // タスクに開始日を設定し、正しく格納されることを確認
     #[test]
     fn test_task_with_start_date() {
         let date = NaiveDate::from_ymd_opt(2024, 12, 25).unwrap();
@@ -189,6 +203,8 @@ mod tests {
         assert_eq!(task.start_date.unwrap(), date);
     }
 
+    // タスクステータスの全バリアントテスト
+    // 6種類のタスクステータス（Inbox、NextAction、WaitingFor、Someday、Done、Trash）がすべて正しく動作することを確認
     #[test]
     fn test_task_status_variants() {
         let statuses = vec![
@@ -222,6 +238,8 @@ mod tests {
         }
     }
 
+    // プロジェクトの作成テスト
+    // プロジェクトを作成し、ID、名前、説明、ステータスが正しく設定されることを確認
     #[test]
     fn test_project_creation() {
         let project = Project {
@@ -237,6 +255,8 @@ mod tests {
         assert!(matches!(project.status, ProjectStatus::Active));
     }
 
+    // 説明なしプロジェクトのテスト
+    // 説明を持たないプロジェクトが正しく作成されることを確認
     #[test]
     fn test_project_without_description() {
         let project = Project {
@@ -249,6 +269,8 @@ mod tests {
         assert!(project.description.is_none());
     }
 
+    // プロジェクトステータスの全バリアントテスト
+    // 3種類のプロジェクトステータス（Active、OnHold、Completed）がすべて正しく動作することを確認
     #[test]
     fn test_project_status_variants() {
         let statuses = vec![
@@ -275,6 +297,8 @@ mod tests {
         }
     }
 
+    // GtdDataへのプロジェクト挿入テスト
+    // プロジェクトを1つ追加し、正しく格納・取得できることを確認
     #[test]
     fn test_gtd_data_insert_project() {
         let mut data = GtdData::new();
@@ -290,6 +314,8 @@ mod tests {
         assert_eq!(data.projects.get("project-1").unwrap().name, "Test Project");
     }
 
+    // プロジェクトステータスの更新テスト
+    // プロジェクトのステータスをActiveからCompletedに更新し、正しく反映されることを確認
     #[test]
     fn test_gtd_data_update_project_status() {
         let mut data = GtdData::new();
@@ -314,6 +340,8 @@ mod tests {
         ));
     }
 
+    // コンテキストの作成テスト
+    // コンテキストを作成し、IDと名前が正しく設定されることを確認
     #[test]
     fn test_context_creation() {
         let context = Context {
@@ -325,6 +353,8 @@ mod tests {
         assert_eq!(context.name, "Office");
     }
 
+    // GtdDataへのコンテキスト挿入テスト
+    // コンテキストを1つ追加し、正しく格納・取得できることを確認
     #[test]
     fn test_gtd_data_insert_context() {
         let mut data = GtdData::new();
@@ -338,6 +368,8 @@ mod tests {
         assert_eq!(data.contexts.get("context-1").unwrap().name, "Office");
     }
 
+    // 複数コンテキストの挿入テスト
+    // 4つのコンテキスト（Office、Home、Phone、Errands）を追加し、すべて正しく格納されることを確認
     #[test]
     fn test_gtd_data_insert_multiple_contexts() {
         let mut data = GtdData::new();
@@ -359,6 +391,8 @@ mod tests {
         assert_eq!(data.contexts.len(), 4);
     }
 
+    // タスクのシリアライゼーションテスト
+    // タスクをTOML形式にシリアライズし、デシリアライズして元のデータと一致することを確認
     #[test]
     fn test_task_serialization() {
         let task = Task {
@@ -382,6 +416,8 @@ mod tests {
         assert_eq!(task.start_date, deserialized.start_date);
     }
 
+    // プロジェクトのシリアライゼーションテスト
+    // プロジェクトをTOML形式にシリアライズし、デシリアライズして元のデータと一致することを確認
     #[test]
     fn test_project_serialization() {
         let project = Project {
@@ -399,6 +435,8 @@ mod tests {
         assert_eq!(project.description, deserialized.description);
     }
 
+    // コンテキストのシリアライゼーションテスト
+    // コンテキストをTOML形式にシリアライズし、デシリアライズして元のデータと一致することを確認
     #[test]
     fn test_context_serialization() {
         let context = Context {
@@ -413,6 +451,8 @@ mod tests {
         assert_eq!(context.name, deserialized.name);
     }
 
+    // GtdData全体のシリアライゼーションテスト
+    // タスク、プロジェクト、コンテキストを含むGtdDataをTOML形式にシリアライズし、デシリアライズして各要素数が一致することを確認
     #[test]
     fn test_gtd_data_serialization() {
         let mut data = GtdData::new();
@@ -450,6 +490,8 @@ mod tests {
         assert_eq!(data.contexts.len(), deserialized.contexts.len());
     }
 
+    // ステータスによるタスクフィルタリングテスト
+    // 複数のステータスを持つタスクを追加し、特定のステータスでフィルタリングできることを確認
     #[test]
     fn test_task_filter_by_status() {
         let mut data = GtdData::new();
@@ -493,6 +535,8 @@ mod tests {
         assert_eq!(done_tasks.len(), 1);
     }
 
+    // プロジェクトによるタスクフィルタリングテスト
+    // 特定のプロジェクトに紐づくタスクのみをフィルタリングできることを確認
     #[test]
     fn test_task_filter_by_project() {
         let mut data = GtdData::new();
@@ -522,6 +566,8 @@ mod tests {
         assert_eq!(project_tasks.len(), 2);
     }
 
+    // コンテキストによるタスクフィルタリングテスト
+    // 特定のコンテキストに紐づくタスクのみをフィルタリングできることを確認
     #[test]
     fn test_task_filter_by_context() {
         let mut data = GtdData::new();
@@ -551,6 +597,8 @@ mod tests {
         assert_eq!(context_tasks.len(), 2);
     }
 
+    // 日付パースのテスト
+    // 文字列形式の日付を正しくパースし、年月日が正確に取得できることを確認
     #[test]
     fn test_date_parsing() {
         let date_str = "2024-12-25";
@@ -563,6 +611,8 @@ mod tests {
         assert_eq!(date.day(), 25);
     }
 
+    // 不正な日付パースのテスト
+    // 無効な月と日を含む日付文字列のパースがエラーになることを確認
     #[test]
     fn test_invalid_date_parsing() {
         let date_str = "2024-13-45"; // Invalid month and day
@@ -570,6 +620,8 @@ mod tests {
         assert!(parsed.is_err());
     }
 
+    // タスクのクローンテスト
+    // タスクをクローンし、元のタスクと同じ内容を持つことを確認
     #[test]
     fn test_task_clone() {
         let task1 = Task {
