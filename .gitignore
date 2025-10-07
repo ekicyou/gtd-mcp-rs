@@ -24,3 +24,6 @@ target
 # Added by cargo
 
 /target
+
+# GTD data file (users should version control this themselves)
+gtd.toml
