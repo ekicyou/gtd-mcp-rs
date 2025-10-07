@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use chrono::NaiveDate;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Task {
@@ -9,6 +10,7 @@ pub struct Task {
     pub project: Option<String>,
     pub context: Option<String>,
     pub notes: Option<String>,
+    pub start_date: Option<NaiveDate>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
