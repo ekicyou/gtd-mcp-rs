@@ -19,7 +19,7 @@ This version uses `mcp-attr` v0.0.7, which provides better cross-platform compat
 ### Components
 
 1. **Data Structures** (`src/gtd.rs`)
-   - `Task`: Represents a GTD task with status (Inbox, NextAction, WaitingFor, Someday, Done)
+   - `Task`: Represents a GTD task with status (Inbox, NextAction, WaitingFor, Someday, Done) and optional start date for calendar management
    - `Project`: Represents a project with status (Active, OnHold, Completed)
    - `Context`: Represents a context (e.g., @office, @home)
    - `GtdData`: Container for all tasks, projects, and contexts
@@ -47,6 +47,7 @@ Adds a new task to the inbox.
 - `project` (optional): Project ID
 - `context` (optional): Context ID
 - `notes` (optional): Additional notes
+- `start_date` (optional): Start date in YYYY-MM-DD format for GTD tickler file workflow
 
 ### list_tasks
 Lists all tasks with optional status filtering.
@@ -80,6 +81,7 @@ status = "Inbox"
 project = "project-id"
 context = "context-id"
 notes = "Some notes"
+start_date = "2024-12-25"
 
 [projects]
 
@@ -125,10 +127,11 @@ Or with the release build:
 - `mcp-attr` (0.0.7): MCP protocol implementation with declarative server building
 - `tokio` (1.x): Async runtime
 - `serde` (1.x): Serialization framework
-- `toml` (0.8): TOML parsing and generation
+- `toml` (0.9): TOML parsing and generation
 - `anyhow` (1.x): Error handling
 - `uuid` (1.x): Unique ID generation
 - `schemars` (0.8): JSON Schema generation
+- `chrono` (0.4): Date and time handling for task start dates
 
 ## Future Enhancements
 
@@ -138,7 +141,7 @@ This is a basic implementation. Potential enhancements include:
 2. Task update and deletion
 3. Project completion tracking
 4. Task dependencies
-5. Due dates and reminders
+5. ~~Due dates and reminders~~ ✅ Start dates implemented for GTD tickler file workflow
 6. Tags and labels
 7. Search and filtering capabilities
 8. Backup and restore functionality

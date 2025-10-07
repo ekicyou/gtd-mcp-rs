@@ -11,6 +11,7 @@ This server now uses `mcp-attr` for better Windows compatibility. Previous versi
 
 - ✅ **Cross-Platform**: Works on Windows, Linux, and macOS
 - Task management (inbox, next actions, waiting for, someday/maybe, done)
+- **Calendar management**: Tasks can have start dates for GTD tickler file workflow
 - Project management
 - Context management
 - TOML-based storage (gtd.toml)
@@ -63,13 +64,15 @@ Add a new task to the inbox.
 - `project` (string, optional): Project ID
 - `context` (string, optional): Context ID
 - `notes` (string, optional): Additional notes
+- `start_date` (string, optional): Start date in YYYY-MM-DD format (for GTD tickler file)
 
 **Example:**
 ```json
 {
   "title": "Review project proposal",
   "project": "proj-123",
-  "context": "ctx-office"
+  "context": "ctx-office",
+  "start_date": "2024-12-25"
 }
 ```
 
@@ -119,6 +122,7 @@ Tasks and projects are stored in `gtd.toml` in the current directory. This file 
 id = "abc-123"
 title = "Review project proposal"
 status = "Inbox"
+start_date = "2024-12-25"
 
 [projects]
 

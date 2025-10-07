@@ -26,5 +26,5 @@ Cargo.lock
 
 /target
 
-# GTD data file (users should version control this themselves)
+# GTD data file (users should version control this themselves if desired)
 gtd.toml

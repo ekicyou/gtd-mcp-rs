@@ -7,6 +7,7 @@ use mcp_attr::{Result as McpResult, bail};
 use std::sync::Mutex;
 use gtd::{GtdData, Task, TaskStatus, Project, ProjectStatus};
 use storage::Storage;
+use chrono::NaiveDate;
 
 struct GtdServerHandler {
     data: Mutex<GtdData>,
@@ -42,7 +43,18 @@ impl McpServer for GtdServerHandler {
         context: Option<String>,
         /// Optional notes
         notes: Option<String>,
+        /// Optional start date (format: YYYY-MM-DD)
+        start_date: Option<String>,
     ) -> McpResult<String> {
+        let parsed_start_date = if let Some(date_str) = start_date {
+            match NaiveDate::parse_from_str(&date_str, "%Y-%m-%d") {
+                Ok(date) => Some(date),
+                Err(_) => bail!("Invalid date format. Use YYYY-MM-DD"),
+            }
+        } else {
+            None
+        };
+
         let task = Task {
             id: uuid::Uuid::new_v4().to_string(),
             title,
@@ -50,6 +62,7 @@ impl McpServer for GtdServerHandler {
             project,
             context,
             notes,
+            start_date: parsed_start_date,
         };
 
         let mut data = self.data.lock().unwrap();
@@ -87,9 +100,12 @@ impl McpServer for GtdServerHandler {
 
         let mut result = String::new();
         for task in tasks {
+            let date_info = task.start_date
+                .map(|d| format!(" [start: {}]", d))
+                .unwrap_or_default();
             result.push_str(&format!(
-                "- [{}] {} (status: {:?})\n",
-                task.id, task.title, task.status
+                "- [{}] {} (status: {:?}){}\n",
+                task.id, task.title, task.status, date_info
             ));
         }
 
