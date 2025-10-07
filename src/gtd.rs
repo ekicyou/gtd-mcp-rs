@@ -41,21 +41,11 @@ pub struct Context {
     pub name: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Default)]
 pub struct GtdData {
     pub tasks: HashMap<String, Task>,
     pub projects: HashMap<String, Project>,
     pub contexts: HashMap<String, Context>,
-}
-
-impl Default for GtdData {
-    fn default() -> Self {
-        Self {
-            tasks: HashMap::new(),
-            projects: HashMap::new(),
-            contexts: HashMap::new(),
-        }
-    }
 }
 
 impl GtdData {
