@@ -4,6 +4,16 @@
 
 This is a basic implementation of a GTD (Getting Things Done) MCP (Model Context Protocol) server in Rust. The server provides task and project management capabilities through MCP tools.
 
+**Version 0.1.0 - Windows Compatible Release**
+
+This version uses `mcp-attr` v0.0.7, which provides better cross-platform compatibility compared to the previous `rust-mcp-sdk`. The new implementation:
+
+- ✅ Works on Windows without Linux-specific dependencies
+- ✅ Uses declarative server building with `#[mcp_server]` and `#[tool]` macros
+- ✅ Simpler, more maintainable code with fewer lines
+- ✅ Automatic JSON Schema generation from function signatures
+- ✅ Full MCP 2025-03-26 protocol support
+
 ## Architecture
 
 ### Components

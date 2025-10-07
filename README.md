@@ -3,13 +3,19 @@ GTD MCP Server
 
 A Model Context Protocol (MCP) server for GTD (Getting Things Done) task management.
 
+**Version 0.1.0 - Cross-Platform Compatible**
+
+This server now uses `mcp-attr` for better Windows compatibility. Previous versions used `rust-mcp-sdk` which had Linux-specific dependencies that prevented Windows builds.
+
 ## Features
 
+- ✅ **Cross-Platform**: Works on Windows, Linux, and macOS
 - Task management (inbox, next actions, waiting for, someday/maybe, done)
 - Project management
 - Context management
 - TOML-based storage (gtd.toml)
 - Git-friendly data format
+- Declarative MCP server implementation with `mcp-attr`
 
 ## Building
 
