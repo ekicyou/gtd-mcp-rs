@@ -4,6 +4,16 @@
 
 This is a basic implementation of a GTD (Getting Things Done) MCP (Model Context Protocol) server in Rust. The server provides task and project management capabilities through MCP tools.
 
+**Version 0.1.0 - Windows Compatible Release**
+
+This version uses `mcp-attr` v0.0.7, which provides better cross-platform compatibility compared to the previous `rust-mcp-sdk`. The new implementation:
+
+- ✅ Works on Windows without Linux-specific dependencies
+- ✅ Uses declarative server building with `#[mcp_server]` and `#[tool]` macros
+- ✅ Simpler, more maintainable code with fewer lines
+- ✅ Automatic JSON Schema generation from function signatures
+- ✅ Full MCP 2025-03-26 protocol support
+
 ## Architecture
 
 ### Components
@@ -20,9 +30,10 @@ This is a basic implementation of a GTD (Getting Things Done) MCP (Model Context
    - Git-friendly format for version control
 
 3. **MCP Server** (`src/main.rs`)
-   - Uses `rust-mcp-sdk` v0.7.0
-   - Implements `ServerHandler` trait
+   - Uses `mcp-attr` v0.0.7 with declarative server building
+   - Implements `McpServer` trait using `#[mcp_server]` macro
    - Provides stdio transport for MCP communication
+   - Uses `#[tool]` attributes for tool registration
 
 ## MCP Tools
 
@@ -111,13 +122,13 @@ Or with the release build:
 
 ## Dependencies
 
-- `rust-mcp-sdk` (0.7.0): MCP protocol implementation
+- `mcp-attr` (0.0.7): MCP protocol implementation with declarative server building
 - `tokio` (1.x): Async runtime
 - `serde` (1.x): Serialization framework
 - `toml` (0.8): TOML parsing and generation
 - `anyhow` (1.x): Error handling
 - `uuid` (1.x): Unique ID generation
-- `async-trait` (0.1): Async trait support
+- `schemars` (0.8): JSON Schema generation
 
 ## Future Enhancements
 
