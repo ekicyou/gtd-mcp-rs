@@ -36,21 +36,27 @@ mod tests {
     use super::*;
     use crate::gtd::{Context, Project, ProjectStatus, Task, TaskStatus};
     use chrono::NaiveDate;
+    use std::env;
     use std::fs;
+
+    fn get_test_path(filename: &str) -> PathBuf {
+        env::temp_dir().join(filename)
+    }
 
     #[test]
     fn test_storage_new() {
-        let storage = Storage::new("/tmp/test_gtd.toml");
-        assert_eq!(storage.file_path, PathBuf::from("/tmp/test_gtd.toml"));
+        let test_path = get_test_path("test_gtd.toml");
+        let storage = Storage::new(&test_path);
+        assert_eq!(storage.file_path, test_path);
     }
 
     #[test]
     fn test_storage_load_nonexistent_file() {
-        let test_path = "/tmp/nonexistent_test_gtd.toml";
+        let test_path = get_test_path("nonexistent_test_gtd.toml");
         // Ensure file doesn't exist
-        let _ = fs::remove_file(test_path);
+        let _ = fs::remove_file(&test_path);
 
-        let storage = Storage::new(test_path);
+        let storage = Storage::new(&test_path);
         let result = storage.load();
 
         assert!(result.is_ok());
@@ -62,11 +68,11 @@ mod tests {
 
     #[test]
     fn test_storage_save_and_load_empty_data() {
-        let test_path = "/tmp/test_empty_gtd.toml";
+        let test_path = get_test_path("test_empty_gtd.toml");
         // Clean up if exists
-        let _ = fs::remove_file(test_path);
+        let _ = fs::remove_file(&test_path);
 
-        let storage = Storage::new(test_path);
+        let storage = Storage::new(&test_path);
         let data = GtdData::new();
 
         let save_result = storage.save(&data);
@@ -81,16 +87,16 @@ mod tests {
         assert!(loaded_data.contexts.is_empty());
 
         // Clean up
-        let _ = fs::remove_file(test_path);
+        let _ = fs::remove_file(&test_path);
     }
 
     #[test]
     fn test_storage_save_and_load_with_tasks() {
-        let test_path = "/tmp/test_tasks_gtd.toml";
+        let test_path = get_test_path("test_tasks_gtd.toml");
         // Clean up if exists
-        let _ = fs::remove_file(test_path);
+        let _ = fs::remove_file(&test_path);
 
-        let storage = Storage::new(test_path);
+        let storage = Storage::new(&test_path);
         let mut data = GtdData::new();
 
         let task = Task {
@@ -124,16 +130,16 @@ mod tests {
         );
 
         // Clean up
-        let _ = fs::remove_file(test_path);
+        let _ = fs::remove_file(&test_path);
     }
 
     #[test]
     fn test_storage_save_and_load_with_projects() {
-        let test_path = "/tmp/test_projects_gtd.toml";
+        let test_path = get_test_path("test_projects_gtd.toml");
         // Clean up if exists
-        let _ = fs::remove_file(test_path);
+        let _ = fs::remove_file(&test_path);
 
-        let storage = Storage::new(test_path);
+        let storage = Storage::new(&test_path);
         let mut data = GtdData::new();
 
         let project = Project {
@@ -161,16 +167,16 @@ mod tests {
         );
 
         // Clean up
-        let _ = fs::remove_file(test_path);
+        let _ = fs::remove_file(&test_path);
     }
 
     #[test]
     fn test_storage_save_and_load_with_contexts() {
-        let test_path = "/tmp/test_contexts_gtd.toml";
+        let test_path = get_test_path("test_contexts_gtd.toml");
         // Clean up if exists
-        let _ = fs::remove_file(test_path);
+        let _ = fs::remove_file(&test_path);
 
-        let storage = Storage::new(test_path);
+        let storage = Storage::new(&test_path);
         let mut data = GtdData::new();
 
         let context = Context {
@@ -192,16 +198,16 @@ mod tests {
         assert_eq!(loaded_context.name, "Office");
 
         // Clean up
-        let _ = fs::remove_file(test_path);
+        let _ = fs::remove_file(&test_path);
     }
 
     #[test]
     fn test_storage_save_and_load_comprehensive() {
-        let test_path = "/tmp/test_comprehensive_gtd.toml";
+        let test_path = get_test_path("test_comprehensive_gtd.toml");
         // Clean up if exists
-        let _ = fs::remove_file(test_path);
+        let _ = fs::remove_file(&test_path);
 
-        let storage = Storage::new(test_path);
+        let storage = Storage::new(&test_path);
         let mut data = GtdData::new();
 
         // Add multiple tasks
@@ -250,16 +256,16 @@ mod tests {
         assert_eq!(loaded_data.contexts.len(), 2);
 
         // Clean up
-        let _ = fs::remove_file(test_path);
+        let _ = fs::remove_file(&test_path);
     }
 
     #[test]
     fn test_storage_overwrite_existing_file() {
-        let test_path = "/tmp/test_overwrite_gtd.toml";
+        let test_path = get_test_path("test_overwrite_gtd.toml");
         // Clean up if exists
-        let _ = fs::remove_file(test_path);
+        let _ = fs::remove_file(&test_path);
 
-        let storage = Storage::new(test_path);
+        let storage = Storage::new(&test_path);
 
         // First save
         let mut data1 = GtdData::new();
@@ -296,31 +302,31 @@ mod tests {
         assert!(!loaded_data.tasks.contains_key("task-1"));
 
         // Clean up
-        let _ = fs::remove_file(test_path);
+        let _ = fs::remove_file(&test_path);
     }
 
     #[test]
     fn test_storage_invalid_toml() {
-        let test_path = "/tmp/test_invalid_gtd.toml";
+        let test_path = get_test_path("test_invalid_gtd.toml");
 
         // Write invalid TOML
-        fs::write(test_path, "this is not valid toml {{{{").unwrap();
+        fs::write(&test_path, "this is not valid toml {{{{").unwrap();
 
-        let storage = Storage::new(test_path);
+        let storage = Storage::new(&test_path);
         let load_result = storage.load();
 
         assert!(load_result.is_err());
 
         // Clean up
-        let _ = fs::remove_file(test_path);
+        let _ = fs::remove_file(&test_path);
     }
 
     #[test]
     fn test_storage_different_status_values() {
-        let test_path = "/tmp/test_status_gtd.toml";
-        let _ = fs::remove_file(test_path);
+        let test_path = get_test_path("test_status_gtd.toml");
+        let _ = fs::remove_file(&test_path);
 
-        let storage = Storage::new(test_path);
+        let storage = Storage::new(&test_path);
         let mut data = GtdData::new();
 
         let statuses = vec![
@@ -351,6 +357,6 @@ mod tests {
         assert_eq!(loaded_data.tasks.len(), 6);
 
         // Clean up
-        let _ = fs::remove_file(test_path);
+        let _ = fs::remove_file(&test_path);
     }
 }
