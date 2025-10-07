@@ -19,7 +19,7 @@ This version uses `mcp-attr` v0.0.7, which provides better cross-platform compat
 ### Components
 
 1. **Data Structures** (`src/gtd.rs`)
-   - `Task`: Represents a GTD task with status (Inbox, NextAction, WaitingFor, Someday, Done) and optional start date for calendar management
+   - `Task`: Represents a GTD task with status (Inbox, NextAction, WaitingFor, Someday, Done, Trash) and optional start date for calendar management
    - `Project`: Represents a project with status (Active, OnHold, Completed)
    - `Context`: Represents a context (e.g., @office, @home)
    - `GtdData`: Container for all tasks, projects, and contexts
@@ -53,7 +53,18 @@ Adds a new task to the inbox.
 Lists all tasks with optional status filtering.
 
 **Parameters:**
-- `status` (optional): Filter by status (Inbox, NextAction, WaitingFor, Someday, Done)
+- `status` (optional): Filter by status (Inbox, NextAction, WaitingFor, Someday, Done, Trash)
+
+### trash_task
+Moves a task to trash.
+
+**Parameters:**
+- `task_id` (required): Task ID to move to trash
+
+### empty_trash
+Permanently deletes all trashed tasks.
+
+**Parameters:** None
 
 ### add_project
 Creates a new project.
@@ -138,7 +149,7 @@ Or with the release build:
 This is a basic implementation. Potential enhancements include:
 
 1. Context management tools (add_context, list_contexts)
-2. Task update and deletion
+2. ~~Task update and deletion~~ ✅ Trash management implemented (move to trash, empty trash)
 3. Project completion tracking
 4. Task dependencies
 5. ~~Due dates and reminders~~ ✅ Start dates implemented for GTD tickler file workflow
