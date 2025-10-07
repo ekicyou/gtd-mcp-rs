@@ -20,6 +20,7 @@ pub enum TaskStatus {
     WaitingFor,
     Someday,
     Done,
+    Trash,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

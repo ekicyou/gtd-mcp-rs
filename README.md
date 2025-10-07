@@ -10,7 +10,8 @@ This server now uses `mcp-attr` for better Windows compatibility. Previous versi
 ## Features
 
 - ✅ **Cross-Platform**: Works on Windows, Linux, and macOS
-- Task management (inbox, next actions, waiting for, someday/maybe, done)
+- Task management (inbox, next actions, waiting for, someday/maybe, done, trash)
+- **Trash management**: Move tasks to trash and bulk delete
 - **Calendar management**: Tasks can have start dates for GTD tickler file workflow
 - Project management
 - Context management
@@ -80,13 +81,36 @@ Add a new task to the inbox.
 List all tasks with optional status filter.
 
 **Parameters:**
-- `status` (string, optional): Filter by status (Inbox, NextAction, WaitingFor, Someday, Done)
+- `status` (string, optional): Filter by status (Inbox, NextAction, WaitingFor, Someday, Done, Trash)
 
 **Example:**
 ```json
 {
   "status": "Inbox"
 }
+```
+
+### trash_task
+Move a task to trash.
+
+**Parameters:**
+- `task_id` (string, required): Task ID to move to trash
+
+**Example:**
+```json
+{
+  "task_id": "abc-123"
+}
+```
+
+### empty_trash
+Permanently delete all trashed tasks.
+
+**Parameters:** None
+
+**Example:**
+```json
+{}
 ```
 
 ### add_project
