@@ -2,12 +2,12 @@ mod gtd;
 mod storage;
 
 use anyhow::Result;
-use mcp_attr::server::{mcp_server, McpServer, serve_stdio};
+use chrono::NaiveDate;
+use gtd::{GtdData, Project, ProjectStatus, Task, TaskStatus};
+use mcp_attr::server::{McpServer, mcp_server, serve_stdio};
 use mcp_attr::{Result as McpResult, bail};
 use std::sync::Mutex;
-use gtd::{GtdData, Task, TaskStatus, Project, ProjectStatus};
 use storage::Storage;
-use chrono::NaiveDate;
 
 struct GtdServerHandler {
     data: Mutex<GtdData>,
@@ -101,7 +101,8 @@ impl McpServer for GtdServerHandler {
 
         let mut result = String::new();
         for task in tasks {
-            let date_info = task.start_date
+            let date_info = task
+                .start_date
                 .map(|d| format!(" [start: {}]", d))
                 .unwrap_or_default();
             result.push_str(&format!(
@@ -121,15 +122,15 @@ impl McpServer for GtdServerHandler {
         task_id: String,
     ) -> McpResult<String> {
         let mut data = self.data.lock().unwrap();
-        
+
         if let Some(task) = data.tasks.get_mut(&task_id) {
             task.status = TaskStatus::Trash;
             drop(data);
-            
+
             if let Err(e) = self.save_data() {
                 bail!("Failed to save: {}", e);
             }
-            
+
             Ok(format!("Task {} moved to trash", task_id))
         } else {
             bail!("Task not found: {}", task_id);
@@ -140,25 +141,26 @@ impl McpServer for GtdServerHandler {
     #[tool]
     async fn empty_trash(&self) -> McpResult<String> {
         let mut data = self.data.lock().unwrap();
-        
-        let trash_tasks: Vec<String> = data.tasks
+
+        let trash_tasks: Vec<String> = data
+            .tasks
             .iter()
             .filter(|(_, task)| matches!(task.status, TaskStatus::Trash))
             .map(|(id, _)| id.clone())
             .collect();
-        
+
         let count = trash_tasks.len();
-        
+
         for task_id in trash_tasks {
             data.tasks.remove(&task_id);
         }
-        
+
         drop(data);
-        
+
         if let Err(e) = self.save_data() {
             bail!("Failed to save: {}", e);
         }
-        
+
         Ok(format!("Deleted {} task(s) from trash", count))
     }
 
@@ -214,4 +216,3 @@ async fn main() -> Result<()> {
     serve_stdio(handler).await?;
     Ok(())
 }
-
