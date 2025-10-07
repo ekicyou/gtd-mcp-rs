@@ -81,7 +81,7 @@ impl McpServer for GtdServerHandler {
     #[tool]
     async fn list_tasks(
         &self,
-        /// Optional status filter (Inbox, NextAction, WaitingFor, Someday, Done)
+        /// Optional status filter (Inbox, NextAction, WaitingFor, Someday, Done, Trash)
         status: Option<String>,
     ) -> McpResult<String> {
         let data = self.data.lock().unwrap();
@@ -94,6 +94,7 @@ impl McpServer for GtdServerHandler {
                 "WaitingFor" => matches!(task.status, TaskStatus::WaitingFor),
                 "Someday" => matches!(task.status, TaskStatus::Someday),
                 "Done" => matches!(task.status, TaskStatus::Done),
+                "Trash" => matches!(task.status, TaskStatus::Trash),
                 _ => true,
             });
         }
@@ -110,6 +111,55 @@ impl McpServer for GtdServerHandler {
         }
 
         Ok(result)
+    }
+
+    /// Move a task to trash
+    #[tool]
+    async fn trash_task(
+        &self,
+        /// Task ID to move to trash
+        task_id: String,
+    ) -> McpResult<String> {
+        let mut data = self.data.lock().unwrap();
+        
+        if let Some(task) = data.tasks.get_mut(&task_id) {
+            task.status = TaskStatus::Trash;
+            drop(data);
+            
+            if let Err(e) = self.save_data() {
+                bail!("Failed to save: {}", e);
+            }
+            
+            Ok(format!("Task {} moved to trash", task_id))
+        } else {
+            bail!("Task not found: {}", task_id);
+        }
+    }
+
+    /// Empty trash - permanently delete all trashed tasks
+    #[tool]
+    async fn empty_trash(&self) -> McpResult<String> {
+        let mut data = self.data.lock().unwrap();
+        
+        let trash_tasks: Vec<String> = data.tasks
+            .iter()
+            .filter(|(_, task)| matches!(task.status, TaskStatus::Trash))
+            .map(|(id, _)| id.clone())
+            .collect();
+        
+        let count = trash_tasks.len();
+        
+        for task_id in trash_tasks {
+            data.tasks.remove(&task_id);
+        }
+        
+        drop(data);
+        
+        if let Err(e) = self.save_data() {
+            bail!("Failed to save: {}", e);
+        }
+        
+        Ok(format!("Deleted {} task(s) from trash", count))
     }
 
     /// Add a new project
