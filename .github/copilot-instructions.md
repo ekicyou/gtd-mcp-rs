@@ -120,12 +120,11 @@ cargo run               # stdio MCPサーバーを起動
 
 ## 依存関係
 
-- **`mcp-attr` (0.0.7)**: 宣言的MCPサーバー構築（クロスプラットフォーム、`rust-mcp-sdk`の代替）
+- **`mcp-attr` (0.0.7)**: 宣言的MCPサーバー構築（クロスプラットフォーム、`rust-mcp-sdk`の代替）。`schemars 0.8`に依存してJSON Schema生成を提供
 - **`tokio`**: MCPサーバー用の非同期ランタイム
 - **`toml` (0.9)**: シリアライゼーション（注：可読性のため`toml::to_string_pretty`を使用）
 - **`chrono`**: `serde`機能付き日付処理
 - **`uuid`**: `v4`機能でタスク/プロジェクトIDを生成
-- **`schemars`**: MCP用のJSON Schema生成
 - **`anyhow`**: コンテキスト付きエラーハンドリング
 
 ## コードスタイルパターン
