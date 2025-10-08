@@ -6,7 +6,9 @@
 
 プロジェクトには以下のCIチェックが自動で実行されます：
 
-### 実行タイミング
+### 1. CI ワークフロー (`.github/workflows/ci.yml`)
+
+#### 実行タイミング
 - mainブランチへのpush時
 - Pull Request作成・更新時
 
@@ -31,6 +33,24 @@
 #### 3. MSRV チェック (msrv)
 - Minimum Supported Rust Version (最小サポートRustバージョン) の検証
 - Edition 2024のため、Rust 1.85.0以上が必要
+
+### 2. セキュリティ監査ワークフロー (`.github/workflows/security-audit.yml`)
+
+#### 実行タイミング
+- 毎日 00:00 UTC に自動実行（スケジュール）
+- 手動実行も可能（workflow_dispatch）
+
+#### チェック内容
+- `cargo audit`: 依存パッケージのセキュリティ脆弱性をチェック
+- 脆弱性が検出された場合、自動的にIssueを作成
+
+### 3. Dependabot (`.github/dependabot.yml`)
+
+#### 機能
+- **Cargo依存パッケージ**: 毎週月曜日に自動チェック
+- **GitHub Actions**: 毎週月曜日に自動チェック
+- セキュリティアップデートは自動的にPRを作成
+- パッチアップデートをグループ化して1つのPRにまとめる
 
 ## Branch Protection ルールの設定方法
 
