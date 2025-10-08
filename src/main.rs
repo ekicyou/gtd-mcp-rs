@@ -55,9 +55,11 @@ impl McpServer for GtdServerHandler {
             None
         };
 
+        let mut data = self.data.lock().unwrap();
+
         let today = local_date_today();
         let task = Task {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: data.generate_task_id(),
             title,
             status: TaskStatus::inbox,
             project,
@@ -67,8 +69,6 @@ impl McpServer for GtdServerHandler {
             created_at: today,
             updated_at: today,
         };
-
-        let mut data = self.data.lock().unwrap();
 
         // Validate references before adding the task
         if !data.validate_task_references(&task) {
@@ -198,14 +198,15 @@ impl McpServer for GtdServerHandler {
         /// Optional project description
         description: Option<String>,
     ) -> McpResult<String> {
+        let mut data = self.data.lock().unwrap();
+
         let project = Project {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: data.generate_project_id(),
             name,
             description,
             status: ProjectStatus::active,
         };
 
-        let mut data = self.data.lock().unwrap();
         let project_id = project.id.clone();
         data.add_project(project);
         drop(data);

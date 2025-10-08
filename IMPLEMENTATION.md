@@ -140,9 +140,31 @@ Or with the release build:
 - `serde` (1.x): Serialization framework
 - `toml` (0.9): TOML parsing and generation
 - `anyhow` (1.x): Error handling
-- `uuid` (1.x): Unique ID generation
+- `uuid` (1.x): Unique ID generation (kept for backward compatibility, but no longer used)
 - `schemars` (0.8): JSON Schema generation
 - `chrono` (0.4): Date and time handling for task start dates
+
+## LLM-Friendly ID Generation
+
+The server uses sequential counter-based IDs instead of UUIDs for better LLM interaction:
+
+- **Task IDs**: `#1`, `#2`, `#3`, ... (2-3 characters, GitHub issue tracker style)
+- **Project IDs**: `project-1`, `project-2`, `project-3`, ... (9-11 characters, descriptive format)
+
+### Benefits:
+- ✅ **94%+ reduction** in character count for task IDs compared to UUIDs (36 chars → 2-3 chars)
+- ✅ **GitHub issue tracker style** for tasks (`#1`, `#2`, `#42`) - instantly familiar
+- ✅ **Descriptive project IDs** (`project-1`) - more readable as projects are fewer
+- ✅ **Human-readable** and easy to remember (`#42` vs `d8f5f3c1-7e4d-4b2a-9f8e-1c2d3e4f5a6b`)
+- ✅ **LLM-friendly** - easier for language models to reference and recall
+- ✅ **Lower token cost** when transmitting task lists to LLMs
+- ✅ **Persistent counters** stored in `gtd.toml` ensure uniqueness across sessions
+
+Example output:
+```
+Old: - [d8f5f3c1-7e4d-4b2a-9f8e-1c2d3e4f5a6b] Complete documentation
+New: - [#1] Complete documentation
+```
 
 ## Future Enhancements
 

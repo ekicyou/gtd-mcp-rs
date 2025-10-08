@@ -78,6 +78,14 @@ pub struct GtdData {
     pub trash: Vec<Task>,
     pub projects: Vec<Project>,
     pub contexts: HashMap<String, Context>,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub task_counter: u32,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub project_counter: u32,
+}
+
+fn is_zero(n: &u32) -> bool {
+    *n == 0
 }
 
 impl<'de> Deserialize<'de> for GtdData {
@@ -103,6 +111,10 @@ impl<'de> Deserialize<'de> for GtdData {
             projects: Vec<Project>,
             #[serde(default)]
             contexts: HashMap<String, Context>,
+            #[serde(default)]
+            task_counter: u32,
+            #[serde(default)]
+            project_counter: u32,
         }
 
         let mut helper = GtdDataHelper::deserialize(deserializer)?;
@@ -141,6 +153,8 @@ impl<'de> Deserialize<'de> for GtdData {
             trash: helper.trash,
             projects: helper.projects,
             contexts: helper.contexts,
+            task_counter: helper.task_counter,
+            project_counter: helper.project_counter,
         })
     }
 }
@@ -148,6 +162,18 @@ impl<'de> Deserialize<'de> for GtdData {
 impl GtdData {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Generate a new unique task ID
+    pub fn generate_task_id(&mut self) -> String {
+        self.task_counter += 1;
+        format!("#{}", self.task_counter)
+    }
+
+    /// Generate a new unique project ID
+    pub fn generate_project_id(&mut self) -> String {
+        self.project_counter += 1;
+        format!("project-{}", self.project_counter)
     }
 
     /// Get a reference to the task list for the given status
@@ -1588,5 +1614,105 @@ name = "Home"
         let deserialized: Task = toml::from_str(&serialized).unwrap();
         assert_eq!(deserialized.created_at, date);
         assert_eq!(deserialized.updated_at, date);
+    }
+
+    // ID生成テスト - タスクIDが連番で生成されることを確認
+    #[test]
+    fn test_generate_task_id() {
+        let mut data = GtdData::new();
+
+        let id1 = data.generate_task_id();
+        let id2 = data.generate_task_id();
+        let id3 = data.generate_task_id();
+
+        assert_eq!(id1, "#1");
+        assert_eq!(id2, "#2");
+        assert_eq!(id3, "#3");
+        assert_eq!(data.task_counter, 3);
+    }
+
+    // ID生成テスト - プロジェクトIDが連番で生成されることを確認
+    #[test]
+    fn test_generate_project_id() {
+        let mut data = GtdData::new();
+
+        let id1 = data.generate_project_id();
+        let id2 = data.generate_project_id();
+        let id3 = data.generate_project_id();
+
+        assert_eq!(id1, "project-1");
+        assert_eq!(id2, "project-2");
+        assert_eq!(id3, "project-3");
+        assert_eq!(data.project_counter, 3);
+    }
+
+    // ID生成テスト - カウンターが独立していることを確認
+    #[test]
+    fn test_task_and_project_counters_independent() {
+        let mut data = GtdData::new();
+
+        let task_id1 = data.generate_task_id();
+        let project_id1 = data.generate_project_id();
+        let task_id2 = data.generate_task_id();
+        let project_id2 = data.generate_project_id();
+
+        assert_eq!(task_id1, "#1");
+        assert_eq!(task_id2, "#2");
+        assert_eq!(project_id1, "project-1");
+        assert_eq!(project_id2, "project-2");
+        assert_eq!(data.task_counter, 2);
+        assert_eq!(data.project_counter, 2);
+    }
+
+    // ID生成テスト - カウンターの永続化を確認
+    #[test]
+    fn test_counter_serialization() {
+        let mut data = GtdData::new();
+
+        // Generate some IDs
+        data.generate_task_id();
+        data.generate_task_id();
+        data.generate_project_id();
+
+        // Serialize
+        let serialized = toml::to_string_pretty(&data).unwrap();
+
+        // Check that counters are in the serialized output
+        assert!(
+            serialized.contains("task_counter = 2"),
+            "task_counter should be serialized"
+        );
+        assert!(
+            serialized.contains("project_counter = 1"),
+            "project_counter should be serialized"
+        );
+
+        // Deserialize
+        let deserialized: GtdData = toml::from_str(&serialized).unwrap();
+        assert_eq!(deserialized.task_counter, 2);
+        assert_eq!(deserialized.project_counter, 1);
+
+        // Next IDs should continue from where we left off
+        let mut data = deserialized;
+        assert_eq!(data.generate_task_id(), "#3");
+        assert_eq!(data.generate_project_id(), "project-2");
+    }
+
+    // ID生成テスト - カウンターが0の場合はTOMLに含まれないことを確認
+    #[test]
+    fn test_counter_skip_serializing_if_zero() {
+        let data = GtdData::new();
+
+        let serialized = toml::to_string_pretty(&data).unwrap();
+
+        // Counters should not appear in serialized output when they are 0
+        assert!(
+            !serialized.contains("task_counter"),
+            "task_counter should not be serialized when 0"
+        );
+        assert!(
+            !serialized.contains("project_counter"),
+            "project_counter should not be serialized when 0"
+        );
     }
 }
