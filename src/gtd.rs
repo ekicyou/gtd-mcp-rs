@@ -6,11 +6,16 @@ use std::collections::HashMap;
 pub struct Task {
     pub id: String,
     pub title: String,
+    #[serde(skip, default = "default_task_status")]
     pub status: TaskStatus,
     pub project: Option<String>,
     pub context: Option<String>,
     pub notes: Option<String>,
     pub start_date: Option<NaiveDate>,
+}
+
+fn default_task_status() -> TaskStatus {
+    TaskStatus::inbox
 }
 
 #[allow(non_camel_case_types)]
@@ -52,7 +57,18 @@ pub struct Context {
 
 #[derive(Debug, Serialize, Default)]
 pub struct GtdData {
-    pub tasks: Vec<Task>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub inbox: Vec<Task>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub next_action: Vec<Task>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub waiting_for: Vec<Task>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub someday: Vec<Task>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub done: Vec<Task>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub trash: Vec<Task>,
     pub projects: Vec<Project>,
     pub contexts: HashMap<String, Context>,
 }
@@ -65,7 +81,17 @@ impl<'de> Deserialize<'de> for GtdData {
         #[derive(Deserialize)]
         struct GtdDataHelper {
             #[serde(default)]
-            tasks: Vec<Task>,
+            inbox: Vec<Task>,
+            #[serde(default)]
+            next_action: Vec<Task>,
+            #[serde(default)]
+            waiting_for: Vec<Task>,
+            #[serde(default)]
+            someday: Vec<Task>,
+            #[serde(default)]
+            done: Vec<Task>,
+            #[serde(default)]
+            trash: Vec<Task>,
             #[serde(default)]
             projects: Vec<Project>,
             #[serde(default)]
@@ -79,8 +105,33 @@ impl<'de> Deserialize<'de> for GtdData {
             context.name = key.clone();
         }
         
+        // Set the status field for each task based on which collection it's in
+        for task in &mut helper.inbox {
+            task.status = TaskStatus::inbox;
+        }
+        for task in &mut helper.next_action {
+            task.status = TaskStatus::next_action;
+        }
+        for task in &mut helper.waiting_for {
+            task.status = TaskStatus::waiting_for;
+        }
+        for task in &mut helper.someday {
+            task.status = TaskStatus::someday;
+        }
+        for task in &mut helper.done {
+            task.status = TaskStatus::done;
+        }
+        for task in &mut helper.trash {
+            task.status = TaskStatus::trash;
+        }
+        
         Ok(GtdData {
-            tasks: helper.tasks,
+            inbox: helper.inbox,
+            next_action: helper.next_action,
+            waiting_for: helper.waiting_for,
+            someday: helper.someday,
+            done: helper.done,
+            trash: helper.trash,
             projects: helper.projects,
             contexts: helper.contexts,
         })
@@ -92,26 +143,91 @@ impl GtdData {
         Self::default()
     }
 
+    /// Get a reference to the task list for the given status
+    #[allow(dead_code)]
+    fn get_task_list(&self, status: &TaskStatus) -> &Vec<Task> {
+        match status {
+            TaskStatus::inbox => &self.inbox,
+            TaskStatus::next_action => &self.next_action,
+            TaskStatus::waiting_for => &self.waiting_for,
+            TaskStatus::someday => &self.someday,
+            TaskStatus::done => &self.done,
+            TaskStatus::trash => &self.trash,
+        }
+    }
+
+    /// Get a mutable reference to the task list for the given status
+    fn get_task_list_mut(&mut self, status: &TaskStatus) -> &mut Vec<Task> {
+        match status {
+            TaskStatus::inbox => &mut self.inbox,
+            TaskStatus::next_action => &mut self.next_action,
+            TaskStatus::waiting_for => &mut self.waiting_for,
+            TaskStatus::someday => &mut self.someday,
+            TaskStatus::done => &mut self.done,
+            TaskStatus::trash => &mut self.trash,
+        }
+    }
+
+    /// Get all task lists as an array of references
+    fn all_task_lists(&self) -> [&Vec<Task>; 6] {
+        [&self.inbox, &self.next_action, &self.waiting_for, &self.someday, &self.done, &self.trash]
+    }
+
+    /// Get all task lists as an array of mutable references
+    fn all_task_lists_mut(&mut self) -> [&mut Vec<Task>; 6] {
+        [&mut self.inbox, &mut self.next_action, &mut self.waiting_for, &mut self.someday, &mut self.done, &mut self.trash]
+    }
+
+    /// Get all tasks as a single vector (for testing and compatibility)
+    #[allow(dead_code)]
+    pub fn all_tasks(&self) -> Vec<&Task> {
+        let mut tasks = Vec::new();
+        for list in self.all_task_lists() {
+            tasks.extend(list.iter());
+        }
+        tasks
+    }
+
+    /// Count total number of tasks across all statuses
+    #[allow(dead_code)]
+    pub fn task_count(&self) -> usize {
+        self.inbox.len() + self.next_action.len() + self.waiting_for.len() 
+            + self.someday.len() + self.done.len() + self.trash.len()
+    }
+
     // Helper methods for task operations
     #[allow(dead_code)]
     pub fn find_task_by_id(&self, id: &str) -> Option<&Task> {
-        self.tasks.iter().find(|t| t.id == id)
+        for list in self.all_task_lists() {
+            if let Some(task) = list.iter().find(|t| t.id == id) {
+                return Some(task);
+            }
+        }
+        None
     }
 
     pub fn find_task_by_id_mut(&mut self, id: &str) -> Option<&mut Task> {
-        self.tasks.iter_mut().find(|t| t.id == id)
+        for list in self.all_task_lists_mut() {
+            if let Some(task) = list.iter_mut().find(|t| t.id == id) {
+                return Some(task);
+            }
+        }
+        None
     }
 
     pub fn add_task(&mut self, task: Task) {
-        self.tasks.push(task);
+        let status = task.status.clone();
+        self.get_task_list_mut(&status).push(task);
     }
 
+    #[allow(dead_code)]
     pub fn remove_task(&mut self, id: &str) -> Option<Task> {
-        if let Some(pos) = self.tasks.iter().position(|t| t.id == id) {
-            Some(self.tasks.remove(pos))
-        } else {
-            None
+        for list in self.all_task_lists_mut() {
+            if let Some(pos) = list.iter().position(|t| t.id == id) {
+                return Some(list.remove(pos));
+            }
         }
+        None
     }
 
     // Helper methods for project operations
@@ -175,7 +291,12 @@ mod tests {
     #[test]
     fn test_gtd_data_new() {
         let data = GtdData::new();
-        assert!(data.tasks.is_empty());
+        assert!(data.inbox.is_empty());
+        assert!(data.next_action.is_empty());
+        assert!(data.waiting_for.is_empty());
+        assert!(data.someday.is_empty());
+        assert!(data.done.is_empty());
+        assert!(data.trash.is_empty());
         assert!(data.projects.is_empty());
         assert!(data.contexts.is_empty());
     }
@@ -196,7 +317,8 @@ mod tests {
         };
 
         data.add_task(task.clone());
-        assert_eq!(data.tasks.len(), 1);
+        assert_eq!(data.task_count(), 1);
+        assert_eq!(data.inbox.len(), 1);
         assert_eq!(data.find_task_by_id("task-1").unwrap().title, "Test Task");
     }
 
@@ -219,7 +341,8 @@ mod tests {
             data.add_task(task);
         }
 
-        assert_eq!(data.tasks.len(), 5);
+        assert_eq!(data.task_count(), 5);
+        assert_eq!(data.inbox.len(), 5);
     }
 
     // タスクステータスの更新テスト
@@ -268,10 +391,12 @@ mod tests {
         };
 
         data.add_task(task);
-        assert_eq!(data.tasks.len(), 1);
+        assert_eq!(data.task_count(), 1);
+        assert_eq!(data.inbox.len(), 1);
 
         data.remove_task(&task_id);
-        assert_eq!(data.tasks.len(), 0);
+        assert_eq!(data.task_count(), 0);
+        assert_eq!(data.inbox.len(), 0);
     }
 
     // プロジェクトとコンテキスト付きタスクのテスト
@@ -610,7 +735,7 @@ mod tests {
         let serialized = toml::to_string(&data).unwrap();
         let deserialized: GtdData = toml::from_str(&serialized).unwrap();
 
-        assert_eq!(data.tasks.len(), deserialized.tasks.len());
+        assert_eq!(data.task_count(), deserialized.task_count());
         assert_eq!(data.projects.len(), deserialized.projects.len());
         assert_eq!(data.contexts.len(), deserialized.contexts.len());
     }
@@ -644,20 +769,13 @@ mod tests {
         }
 
         // Filter by Inbox
-        let inbox_tasks: Vec<_> = data
-            .tasks
-            .iter()
-            .filter(|t| matches!(t.status, TaskStatus::inbox))
-            .collect();
-        assert_eq!(inbox_tasks.len(), 1);
+        assert_eq!(data.inbox.len(), 1);
 
         // Filter by Done
-        let done_tasks: Vec<_> = data
-            .tasks
-            .iter()
-            .filter(|t| matches!(t.status, TaskStatus::done))
-            .collect();
-        assert_eq!(done_tasks.len(), 1);
+        assert_eq!(data.done.len(), 1);
+        
+        // Verify all statuses have exactly one task
+        assert_eq!(data.task_count(), 6);
     }
 
     // プロジェクトによるタスクフィルタリングテスト
@@ -683,8 +801,8 @@ mod tests {
             data.add_task(task);
         }
 
-        let project_tasks: Vec<_> = data
-            .tasks
+        let all_tasks = data.all_tasks();
+        let project_tasks: Vec<_> = all_tasks
             .iter()
             .filter(|t| t.project.as_ref().map_or(false, |p| p == "project-1"))
             .collect();
@@ -714,8 +832,8 @@ mod tests {
             data.add_task(task);
         }
 
-        let context_tasks: Vec<_> = data
-            .tasks
+        let all_tasks = data.all_tasks();
+        let context_tasks: Vec<_> = all_tasks
             .iter()
             .filter(|t| t.context.as_ref().map_or(false, |c| c == "context-1"))
             .collect();
@@ -769,7 +887,10 @@ mod tests {
     // Verify that enum variants are serialized as snake_case in TOML format
     #[test]
     fn test_enum_snake_case_serialization() {
-        let task = Task {
+        let mut data = GtdData::new();
+        
+        // Add a task to next_action to verify the field name is snake_case
+        data.add_task(Task {
             id: "task-1".to_string(),
             title: "Test Task".to_string(),
             status: TaskStatus::next_action,
@@ -777,12 +898,12 @@ mod tests {
             context: None,
             notes: None,
             start_date: None,
-        };
+        });
 
-        let serialized = toml::to_string(&task).unwrap();
+        let serialized = toml::to_string(&data).unwrap();
         assert!(
-            serialized.contains("next_action"),
-            "Expected 'next_action' in TOML output"
+            serialized.contains("[[next_action]]"),
+            "Expected '[[next_action]]' in TOML output"
         );
 
         let project = Project {
@@ -820,8 +941,8 @@ mod tests {
         }
 
         // Verify that tasks maintain insertion order
-        assert_eq!(data.tasks.len(), 5);
-        for (i, task) in data.tasks.iter().enumerate() {
+        assert_eq!(data.inbox.len(), 5);
+        for (i, task) in data.inbox.iter().enumerate() {
             assert_eq!(task.id, format!("task-{}", i + 1));
             assert_eq!(task.title, format!("Task {}", i + 1));
         }
@@ -859,8 +980,8 @@ mod tests {
         let deserialized: GtdData = toml::from_str(&toml_str).unwrap();
 
         // Verify deserialized data maintains insertion order
-        assert_eq!(deserialized.tasks.len(), 3);
-        for (i, task) in deserialized.tasks.iter().enumerate() {
+        assert_eq!(deserialized.inbox.len(), 3);
+        for (i, task) in deserialized.inbox.iter().enumerate() {
             assert_eq!(task.id, format!("task-{}", i + 1));
         }
 
@@ -920,19 +1041,17 @@ mod tests {
         println!("\n=== TOML Output ===\n{}\n===================\n", toml_output);
 
         // 期待されるTOML構造（テキスト完全一致）
-        let expected_toml = r#"[[tasks]]
+        let expected_toml = r#"[[inbox]]
+id = "task-002"
+title = "Quick task"
+
+[[next_action]]
 id = "task-001"
 title = "Complete project documentation"
-status = "next_action"
 project = "project-001"
 context = "Office"
 notes = "Review all sections and update examples"
 start_date = "2024-03-15"
-
-[[tasks]]
-id = "task-002"
-title = "Quick task"
-status = "inbox"
 
 [[projects]]
 id = "project-001"
@@ -951,8 +1070,15 @@ description = "Work environment with desk and computer"
         let deserialized: GtdData = toml::from_str(&toml_output).unwrap();
 
         // 全タスクフィールドを検証
-        assert_eq!(deserialized.tasks.len(), 2);
-        let task1 = &deserialized.tasks[0];
+        assert_eq!(deserialized.inbox.len(), 1);
+        assert_eq!(deserialized.next_action.len(), 1);
+        
+        let task_inbox = &deserialized.inbox[0];
+        assert_eq!(task_inbox.id, "task-002");
+        assert_eq!(task_inbox.title, "Quick task");
+        assert!(matches!(task_inbox.status, TaskStatus::inbox));
+        
+        let task1 = &deserialized.next_action[0];
         assert_eq!(task1.id, "task-001");
         assert_eq!(task1.title, "Complete project documentation");
         assert!(matches!(task1.status, TaskStatus::next_action));
