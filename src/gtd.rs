@@ -116,14 +116,14 @@ impl<'de> Deserialize<'de> for GtdData {
             #[serde(default)]
             project_counter: u32,
         }
-        
+
         let mut helper = GtdDataHelper::deserialize(deserializer)?;
-        
+
         // Populate the name field in each Context from the HashMap key
         for (key, context) in helper.contexts.iter_mut() {
             context.name = key.clone();
         }
-        
+
         // Set the status field for each task based on which collection it's in
         for task in &mut helper.inbox {
             task.status = TaskStatus::inbox;
@@ -143,7 +143,7 @@ impl<'de> Deserialize<'de> for GtdData {
         for task in &mut helper.trash {
             task.status = TaskStatus::trash;
         }
-        
+
         Ok(GtdData {
             inbox: helper.inbox,
             next_action: helper.next_action,
@@ -203,12 +203,26 @@ impl GtdData {
 
     /// Get all task lists as an array of references
     fn all_task_lists(&self) -> [&Vec<Task>; 6] {
-        [&self.inbox, &self.next_action, &self.waiting_for, &self.someday, &self.done, &self.trash]
+        [
+            &self.inbox,
+            &self.next_action,
+            &self.waiting_for,
+            &self.someday,
+            &self.done,
+            &self.trash,
+        ]
     }
 
     /// Get all task lists as an array of mutable references
     fn all_task_lists_mut(&mut self) -> [&mut Vec<Task>; 6] {
-        [&mut self.inbox, &mut self.next_action, &mut self.waiting_for, &mut self.someday, &mut self.done, &mut self.trash]
+        [
+            &mut self.inbox,
+            &mut self.next_action,
+            &mut self.waiting_for,
+            &mut self.someday,
+            &mut self.done,
+            &mut self.trash,
+        ]
     }
 
     /// Get all tasks as a single vector (for testing and compatibility)
@@ -224,8 +238,12 @@ impl GtdData {
     /// Count total number of tasks across all statuses
     #[allow(dead_code)]
     pub fn task_count(&self) -> usize {
-        self.inbox.len() + self.next_action.len() + self.waiting_for.len() 
-            + self.someday.len() + self.done.len() + self.trash.len()
+        self.inbox.len()
+            + self.next_action.len()
+            + self.waiting_for.len()
+            + self.someday.len()
+            + self.done.len()
+            + self.trash.len()
     }
 
     // Helper methods for task operations
@@ -372,8 +390,8 @@ mod tests {
                 context: None,
                 notes: None,
                 start_date: None,
-            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
-            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+                created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+                updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
             };
             data.add_task(task);
         }
@@ -503,8 +521,8 @@ mod tests {
                 context: None,
                 notes: None,
                 start_date: None,
-            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
-            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+                created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+                updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
             };
 
             match status {
@@ -591,7 +609,10 @@ mod tests {
 
         data.add_project(project.clone());
         assert_eq!(data.projects.len(), 1);
-        assert_eq!(data.find_project_by_id("project-1").unwrap().name, "Test Project");
+        assert_eq!(
+            data.find_project_by_id("project-1").unwrap().name,
+            "Test Project"
+        );
     }
 
     // プロジェクトステータスの更新テスト
@@ -643,7 +664,10 @@ mod tests {
         };
 
         assert_eq!(context.name, "Office");
-        assert_eq!(context.description, Some("Work environment with desk and computer".to_string()));
+        assert_eq!(
+            context.description,
+            Some("Work environment with desk and computer".to_string())
+        );
     }
 
     // GtdDataへのコンテキスト挿入テスト
@@ -666,12 +690,7 @@ mod tests {
     #[test]
     fn test_gtd_data_insert_multiple_contexts() {
         let mut data = GtdData::new();
-        let contexts = vec![
-            "Office",
-            "Home",
-            "Phone",
-            "Errands",
-        ];
+        let contexts = vec!["Office", "Home", "Phone", "Errands"];
 
         for name in contexts {
             let context = Context {
@@ -742,8 +761,11 @@ mod tests {
 
         let serialized = toml::to_string(&context).unwrap();
         // name フィールドは serialization でスキップされるため、TOML には含まれない
-        assert!(!serialized.contains("name"), "name field should not be serialized");
-        
+        assert!(
+            !serialized.contains("name"),
+            "name field should not be serialized"
+        );
+
         let deserialized: Context = toml::from_str(&serialized).unwrap();
         // standalone でデシリアライズすると name は空文字列になる（default）
         assert_eq!(deserialized.name, "");
@@ -797,7 +819,7 @@ mod tests {
     fn test_task_filter_by_status() {
         let mut data = GtdData::new();
 
-        let statuses = vec![
+        let statuses = [
             TaskStatus::inbox,
             TaskStatus::next_action,
             TaskStatus::waiting_for,
@@ -815,8 +837,8 @@ mod tests {
                 context: None,
                 notes: None,
                 start_date: None,
-            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
-            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+                created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+                updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
             };
             data.add_task(task);
         }
@@ -826,7 +848,7 @@ mod tests {
 
         // Filter by Done
         assert_eq!(data.done.len(), 1);
-        
+
         // Verify all statuses have exactly one task
         assert_eq!(data.task_count(), 6);
     }
@@ -850,8 +872,8 @@ mod tests {
                 context: None,
                 notes: None,
                 start_date: None,
-            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
-            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+                created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+                updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
             };
             data.add_task(task);
         }
@@ -859,7 +881,7 @@ mod tests {
         let all_tasks = data.all_tasks();
         let project_tasks: Vec<_> = all_tasks
             .iter()
-            .filter(|t| t.project.as_ref().map_or(false, |p| p == "project-1"))
+            .filter(|t| t.project.as_ref().is_some_and(|p| p == "project-1"))
             .collect();
         assert_eq!(project_tasks.len(), 2);
     }
@@ -883,8 +905,8 @@ mod tests {
                 },
                 notes: None,
                 start_date: None,
-            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
-            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+                created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+                updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
             };
             data.add_task(task);
         }
@@ -892,7 +914,7 @@ mod tests {
         let all_tasks = data.all_tasks();
         let context_tasks: Vec<_> = all_tasks
             .iter()
-            .filter(|t| t.context.as_ref().map_or(false, |c| c == "context-1"))
+            .filter(|t| t.context.as_ref().is_some_and(|c| c == "context-1"))
             .collect();
         assert_eq!(context_tasks.len(), 2);
     }
@@ -947,7 +969,7 @@ mod tests {
     #[test]
     fn test_enum_snake_case_serialization() {
         let mut data = GtdData::new();
-        
+
         // Add a task to next_action to verify the field name is snake_case
         data.add_task(Task {
             id: "task-1".to_string(),
@@ -997,8 +1019,8 @@ mod tests {
                 context: None,
                 notes: None,
                 start_date: None,
-            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
-            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+                created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+                updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
             };
             data.add_task(task);
         }
@@ -1027,8 +1049,8 @@ mod tests {
                 context: None,
                 notes: None,
                 start_date: None,
-            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
-            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+                created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+                updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
             });
         }
 
@@ -1107,7 +1129,10 @@ mod tests {
         let toml_output = toml::to_string_pretty(&data).unwrap();
 
         // TOML構造と可読性を確認
-        println!("\n=== TOML Output ===\n{}\n===================\n", toml_output);
+        println!(
+            "\n=== TOML Output ===\n{}\n===================\n",
+            toml_output
+        );
 
         // 期待されるTOML構造（テキスト完全一致）
         let expected_toml = r#"[[inbox]]
@@ -1137,7 +1162,10 @@ description = "Work environment with desk and computer"
 "#;
 
         // TOML出力が期待される形式と完全一致することを確認
-        assert_eq!(toml_output, expected_toml, "TOML output should match expected format");
+        assert_eq!(
+            toml_output, expected_toml,
+            "TOML output should match expected format"
+        );
 
         // デシリアライゼーションが正しく動作することを確認
         let deserialized: GtdData = toml::from_str(&toml_output).unwrap();
@@ -1145,19 +1173,22 @@ description = "Work environment with desk and computer"
         // 全タスクフィールドを検証
         assert_eq!(deserialized.inbox.len(), 1);
         assert_eq!(deserialized.next_action.len(), 1);
-        
+
         let task_inbox = &deserialized.inbox[0];
         assert_eq!(task_inbox.id, "task-002");
         assert_eq!(task_inbox.title, "Quick task");
         assert!(matches!(task_inbox.status, TaskStatus::inbox));
-        
+
         let task1 = &deserialized.next_action[0];
         assert_eq!(task1.id, "task-001");
         assert_eq!(task1.title, "Complete project documentation");
         assert!(matches!(task1.status, TaskStatus::next_action));
         assert_eq!(task1.project, Some("project-001".to_string()));
         assert_eq!(task1.context, Some("Office".to_string()));
-        assert_eq!(task1.notes, Some("Review all sections and update examples".to_string()));
+        assert_eq!(
+            task1.notes,
+            Some("Review all sections and update examples".to_string())
+        );
         assert_eq!(task1.start_date, NaiveDate::from_ymd_opt(2024, 3, 15));
 
         // プロジェクトフィールドを検証
@@ -1165,15 +1196,21 @@ description = "Work environment with desk and computer"
         let project1 = &deserialized.projects[0];
         assert_eq!(project1.id, "project-001");
         assert_eq!(project1.name, "Documentation Project");
-        assert_eq!(project1.description, Some("Comprehensive project documentation update".to_string()));
+        assert_eq!(
+            project1.description,
+            Some("Comprehensive project documentation update".to_string())
+        );
         assert!(matches!(project1.status, ProjectStatus::active));
 
         // コンテキストフィールドを検証
         assert_eq!(deserialized.contexts.len(), 1);
-        
+
         let context_office = deserialized.contexts.get("Office").unwrap();
         assert_eq!(context_office.name, "Office");
-        assert_eq!(context_office.description, Some("Work environment with desk and computer".to_string()));
+        assert_eq!(
+            context_office.description,
+            Some("Work environment with desk and computer".to_string())
+        );
     }
 
     // 後方互換性テスト: 旧形式（nameフィールド付き）のTOMLも正しく読み込めることを確認
@@ -1196,23 +1233,32 @@ name = "Home"
 
         // 旧形式のTOMLを読み込めることを確認
         let deserialized: GtdData = toml::from_str(old_format_toml).unwrap();
-        
+
         assert_eq!(deserialized.contexts.len(), 2);
-        
+
         // Officeコンテキストを検証
         let office = deserialized.contexts.get("Office").unwrap();
         assert_eq!(office.name, "Office");
-        assert_eq!(office.description, Some("Work environment with desk and computer".to_string()));
-        
+        assert_eq!(
+            office.description,
+            Some("Work environment with desk and computer".to_string())
+        );
+
         // Homeコンテキストを検証
         let home = deserialized.contexts.get("Home").unwrap();
         assert_eq!(home.name, "Home");
         assert_eq!(home.description, None);
-        
+
         // 再シリアライズすると新形式（nameフィールドなし）になることを確認
         let reserialized = toml::to_string_pretty(&deserialized).unwrap();
-        assert!(!reserialized.contains("name = \"Office\""), "Reserialized TOML should not contain redundant name field");
-        assert!(!reserialized.contains("name = \"Home\""), "Reserialized TOML should not contain redundant name field");
+        assert!(
+            !reserialized.contains("name = \"Office\""),
+            "Reserialized TOML should not contain redundant name field"
+        );
+        assert!(
+            !reserialized.contains("name = \"Home\""),
+            "Reserialized TOML should not contain redundant name field"
+        );
     }
 
     // 参照整合性検証テスト - プロジェクト参照が有効
@@ -1220,7 +1266,7 @@ name = "Home"
     #[test]
     fn test_validate_task_project_valid() {
         let mut data = GtdData::new();
-        
+
         data.add_project(Project {
             id: "project-1".to_string(),
             name: "Test Project".to_string(),
@@ -1248,7 +1294,7 @@ name = "Home"
     #[test]
     fn test_validate_task_project_invalid() {
         let data = GtdData::new();
-        
+
         let task = Task {
             id: "task-1".to_string(),
             title: "Test Task".to_string(),
@@ -1269,7 +1315,7 @@ name = "Home"
     #[test]
     fn test_validate_task_project_none() {
         let data = GtdData::new();
-        
+
         let task = Task {
             id: "task-1".to_string(),
             title: "Test Task".to_string(),
@@ -1290,7 +1336,7 @@ name = "Home"
     #[test]
     fn test_validate_task_context_valid() {
         let mut data = GtdData::new();
-        
+
         data.add_context(Context {
             name: "Office".to_string(),
             description: None,
@@ -1316,7 +1362,7 @@ name = "Home"
     #[test]
     fn test_validate_task_context_invalid() {
         let data = GtdData::new();
-        
+
         let task = Task {
             id: "task-1".to_string(),
             title: "Test Task".to_string(),
@@ -1337,7 +1383,7 @@ name = "Home"
     #[test]
     fn test_validate_task_context_none() {
         let data = GtdData::new();
-        
+
         let task = Task {
             id: "task-1".to_string(),
             title: "Test Task".to_string(),
@@ -1358,7 +1404,7 @@ name = "Home"
     #[test]
     fn test_validate_task_references_all_valid() {
         let mut data = GtdData::new();
-        
+
         data.add_project(Project {
             id: "project-1".to_string(),
             name: "Test Project".to_string(),
@@ -1391,7 +1437,7 @@ name = "Home"
     #[test]
     fn test_validate_task_references_invalid_project() {
         let mut data = GtdData::new();
-        
+
         data.add_context(Context {
             name: "Office".to_string(),
             description: None,
@@ -1417,7 +1463,7 @@ name = "Home"
     #[test]
     fn test_validate_task_references_invalid_context() {
         let mut data = GtdData::new();
-        
+
         data.add_project(Project {
             id: "project-1".to_string(),
             name: "Test Project".to_string(),
@@ -1445,7 +1491,7 @@ name = "Home"
     #[test]
     fn test_validate_task_references_both_invalid() {
         let data = GtdData::new();
-        
+
         let task = Task {
             id: "task-1".to_string(),
             title: "Test Task".to_string(),
@@ -1489,7 +1535,7 @@ name = "Home"
     fn test_task_updated_at_changes() {
         let created_date = NaiveDate::from_ymd_opt(2024, 3, 15).unwrap();
         let updated_date = NaiveDate::from_ymd_opt(2024, 3, 20).unwrap();
-        
+
         let mut task = Task {
             id: "task-1".to_string(),
             title: "Test Task".to_string(),
@@ -1518,7 +1564,7 @@ name = "Home"
         let mut data = GtdData::new();
         let created_date = NaiveDate::from_ymd_opt(2024, 3, 15).unwrap();
         let task_id = "task-1".to_string();
-        
+
         let task = Task {
             id: task_id.clone(),
             title: "Test Task".to_string(),

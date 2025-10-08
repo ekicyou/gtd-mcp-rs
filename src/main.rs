@@ -69,7 +69,7 @@ impl McpServer for GtdServerHandler {
             created_at: today,
             updated_at: today,
         };
-        
+
         // Validate references before adding the task
         if !data.validate_task_references(&task) {
             let mut errors = Vec::new();
@@ -82,7 +82,7 @@ impl McpServer for GtdServerHandler {
             drop(data);
             bail!("Failed to add task: {}", errors.join(", "));
         }
-        
+
         let task_id = task.id.clone();
         data.add_task(task);
         drop(data);
