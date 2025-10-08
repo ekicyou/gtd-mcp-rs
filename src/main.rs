@@ -3,7 +3,7 @@ mod storage;
 
 use anyhow::Result;
 use chrono::NaiveDate;
-use gtd::{GtdData, Project, ProjectStatus, Task, TaskStatus};
+use gtd::{GtdData, Project, ProjectStatus, Task, TaskStatus, local_date_today};
 use mcp_attr::server::{McpServer, mcp_server, serve_stdio};
 use mcp_attr::{Result as McpResult, bail};
 use std::sync::Mutex;
@@ -55,6 +55,7 @@ impl McpServer for GtdServerHandler {
             None
         };
 
+        let today = local_date_today();
         let task = Task {
             id: uuid::Uuid::new_v4().to_string(),
             title,
@@ -63,6 +64,8 @@ impl McpServer for GtdServerHandler {
             context,
             notes,
             start_date: parsed_start_date,
+            created_at: today,
+            updated_at: today,
         };
 
         let mut data = self.data.lock().unwrap();
@@ -137,8 +140,8 @@ impl McpServer for GtdServerHandler {
                 .map(|d| format!(" [start: {}]", d))
                 .unwrap_or_default();
             result.push_str(&format!(
-                "- [{}] {} (status: {:?}){}\n",
-                task.id, task.title, task.status, date_info
+                "- [{}] {} (status: {:?}){} [created: {}, updated: {}]\n",
+                task.id, task.title, task.status, date_info, task.created_at, task.updated_at
             ));
         }
 
@@ -156,6 +159,7 @@ impl McpServer for GtdServerHandler {
 
         if let Some(task) = data.find_task_by_id_mut(&task_id) {
             task.status = TaskStatus::trash;
+            task.updated_at = local_date_today();
             drop(data);
 
             if let Err(e) = self.save_data() {

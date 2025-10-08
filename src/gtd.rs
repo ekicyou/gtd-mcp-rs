@@ -1,4 +1,4 @@
-use chrono::NaiveDate;
+use chrono::{Local, NaiveDate};
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::HashMap;
 
@@ -12,10 +12,17 @@ pub struct Task {
     pub context: Option<String>,
     pub notes: Option<String>,
     pub start_date: Option<NaiveDate>,
+    pub created_at: NaiveDate,
+    pub updated_at: NaiveDate,
 }
 
 fn default_task_status() -> TaskStatus {
     TaskStatus::inbox
+}
+
+/// Get the current date in local timezone
+pub fn local_date_today() -> NaiveDate {
+    Local::now().date_naive()
 }
 
 #[allow(non_camel_case_types)]
@@ -314,6 +321,8 @@ mod tests {
             context: None,
             notes: None,
             start_date: None,
+            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
         };
 
         data.add_task(task.clone());
@@ -337,6 +346,8 @@ mod tests {
                 context: None,
                 notes: None,
                 start_date: None,
+            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
             };
             data.add_task(task);
         }
@@ -359,6 +370,8 @@ mod tests {
             context: None,
             notes: None,
             start_date: None,
+            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
         };
 
         data.add_task(task);
@@ -388,6 +401,8 @@ mod tests {
             context: None,
             notes: None,
             start_date: None,
+            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
         };
 
         data.add_task(task);
@@ -411,6 +426,8 @@ mod tests {
             context: Some("context-1".to_string()),
             notes: Some("Test notes".to_string()),
             start_date: None,
+            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
         };
 
         assert_eq!(task.project.as_ref().unwrap(), "project-1");
@@ -431,6 +448,8 @@ mod tests {
             context: None,
             notes: None,
             start_date: Some(date),
+            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
         };
 
         assert_eq!(task.start_date.unwrap(), date);
@@ -458,6 +477,8 @@ mod tests {
                 context: None,
                 notes: None,
                 start_date: None,
+            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
             };
 
             match status {
@@ -649,6 +670,8 @@ mod tests {
             context: Some("context-1".to_string()),
             notes: Some("Test notes".to_string()),
             start_date: NaiveDate::from_ymd_opt(2024, 12, 25),
+            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
         };
 
         let serialized = toml::to_string(&task).unwrap();
@@ -715,6 +738,8 @@ mod tests {
             context: None,
             notes: None,
             start_date: None,
+            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
         };
         data.add_task(task);
 
@@ -764,6 +789,8 @@ mod tests {
                 context: None,
                 notes: None,
                 start_date: None,
+            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
             };
             data.add_task(task);
         }
@@ -797,6 +824,8 @@ mod tests {
                 context: None,
                 notes: None,
                 start_date: None,
+            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
             };
             data.add_task(task);
         }
@@ -828,6 +857,8 @@ mod tests {
                 },
                 notes: None,
                 start_date: None,
+            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
             };
             data.add_task(task);
         }
@@ -875,6 +906,8 @@ mod tests {
             context: Some("context-1".to_string()),
             notes: Some("Test notes".to_string()),
             start_date: NaiveDate::from_ymd_opt(2024, 12, 25),
+            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
         };
 
         let task2 = task1.clone();
@@ -898,6 +931,8 @@ mod tests {
             context: None,
             notes: None,
             start_date: None,
+            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
         });
 
         let serialized = toml::to_string(&data).unwrap();
@@ -936,6 +971,8 @@ mod tests {
                 context: None,
                 notes: None,
                 start_date: None,
+            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
             };
             data.add_task(task);
         }
@@ -964,6 +1001,8 @@ mod tests {
                 context: None,
                 notes: None,
                 start_date: None,
+            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
             });
         }
 
@@ -1007,6 +1046,8 @@ mod tests {
             context: Some("Office".to_string()),
             notes: Some("Review all sections and update examples".to_string()),
             start_date: NaiveDate::from_ymd_opt(2024, 3, 15),
+            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
         });
 
         // 最小限のフィールドを設定したタスクを追加（比較用）
@@ -1018,6 +1059,8 @@ mod tests {
             context: None,
             notes: None,
             start_date: None,
+            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
         });
 
         // 全フィールドを設定したプロジェクトを追加
@@ -1044,6 +1087,8 @@ mod tests {
         let expected_toml = r#"[[inbox]]
 id = "task-002"
 title = "Quick task"
+created_at = "2024-01-01"
+updated_at = "2024-01-01"
 
 [[next_action]]
 id = "task-001"
@@ -1052,6 +1097,8 @@ project = "project-001"
 context = "Office"
 notes = "Review all sections and update examples"
 start_date = "2024-03-15"
+created_at = "2024-01-01"
+updated_at = "2024-01-01"
 
 [[projects]]
 id = "project-001"
@@ -1163,6 +1210,8 @@ name = "Home"
             context: None,
             notes: None,
             start_date: None,
+            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
         };
 
         assert!(data.validate_task_project(&task));
@@ -1182,6 +1231,8 @@ name = "Home"
             context: None,
             notes: None,
             start_date: None,
+            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
         };
 
         assert!(!data.validate_task_project(&task));
@@ -1201,6 +1252,8 @@ name = "Home"
             context: None,
             notes: None,
             start_date: None,
+            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
         };
 
         assert!(data.validate_task_project(&task));
@@ -1225,6 +1278,8 @@ name = "Home"
             context: Some("Office".to_string()),
             notes: None,
             start_date: None,
+            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
         };
 
         assert!(data.validate_task_context(&task));
@@ -1244,6 +1299,8 @@ name = "Home"
             context: Some("NonExistent".to_string()),
             notes: None,
             start_date: None,
+            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
         };
 
         assert!(!data.validate_task_context(&task));
@@ -1263,6 +1320,8 @@ name = "Home"
             context: None,
             notes: None,
             start_date: None,
+            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
         };
 
         assert!(data.validate_task_context(&task));
@@ -1294,6 +1353,8 @@ name = "Home"
             context: Some("Office".to_string()),
             notes: None,
             start_date: None,
+            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
         };
 
         assert!(data.validate_task_references(&task));
@@ -1318,6 +1379,8 @@ name = "Home"
             context: Some("Office".to_string()),
             notes: None,
             start_date: None,
+            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
         };
 
         assert!(!data.validate_task_references(&task));
@@ -1344,6 +1407,8 @@ name = "Home"
             context: Some("NonExistent".to_string()),
             notes: None,
             start_date: None,
+            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
         };
 
         assert!(!data.validate_task_references(&task));
@@ -1363,8 +1428,119 @@ name = "Home"
             context: Some("NonExistent".to_string()),
             notes: None,
             start_date: None,
+            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
         };
 
         assert!(!data.validate_task_references(&task));
+    }
+
+    // 作成日と更新日のテスト
+    // タスクが作成されたとき、created_atとupdated_atが同じ日付に設定されることを確認
+    #[test]
+    fn test_task_created_at_and_updated_at() {
+        let date = NaiveDate::from_ymd_opt(2024, 3, 15).unwrap();
+        let task = Task {
+            id: "task-1".to_string(),
+            title: "Test Task".to_string(),
+            status: TaskStatus::inbox,
+            project: None,
+            context: None,
+            notes: None,
+            start_date: None,
+            created_at: date,
+            updated_at: date,
+        };
+
+        assert_eq!(task.created_at, date);
+        assert_eq!(task.updated_at, date);
+        assert_eq!(task.created_at, task.updated_at);
+    }
+
+    // 更新日の変更テスト
+    // タスクが更新されたとき、updated_atが変更されることを確認
+    #[test]
+    fn test_task_updated_at_changes() {
+        let created_date = NaiveDate::from_ymd_opt(2024, 3, 15).unwrap();
+        let updated_date = NaiveDate::from_ymd_opt(2024, 3, 20).unwrap();
+        
+        let mut task = Task {
+            id: "task-1".to_string(),
+            title: "Test Task".to_string(),
+            status: TaskStatus::inbox,
+            project: None,
+            context: None,
+            notes: None,
+            start_date: None,
+            created_at: created_date,
+            updated_at: created_date,
+        };
+
+        // タスクを更新
+        task.status = TaskStatus::next_action;
+        task.updated_at = updated_date;
+
+        assert_eq!(task.created_at, created_date);
+        assert_eq!(task.updated_at, updated_date);
+        assert_ne!(task.created_at, task.updated_at);
+    }
+
+    // 作成日は変更されないことを確認するテスト
+    // タスクのステータスが変更されても、created_atは変更されないことを確認
+    #[test]
+    fn test_task_created_at_immutable() {
+        let mut data = GtdData::new();
+        let created_date = NaiveDate::from_ymd_opt(2024, 3, 15).unwrap();
+        let task_id = "task-1".to_string();
+        
+        let task = Task {
+            id: task_id.clone(),
+            title: "Test Task".to_string(),
+            status: TaskStatus::inbox,
+            project: None,
+            context: None,
+            notes: None,
+            start_date: None,
+            created_at: created_date,
+            updated_at: created_date,
+        };
+
+        data.add_task(task);
+
+        // タスクのステータスを更新
+        if let Some(task) = data.find_task_by_id_mut(&task_id) {
+            task.status = TaskStatus::next_action;
+            task.updated_at = NaiveDate::from_ymd_opt(2024, 3, 20).unwrap();
+        }
+
+        // created_atは変更されていないことを確認
+        let task = data.find_task_by_id(&task_id).unwrap();
+        assert_eq!(task.created_at, created_date);
+        assert_ne!(task.updated_at, created_date);
+    }
+
+    // TOML シリアライゼーションに作成日と更新日が含まれることを確認
+    #[test]
+    fn test_task_dates_serialization() {
+        let date = NaiveDate::from_ymd_opt(2024, 3, 15).unwrap();
+        let task = Task {
+            id: "task-1".to_string(),
+            title: "Test Task".to_string(),
+            status: TaskStatus::inbox,
+            project: None,
+            context: None,
+            notes: None,
+            start_date: None,
+            created_at: date,
+            updated_at: date,
+        };
+
+        let serialized = toml::to_string(&task).unwrap();
+        assert!(serialized.contains("created_at = \"2024-03-15\""));
+        assert!(serialized.contains("updated_at = \"2024-03-15\""));
+
+        let deserialized: Task = toml::from_str(&serialized).unwrap();
+        assert_eq!(deserialized.created_at, date);
+        assert_eq!(deserialized.updated_at, date);
     }
 }
