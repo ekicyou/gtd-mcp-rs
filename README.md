@@ -66,6 +66,17 @@ cargo test
 
 See [BRANCH_PROTECTION.md](BRANCH_PROTECTION.md) for details on CI/CD and branch protection setup.
 
+## CI/CD
+
+This project uses GitHub Actions for continuous integration:
+
+- **Automated testing** on Linux, macOS, and Windows
+- **Code quality checks** (formatting, linting)
+- **Daily security audits** with cargo audit
+- **Automated dependency updates** via Dependabot
+
+See [CI_SUMMARY.md](CI_SUMMARY.md) for a complete overview of the CI/CD infrastructure.
+
 ## Usage
 
 The server uses stdio transport and can be integrated with MCP clients:
