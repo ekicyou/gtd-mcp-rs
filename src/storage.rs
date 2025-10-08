@@ -115,6 +115,8 @@ mod tests {
             context: Some("context-1".to_string()),
             notes: Some("Test notes".to_string()),
             start_date: NaiveDate::from_ymd_opt(2024, 12, 25),
+            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
         };
         data.add_task(task.clone());
 
@@ -234,6 +236,8 @@ mod tests {
                 context: None,
                 notes: None,
                 start_date: None,
+            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
             };
             data.add_task(task);
         }
@@ -293,6 +297,8 @@ mod tests {
             context: None,
             notes: None,
             start_date: None,
+            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
         };
         data1.add_task(task1);
         storage.save(&data1).unwrap();
@@ -307,6 +313,8 @@ mod tests {
             context: None,
             notes: None,
             start_date: None,
+            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
         };
         data2.add_task(task2);
         storage.save(&data2).unwrap();
@@ -367,6 +375,8 @@ mod tests {
                 context: None,
                 notes: None,
                 start_date: None,
+            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
             };
             data.add_task(task);
         }
