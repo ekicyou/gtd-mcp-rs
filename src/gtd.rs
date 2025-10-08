@@ -43,6 +43,7 @@ pub enum ProjectStatus {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Context {
     pub name: String,
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Default)]
@@ -395,9 +396,24 @@ mod tests {
     fn test_context_creation() {
         let context = Context {
             name: "Office".to_string(),
+            description: None,
         };
 
         assert_eq!(context.name, "Office");
+        assert_eq!(context.description, None);
+    }
+
+    // コンテキストの説明付き作成テスト
+    // 説明フィールドを持つコンテキストが正しく作成されることを確認
+    #[test]
+    fn test_context_with_description() {
+        let context = Context {
+            name: "Office".to_string(),
+            description: Some("Work environment with desk and computer".to_string()),
+        };
+
+        assert_eq!(context.name, "Office");
+        assert_eq!(context.description, Some("Work environment with desk and computer".to_string()));
     }
 
     // GtdDataへのコンテキスト挿入テスト
@@ -407,6 +423,7 @@ mod tests {
         let mut data = GtdData::new();
         let context = Context {
             name: "Office".to_string(),
+            description: None,
         };
 
         data.add_context(context.clone());
@@ -429,6 +446,7 @@ mod tests {
         for name in contexts {
             let context = Context {
                 name: name.to_string(),
+                description: None,
             };
             data.add_context(context);
         }
@@ -486,6 +504,7 @@ mod tests {
     fn test_context_serialization() {
         let context = Context {
             name: "Office".to_string(),
+            description: None,
         };
 
         let serialized = toml::to_string(&context).unwrap();
@@ -521,6 +540,7 @@ mod tests {
 
         let context = Context {
             name: "Office".to_string(),
+            description: None,
         };
         data.add_context(context);
 
@@ -823,9 +843,15 @@ mod tests {
             status: ProjectStatus::active,
         });
 
-        // Add a context
+        // Add contexts - one without and one with description
         data.add_context(Context {
             name: "Office".to_string(),
+            description: None,
+        });
+
+        data.add_context(Context {
+            name: "Home".to_string(),
+            description: Some("Personal workspace for evening tasks".to_string()),
         });
 
         // Generate TOML output
@@ -854,6 +880,10 @@ id = "project-001"
 name = "Documentation Project"
 description = "Comprehensive project documentation update"
 status = "active"
+
+[contexts.Home]
+name = "Home"
+description = "Personal workspace for evening tasks"
 
 [contexts.Office]
 name = "Office"
@@ -885,8 +915,14 @@ name = "Office"
         assert!(matches!(project1.status, ProjectStatus::active));
 
         // Verify context fields
-        assert_eq!(deserialized.contexts.len(), 1);
-        let context1 = deserialized.contexts.get("Office").unwrap();
-        assert_eq!(context1.name, "Office");
+        assert_eq!(deserialized.contexts.len(), 2);
+        
+        let context_office = deserialized.contexts.get("Office").unwrap();
+        assert_eq!(context_office.name, "Office");
+        assert_eq!(context_office.description, None);
+        
+        let context_home = deserialized.contexts.get("Home").unwrap();
+        assert_eq!(context_home.name, "Home");
+        assert_eq!(context_home.description, Some("Personal workspace for evening tasks".to_string()));
     }
 }

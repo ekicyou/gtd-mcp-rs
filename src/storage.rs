@@ -193,6 +193,7 @@ mod tests {
 
         let context = Context {
             name: "Office".to_string(),
+            description: None,
         };
         data.add_context(context.clone());
 
@@ -252,6 +253,7 @@ mod tests {
         for i in 1..=2 {
             let context = Context {
                 name: format!("Context {}", i),
+                description: None,
             };
             data.add_context(context);
         }
