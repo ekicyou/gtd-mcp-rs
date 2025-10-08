@@ -81,12 +81,12 @@ Add a new task to the inbox.
 List all tasks with optional status filter.
 
 **Parameters:**
-- `status` (string, optional): Filter by status (Inbox, NextAction, WaitingFor, Someday, Done, Trash)
+- `status` (string, optional): Filter by status (inbox, next_action, waiting_for, someday, done, trash)
 
 **Example:**
 ```json
 {
-  "status": "Inbox"
+  "status": "inbox"
 }
 ```
 

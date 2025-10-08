@@ -110,7 +110,7 @@ mod tests {
         let task = Task {
             id: "task-1".to_string(),
             title: "Test Task".to_string(),
-            status: TaskStatus::Inbox,
+            status: TaskStatus::inbox,
             project: Some("project-1".to_string()),
             context: Some("context-1".to_string()),
             notes: Some("Test notes".to_string()),
@@ -156,7 +156,7 @@ mod tests {
             id: "project-1".to_string(),
             name: "Test Project".to_string(),
             description: Some("Test description".to_string()),
-            status: ProjectStatus::Active,
+            status: ProjectStatus::active,
         };
         data.projects.insert(project.id.clone(), project.clone());
 
@@ -229,7 +229,7 @@ mod tests {
             let task = Task {
                 id: format!("task-{}", i),
                 title: format!("Task {}", i),
-                status: TaskStatus::Inbox,
+                status: TaskStatus::inbox,
                 project: None,
                 context: None,
                 notes: None,
@@ -244,7 +244,7 @@ mod tests {
                 id: format!("project-{}", i),
                 name: format!("Project {}", i),
                 description: None,
-                status: ProjectStatus::Active,
+                status: ProjectStatus::active,
             };
             data.projects.insert(project.id.clone(), project);
         }
@@ -288,7 +288,7 @@ mod tests {
         let task1 = Task {
             id: "task-1".to_string(),
             title: "Original Task".to_string(),
-            status: TaskStatus::Inbox,
+            status: TaskStatus::inbox,
             project: None,
             context: None,
             notes: None,
@@ -302,7 +302,7 @@ mod tests {
         let task2 = Task {
             id: "task-2".to_string(),
             title: "New Task".to_string(),
-            status: TaskStatus::NextAction,
+            status: TaskStatus::next_action,
             project: None,
             context: None,
             notes: None,
@@ -350,12 +350,12 @@ mod tests {
         let mut data = GtdData::new();
 
         let statuses = vec![
-            TaskStatus::Inbox,
-            TaskStatus::NextAction,
-            TaskStatus::WaitingFor,
-            TaskStatus::Someday,
-            TaskStatus::Done,
-            TaskStatus::Trash,
+            TaskStatus::inbox,
+            TaskStatus::next_action,
+            TaskStatus::waiting_for,
+            TaskStatus::someday,
+            TaskStatus::done,
+            TaskStatus::trash,
         ];
 
         for (i, status) in statuses.iter().enumerate() {

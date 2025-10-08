@@ -58,7 +58,7 @@ impl McpServer for GtdServerHandler {
         let task = Task {
             id: uuid::Uuid::new_v4().to_string(),
             title,
-            status: TaskStatus::Inbox,
+            status: TaskStatus::inbox,
             project,
             context,
             notes,
@@ -81,7 +81,7 @@ impl McpServer for GtdServerHandler {
     #[tool]
     async fn list_tasks(
         &self,
-        /// Optional status filter (Inbox, NextAction, WaitingFor, Someday, Done, Trash)
+        /// Optional status filter (inbox, next_action, waiting_for, someday, done, trash)
         status: Option<String>,
     ) -> McpResult<String> {
         let data = self.data.lock().unwrap();
@@ -89,12 +89,12 @@ impl McpServer for GtdServerHandler {
 
         if let Some(status_str) = status {
             tasks.retain(|task| match status_str.as_str() {
-                "Inbox" => matches!(task.status, TaskStatus::Inbox),
-                "NextAction" => matches!(task.status, TaskStatus::NextAction),
-                "WaitingFor" => matches!(task.status, TaskStatus::WaitingFor),
-                "Someday" => matches!(task.status, TaskStatus::Someday),
-                "Done" => matches!(task.status, TaskStatus::Done),
-                "Trash" => matches!(task.status, TaskStatus::Trash),
+                "inbox" => matches!(task.status, TaskStatus::inbox),
+                "next_action" => matches!(task.status, TaskStatus::next_action),
+                "waiting_for" => matches!(task.status, TaskStatus::waiting_for),
+                "someday" => matches!(task.status, TaskStatus::someday),
+                "done" => matches!(task.status, TaskStatus::done),
+                "trash" => matches!(task.status, TaskStatus::trash),
                 _ => true,
             });
         }
@@ -124,7 +124,7 @@ impl McpServer for GtdServerHandler {
         let mut data = self.data.lock().unwrap();
 
         if let Some(task) = data.tasks.get_mut(&task_id) {
-            task.status = TaskStatus::Trash;
+            task.status = TaskStatus::trash;
             drop(data);
 
             if let Err(e) = self.save_data() {
@@ -145,7 +145,7 @@ impl McpServer for GtdServerHandler {
         let trash_tasks: Vec<String> = data
             .tasks
             .iter()
-            .filter(|(_, task)| matches!(task.status, TaskStatus::Trash))
+            .filter(|(_, task)| matches!(task.status, TaskStatus::trash))
             .map(|(id, _)| id.clone())
             .collect();
 
@@ -177,7 +177,7 @@ impl McpServer for GtdServerHandler {
             id: uuid::Uuid::new_v4().to_string(),
             name,
             description,
-            status: ProjectStatus::Active,
+            status: ProjectStatus::active,
         };
 
         let mut data = self.data.lock().unwrap();
