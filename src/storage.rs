@@ -236,8 +236,8 @@ mod tests {
                 context: None,
                 notes: None,
                 start_date: None,
-            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
-            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+                created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+                updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
             };
             data.add_task(task);
         }
@@ -357,7 +357,7 @@ mod tests {
         let storage = Storage::new(&test_path);
         let mut data = GtdData::new();
 
-        let statuses = vec![
+        let statuses = [
             TaskStatus::inbox,
             TaskStatus::next_action,
             TaskStatus::waiting_for,
@@ -375,8 +375,8 @@ mod tests {
                 context: None,
                 notes: None,
                 start_date: None,
-            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
-            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+                created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+                updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
             };
             data.add_task(task);
         }
