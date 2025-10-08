@@ -1,19 +1,31 @@
-# gtd-mcp-rs Coding Instructions
+# gtd-mcp-rs コーディング規約
 
-## Architecture Overview
+## アーキテクチャ概要
 
-This is an MCP (Model Context Protocol) server implementing GTD (Getting Things Done) task management in Rust. The architecture follows a three-layer pattern:
+RustでGTD（Getting Things Done）タスク管理を実装するMCP（Model Context Protocol）サーバーです。3層アーキテクチャパターンに従っています：
 
-- **`src/main.rs`**: MCP server handler using `mcp-attr` declarative macros (`#[mcp_server]`, `#[tool]`)
-- **`src/gtd.rs`**: Core domain models (`Task`, `Project`, `Context`, `GtdData`) with TOML serialization
-- **`src/storage.rs`**: File persistence layer for `gtd.toml` storage
+- **`src/main.rs`**: `mcp-attr`の宣言的マクロ（`#[mcp_server]`、`#[tool]`）を使用したMCPサーバーハンドラー
+- **`src/gtd.rs`**: TOMLシリアライゼーションを持つコアドメインモデル（`Task`、`Project`、`Context`、`GtdData`）
+- **`src/storage.rs`**: `gtd.toml`ストレージのファイル永続化層
 
-Data flow: MCP client → stdio → `GtdServerHandler` → `GtdData` (in-memory) → `Storage` → `gtd.toml` file
+データフロー: MCPクライアント → stdio → `GtdServerHandler` → `GtdData`（インメモリ） → `Storage` → `gtd.toml`ファイル
 
-## Critical Implementation Details
+## ドキュメントと言語の規約
 
-### Enum Naming Convention
-**Important**: All enums use snake_case variants (not PascalCase) to match TOML serialization:
+**重要**: このプロジェクトでは以下の言語使い分けルールに従ってください：
+
+- **README.md**: 英語で記述（国際的な可読性のため）
+- **ソースコード内のdocコメント**: 英語で記述（`///`コメント、`//!`コメント）
+- **テストコード内のコメント**: 日本語でも可（例：`// 既存ファイルの上書きテスト`）
+- **コミットメッセージ**: 英語推奨だが日本語も可
+- **AIへの指示**: 日本語で構いません（このガイドラインは日本語で記述されています）
+
+クラス名、関数名、変数名は英語で記述してください。
+
+## 重要な実装の詳細
+
+### Enum命名規則
+**重要**: 全てのenumはTOMLシリアライゼーションに合わせてsnake_case形式を使用します（PascalCaseではありません）：
 ```rust
 #[allow(non_camel_case_types)]
 pub enum TaskStatus {
@@ -25,17 +37,17 @@ pub enum TaskStatus {
     trash,
 }
 ```
-This is enforced by tests (e.g., `test_enum_snake_case_serialization`) and must be preserved.
+これはテスト（例：`test_enum_snake_case_serialization`）で強制されており、必ず守る必要があります。
 
-### MCP Tool Implementation Pattern
-All MCP tools follow this pattern:
-1. Lock the mutex: `let mut data = self.data.lock().unwrap();`
-2. Perform operation on `GtdData`
-3. Drop the lock: `drop(data);`
-4. Save to disk: `self.save_data()?`
-5. Use `bail!()` for errors (from `mcp_attr::bail`)
+### MCPツール実装パターン
+全てのMCPツールは以下のパターンに従います：
+1. Mutexをロック: `let mut data = self.data.lock().unwrap();`
+2. `GtdData`に対する操作を実行
+3. ロックを解放: `drop(data);`
+4. ディスクに保存: `self.save_data()?`
+5. エラーには`bail!()`を使用（`mcp_attr::bail`から）
 
-Example:
+例：
 ```rust
 #[tool]
 async fn add_task(&self, title: String, ...) -> McpResult<String> {
@@ -49,40 +61,40 @@ async fn add_task(&self, title: String, ...) -> McpResult<String> {
 }
 ```
 
-### Date Handling
-- Use `chrono::NaiveDate` for dates (no time component)
-- Parse format: `YYYY-MM-DD` via `NaiveDate::parse_from_str(&date_str, "%Y-%m-%d")`
-- Optional dates use `Option<NaiveDate>`
+### 日付の扱い
+- 日付には`chrono::NaiveDate`を使用（時刻コンポーネントなし）
+- パース形式：`YYYY-MM-DD`（`NaiveDate::parse_from_str(&date_str, "%Y-%m-%d")`経由）
+- オプショナルな日付は`Option<NaiveDate>`を使用
 
-### Data Storage
-- TOML format via `toml::to_string_pretty()` for human readability
-- File path: `gtd.toml` in current working directory
-- Git-friendly format for version control
-- Storage operations return `anyhow::Result`
+### データストレージ
+- 人間が読みやすいように`toml::to_string_pretty()`経由でTOML形式
+- ファイルパス：カレントディレクトリの`gtd.toml`
+- バージョン管理に適したGitフレンドリーな形式
+- ストレージ操作は`anyhow::Result`を返す
 
-## Development Workflows
+## 開発ワークフロー
 
-### Building
+### ビルド
 ```bash
-cargo build              # Debug build
-cargo build --release    # Release build
+cargo build              # デバッグビルド
+cargo build --release    # リリースビルド
 ```
 
-### Testing
+### テスト
 ```bash
-cargo test              # Run all 41 unit tests
+cargo test              # 全41個のユニットテストを実行
 ```
-Tests use temp files via `env::temp_dir()` and clean up afterward.
+テストは`env::temp_dir()`経由で一時ファイルを使用し、後でクリーンアップします。
 
-### Running the Server
+### サーバーの実行
 ```bash
-cargo run               # Starts stdio MCP server
-# Or: ./target/release/gtd-mcp-rs
+cargo run               # stdio MCPサーバーを起動
+# または: ./target/release/gtd-mcp-rs
 ```
-The server communicates via stdio (JSON-RPC) with MCP clients like Claude Desktop.
+サーバーはstdio（JSON-RPC）経由でClaude DesktopなどのMCPクライアントと通信します。
 
-### Integration with Claude Desktop
-Add to `claude_desktop_config.json`:
+### Claude Desktopとの統合
+`claude_desktop_config.json`に以下を追加：
 ```json
 {
   "mcpServers": {
@@ -93,41 +105,41 @@ Add to `claude_desktop_config.json`:
 }
 ```
 
-## Testing Conventions
+## テスト規約
 
-### Test Organization
-- Tests in `#[cfg(test)]` modules at bottom of each file
-- Japanese comments explain test purpose (e.g., `// 既存ファイルの上書きテスト`)
-- Test names are descriptive: `test_storage_save_and_load_comprehensive`
+### テストの構成
+- 各ファイルの最後に`#[cfg(test)]`モジュール内にテストを配置
+- 日本語コメントでテストの目的を説明（例：`// 既存ファイルの上書きテスト`）
+- テスト名は説明的に：`test_storage_save_and_load_comprehensive`
 
-### Test Data Patterns
-- Use `get_test_path()` for temp file paths
-- Clean up test files: `let _ = fs::remove_file(&test_path);`
-- Test both minimal and fully-populated structs
-- Verify TOML output matches expected format in `test_complete_toml_output`
+### テストデータパターン
+- 一時ファイルパスには`get_test_path()`を使用
+- テストファイルをクリーンアップ：`let _ = fs::remove_file(&test_path);`
+- 最小限のstructと完全に設定されたstructの両方をテスト
+- `test_complete_toml_output`でTOML出力が期待される形式と一致することを検証
 
-## Dependencies
+## 依存関係
 
-- **`mcp-attr` (0.0.7)**: Declarative MCP server building (cross-platform, replaces `rust-mcp-sdk`)
-- **`tokio`**: Async runtime for MCP server
-- **`toml` (0.9)**: Serialization (note: uses `toml::to_string_pretty` for readability)
-- **`chrono`**: Date handling with `serde` feature
-- **`uuid`**: Generate task/project IDs with `v4` feature
-- **`schemars`**: JSON Schema generation for MCP
-- **`anyhow`**: Error handling with context
+- **`mcp-attr` (0.0.7)**: 宣言的MCPサーバー構築（クロスプラットフォーム、`rust-mcp-sdk`の代替）
+- **`tokio`**: MCPサーバー用の非同期ランタイム
+- **`toml` (0.9)**: シリアライゼーション（注：可読性のため`toml::to_string_pretty`を使用）
+- **`chrono`**: `serde`機能付き日付処理
+- **`uuid`**: `v4`機能でタスク/プロジェクトIDを生成
+- **`schemars`**: MCP用のJSON Schema生成
+- **`anyhow`**: コンテキスト付きエラーハンドリング
 
-## Code Style Patterns
+## コードスタイルパターン
 
-- Use `#[allow(dead_code)]` for helper methods not yet used externally
-- Match expressions for enum filtering (e.g., `matches!(task.status, TaskStatus::inbox)`)
-- String formatting: `format!("- [{}] {} (status: {:?})\n", ...)`
-- Mutex pattern: lock, modify, drop, persist
-- Error propagation: `bail!()` for MCP tools, `?` for internal functions
+- 外部でまだ使用されていないヘルパーメソッドには`#[allow(dead_code)]`を使用
+- enumフィルタリングにはmatch式を使用（例：`matches!(task.status, TaskStatus::inbox)`）
+- 文字列フォーマット：`format!("- [{}] {} (status: {:?})\n", ...)`
+- Mutexパターン：ロック、変更、解放、永続化
+- エラー伝播：MCPツールには`bail!()`、内部関数には`?`
 
-## Gotchas
+## 注意点（落とし穴）
 
-1. **Edition 2024**: `Cargo.toml` uses `edition = "2024"` (not 2021)
-2. **Cross-platform**: Uses `mcp-attr` instead of `rust-mcp-sdk` for Windows compatibility
-3. **TOML structure**: Tasks/projects are arrays (`[[tasks]]`), contexts are tables (`[contexts.Name]`)
-4. **ID generation**: Always use `uuid::Uuid::new_v4().to_string()` for new entities
-5. **Status filtering**: String matching in `list_tasks` uses hardcoded match arms, not dynamic enum parsing
+1. **Edition 2024**: `Cargo.toml`は`edition = "2024"`を使用（2021ではない）
+2. **クロスプラットフォーム**: Windows互換性のため`rust-mcp-sdk`の代わりに`mcp-attr`を使用
+3. **TOML構造**: タスク/プロジェクトは配列（`[[tasks]]`）、コンテキストはテーブル（`[contexts.Name]`）
+4. **ID生成**: 新しいエンティティには常に`uuid::Uuid::new_v4().to_string()`を使用
+5. **ステータスフィルタリング**: `list_tasks`の文字列マッチングは動的なenumパースではなくハードコードされたmatchアームを使用
