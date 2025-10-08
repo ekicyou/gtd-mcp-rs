@@ -17,7 +17,7 @@ This document summarizes the CI/CD infrastructure implemented to protect the mai
                 ▼                ▼                ▼
         ┌───────────┐    ┌───────────┐   ┌────────────┐
         │    Push   │    │    PR     │   │  Schedule  │
-        │ to main   │    │  Created  │   │  (Daily)   │
+        │ to main   │    │  Created  │   │  (Weekly)  │
         └───────────┘    └───────────┘   └────────────┘
                 │                │                │
                 └────────────────┴────────────────┘
@@ -89,14 +89,20 @@ This document summarizes the CI/CD infrastructure implemented to protect the mai
 ### 2. Security Audit Workflow (`security-audit.yml`)
 
 **Triggers:**
-- Schedule: Daily at 00:00 UTC
+- Schedule: Weekly on Monday at 00:00 UTC
 - Manual: workflow_dispatch
 
 **Features:**
-- Runs `cargo audit` daily
+- Runs `cargo audit` weekly
+- Also runs in CI workflow on every pull request
 - Automatically creates GitHub issues when vulnerabilities are detected
 - Prevents duplicate issues with smart checking
 - Labels: `security`, `dependencies`
+
+**Rationale:**
+- Weekly scheduled audit is sufficient for most projects
+- PR-time audit (in CI workflow) catches vulnerabilities before merge
+- Manual trigger available for on-demand security checks
 
 ### 3. Dependabot Configuration (`dependabot.yml`)
 
@@ -213,7 +219,7 @@ This PR also includes code quality improvements:
 
 5. Post-merge
    ├─→ CI runs on main
-   ├─→ Daily security audits
+   ├─→ Weekly security audits
    └─→ Weekly Dependabot checks
 ```
 
@@ -226,7 +232,8 @@ This PR also includes code quality improvements:
   - GitHub Actions updates
 
 - **Automated by Security Audit**:
-  - Daily vulnerability scans
+  - Weekly vulnerability scans (Monday)
+  - PR-time vulnerability checks
   - Issue creation for vulnerabilities
 
 ### Manual Tasks
@@ -241,7 +248,7 @@ This PR also includes code quality improvements:
 .github/
 ├── workflows/
 │   ├── ci.yml                    [NEW] Main CI workflow
-│   └── security-audit.yml        [NEW] Daily security audit
+│   └── security-audit.yml        [NEW] Weekly security audit
 ├── dependabot.yml                [NEW] Dependency automation
 └── copilot-instructions.md       [UNCHANGED]
 

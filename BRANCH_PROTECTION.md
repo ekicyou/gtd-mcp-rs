@@ -37,8 +37,9 @@
 ### 2. セキュリティ監査ワークフロー (`.github/workflows/security-audit.yml`)
 
 #### 実行タイミング
-- 毎日 00:00 UTC に自動実行（スケジュール）
+- 毎週月曜日 00:00 UTC に自動実行（スケジュール）
 - 手動実行も可能（workflow_dispatch）
+- Pull Request時はCIワークフローでも実行
 
 #### チェック内容
 - `cargo audit`: 依存パッケージのセキュリティ脆弱性をチェック
