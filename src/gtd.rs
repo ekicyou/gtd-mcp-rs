@@ -1,6 +1,5 @@
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Task {
@@ -48,14 +47,62 @@ pub struct Context {
 
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct GtdData {
-    pub tasks: HashMap<String, Task>,
-    pub projects: HashMap<String, Project>,
-    pub contexts: HashMap<String, Context>,
+    pub tasks: Vec<Task>,
+    pub projects: Vec<Project>,
+    pub contexts: Vec<Context>,
 }
 
 impl GtdData {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    // Helper methods for task operations
+    #[allow(dead_code)]
+    pub fn find_task_by_id(&self, id: &str) -> Option<&Task> {
+        self.tasks.iter().find(|t| t.id == id)
+    }
+
+    pub fn find_task_by_id_mut(&mut self, id: &str) -> Option<&mut Task> {
+        self.tasks.iter_mut().find(|t| t.id == id)
+    }
+
+    pub fn add_task(&mut self, task: Task) {
+        self.tasks.push(task);
+    }
+
+    pub fn remove_task(&mut self, id: &str) -> Option<Task> {
+        if let Some(pos) = self.tasks.iter().position(|t| t.id == id) {
+            Some(self.tasks.remove(pos))
+        } else {
+            None
+        }
+    }
+
+    // Helper methods for project operations
+    #[allow(dead_code)]
+    pub fn find_project_by_id(&self, id: &str) -> Option<&Project> {
+        self.projects.iter().find(|p| p.id == id)
+    }
+
+    #[allow(dead_code)]
+    pub fn find_project_by_id_mut(&mut self, id: &str) -> Option<&mut Project> {
+        self.projects.iter_mut().find(|p| p.id == id)
+    }
+
+    pub fn add_project(&mut self, project: Project) {
+        self.projects.push(project);
+    }
+
+    // Helper methods for context operations
+    #[allow(dead_code)]
+    pub fn find_context_by_id(&self, id: &str) -> Option<&Context> {
+        self.contexts.iter().find(|c| c.id == id)
+    }
+
+    #[allow(dead_code)]
+    pub fn add_context(&mut self, context: Context) {
+        self.contexts.push(context);
     }
 }
 
@@ -89,9 +136,9 @@ mod tests {
             start_date: None,
         };
 
-        data.tasks.insert(task.id.clone(), task.clone());
+        data.add_task(task.clone());
         assert_eq!(data.tasks.len(), 1);
-        assert_eq!(data.tasks.get("task-1").unwrap().title, "Test Task");
+        assert_eq!(data.find_task_by_id("task-1").unwrap().title, "Test Task");
     }
 
     // 複数タスクの挿入テスト
@@ -110,7 +157,7 @@ mod tests {
                 notes: None,
                 start_date: None,
             };
-            data.tasks.insert(task.id.clone(), task);
+            data.add_task(task);
         }
 
         assert_eq!(data.tasks.len(), 5);
@@ -132,15 +179,15 @@ mod tests {
             start_date: None,
         };
 
-        data.tasks.insert(task_id.clone(), task);
+        data.add_task(task);
 
         // Update status
-        if let Some(task) = data.tasks.get_mut(&task_id) {
+        if let Some(task) = data.find_task_by_id_mut(&task_id) {
             task.status = TaskStatus::next_action;
         }
 
         assert!(matches!(
-            data.tasks.get(&task_id).unwrap().status,
+            data.find_task_by_id(&task_id).unwrap().status,
             TaskStatus::next_action
         ));
     }
@@ -161,10 +208,10 @@ mod tests {
             start_date: None,
         };
 
-        data.tasks.insert(task_id.clone(), task);
+        data.add_task(task);
         assert_eq!(data.tasks.len(), 1);
 
-        data.tasks.remove(&task_id);
+        data.remove_task(&task_id);
         assert_eq!(data.tasks.len(), 0);
     }
 
@@ -311,9 +358,9 @@ mod tests {
             status: ProjectStatus::active,
         };
 
-        data.projects.insert(project.id.clone(), project.clone());
+        data.add_project(project.clone());
         assert_eq!(data.projects.len(), 1);
-        assert_eq!(data.projects.get("project-1").unwrap().name, "Test Project");
+        assert_eq!(data.find_project_by_id("project-1").unwrap().name, "Test Project");
     }
 
     // プロジェクトステータスの更新テスト
@@ -329,15 +376,15 @@ mod tests {
             status: ProjectStatus::active,
         };
 
-        data.projects.insert(project_id.clone(), project);
+        data.add_project(project);
 
         // Update status
-        if let Some(project) = data.projects.get_mut(&project_id) {
+        if let Some(project) = data.find_project_by_id_mut(&project_id) {
             project.status = ProjectStatus::completed;
         }
 
         assert!(matches!(
-            data.projects.get(&project_id).unwrap().status,
+            data.find_project_by_id(&project_id).unwrap().status,
             ProjectStatus::completed
         ));
     }
@@ -365,9 +412,9 @@ mod tests {
             name: "Office".to_string(),
         };
 
-        data.contexts.insert(context.id.clone(), context.clone());
+        data.add_context(context.clone());
         assert_eq!(data.contexts.len(), 1);
-        assert_eq!(data.contexts.get("context-1").unwrap().name, "Office");
+        assert_eq!(data.find_context_by_id("context-1").unwrap().name, "Office");
     }
 
     // 複数コンテキストの挿入テスト
@@ -387,7 +434,7 @@ mod tests {
                 id: id.to_string(),
                 name: name.to_string(),
             };
-            data.contexts.insert(context.id.clone(), context);
+            data.add_context(context);
         }
 
         assert_eq!(data.contexts.len(), 4);
@@ -468,7 +515,7 @@ mod tests {
             notes: None,
             start_date: None,
         };
-        data.tasks.insert(task.id.clone(), task);
+        data.add_task(task);
 
         let project = Project {
             id: "project-1".to_string(),
@@ -476,13 +523,13 @@ mod tests {
             description: None,
             status: ProjectStatus::active,
         };
-        data.projects.insert(project.id.clone(), project);
+        data.add_project(project);
 
         let context = Context {
             id: "context-1".to_string(),
             name: "Office".to_string(),
         };
-        data.contexts.insert(context.id.clone(), context);
+        data.add_context(context);
 
         let serialized = toml::to_string(&data).unwrap();
         let deserialized: GtdData = toml::from_str(&serialized).unwrap();
@@ -517,13 +564,13 @@ mod tests {
                 notes: None,
                 start_date: None,
             };
-            data.tasks.insert(task.id.clone(), task);
+            data.add_task(task);
         }
 
         // Filter by Inbox
         let inbox_tasks: Vec<_> = data
             .tasks
-            .values()
+            .iter()
             .filter(|t| matches!(t.status, TaskStatus::inbox))
             .collect();
         assert_eq!(inbox_tasks.len(), 1);
@@ -531,7 +578,7 @@ mod tests {
         // Filter by Done
         let done_tasks: Vec<_> = data
             .tasks
-            .values()
+            .iter()
             .filter(|t| matches!(t.status, TaskStatus::done))
             .collect();
         assert_eq!(done_tasks.len(), 1);
@@ -557,12 +604,12 @@ mod tests {
                 notes: None,
                 start_date: None,
             };
-            data.tasks.insert(task.id.clone(), task);
+            data.add_task(task);
         }
 
         let project_tasks: Vec<_> = data
             .tasks
-            .values()
+            .iter()
             .filter(|t| t.project.as_ref().map_or(false, |p| p == "project-1"))
             .collect();
         assert_eq!(project_tasks.len(), 2);
@@ -588,12 +635,12 @@ mod tests {
                 notes: None,
                 start_date: None,
             };
-            data.tasks.insert(task.id.clone(), task);
+            data.add_task(task);
         }
 
         let context_tasks: Vec<_> = data
             .tasks
-            .values()
+            .iter()
             .filter(|t| t.context.as_ref().map_or(false, |c| c == "context-1"))
             .collect();
         assert_eq!(context_tasks.len(), 2);
@@ -674,5 +721,33 @@ mod tests {
             serialized.contains("on_hold"),
             "Expected 'on_hold' in TOML output"
         );
+    }
+
+    // Insertion order preservation test
+    // Verify that tasks maintain their insertion order (Vec-based instead of HashMap)
+    #[test]
+    fn test_gtd_data_insertion_order() {
+        let mut data = GtdData::new();
+
+        // Add tasks in specific order
+        for i in 1..=5 {
+            let task = Task {
+                id: format!("task-{}", i),
+                title: format!("Task {}", i),
+                status: TaskStatus::inbox,
+                project: None,
+                context: None,
+                notes: None,
+                start_date: None,
+            };
+            data.add_task(task);
+        }
+
+        // Verify that tasks maintain insertion order
+        assert_eq!(data.tasks.len(), 5);
+        for (i, task) in data.tasks.iter().enumerate() {
+            assert_eq!(task.id, format!("task-{}", i + 1));
+            assert_eq!(task.title, format!("Task {}", i + 1));
+        }
     }
 }

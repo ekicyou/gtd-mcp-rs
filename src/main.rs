@@ -67,7 +67,7 @@ impl McpServer for GtdServerHandler {
 
         let mut data = self.data.lock().unwrap();
         let task_id = task.id.clone();
-        data.tasks.insert(task_id.clone(), task);
+        data.add_task(task);
         drop(data);
 
         if let Err(e) = self.save_data() {
@@ -85,7 +85,7 @@ impl McpServer for GtdServerHandler {
         status: Option<String>,
     ) -> McpResult<String> {
         let data = self.data.lock().unwrap();
-        let mut tasks: Vec<&Task> = data.tasks.values().collect();
+        let mut tasks: Vec<&Task> = data.tasks.iter().collect();
 
         if let Some(status_str) = status {
             tasks.retain(|task| match status_str.as_str() {
@@ -123,7 +123,7 @@ impl McpServer for GtdServerHandler {
     ) -> McpResult<String> {
         let mut data = self.data.lock().unwrap();
 
-        if let Some(task) = data.tasks.get_mut(&task_id) {
+        if let Some(task) = data.find_task_by_id_mut(&task_id) {
             task.status = TaskStatus::trash;
             drop(data);
 
@@ -145,14 +145,14 @@ impl McpServer for GtdServerHandler {
         let trash_tasks: Vec<String> = data
             .tasks
             .iter()
-            .filter(|(_, task)| matches!(task.status, TaskStatus::trash))
-            .map(|(id, _)| id.clone())
+            .filter(|task| matches!(task.status, TaskStatus::trash))
+            .map(|task| task.id.clone())
             .collect();
 
         let count = trash_tasks.len();
 
         for task_id in trash_tasks {
-            data.tasks.remove(&task_id);
+            data.remove_task(&task_id);
         }
 
         drop(data);
@@ -182,7 +182,7 @@ impl McpServer for GtdServerHandler {
 
         let mut data = self.data.lock().unwrap();
         let project_id = project.id.clone();
-        data.projects.insert(project_id.clone(), project);
+        data.add_project(project);
         drop(data);
 
         if let Err(e) = self.save_data() {
@@ -196,7 +196,7 @@ impl McpServer for GtdServerHandler {
     #[tool]
     async fn list_projects(&self) -> McpResult<String> {
         let data = self.data.lock().unwrap();
-        let projects: Vec<&Project> = data.projects.values().collect();
+        let projects: Vec<&Project> = data.projects.iter().collect();
 
         let mut result = String::new();
         for project in projects {
