@@ -65,7 +65,7 @@ mod tests {
 
         assert!(result.is_ok());
         let data = result.unwrap();
-        assert!(data.tasks.is_empty());
+        assert_eq!(data.task_count(), 0);
         assert!(data.projects.is_empty());
         assert!(data.contexts.is_empty());
     }
@@ -88,7 +88,7 @@ mod tests {
         assert!(load_result.is_ok());
 
         let loaded_data = load_result.unwrap();
-        assert!(loaded_data.tasks.is_empty());
+        assert_eq!(loaded_data.task_count(), 0);
         assert!(loaded_data.projects.is_empty());
         assert!(loaded_data.contexts.is_empty());
 
@@ -125,7 +125,7 @@ mod tests {
         assert!(load_result.is_ok());
 
         let loaded_data = load_result.unwrap();
-        assert_eq!(loaded_data.tasks.len(), 1);
+        assert_eq!(loaded_data.task_count(), 1);
 
         let loaded_task = loaded_data.find_task_by_id("task-1").unwrap();
         assert_eq!(loaded_task.title, "Test Task");
@@ -265,7 +265,7 @@ mod tests {
         assert!(load_result.is_ok());
 
         let loaded_data = load_result.unwrap();
-        assert_eq!(loaded_data.tasks.len(), 3);
+        assert_eq!(loaded_data.task_count(), 3);
         assert_eq!(loaded_data.projects.len(), 2);
         assert_eq!(loaded_data.contexts.len(), 2);
 
@@ -313,7 +313,7 @@ mod tests {
 
         // Load and verify
         let loaded_data = storage.load().unwrap();
-        assert_eq!(loaded_data.tasks.len(), 1);
+        assert_eq!(loaded_data.task_count(), 1);
         assert!(loaded_data.find_task_by_id("task-2").is_some());
         assert!(loaded_data.find_task_by_id("task-1").is_none());
 
@@ -374,7 +374,7 @@ mod tests {
         storage.save(&data).unwrap();
         let loaded_data = storage.load().unwrap();
 
-        assert_eq!(loaded_data.tasks.len(), 6);
+        assert_eq!(loaded_data.task_count(), 6);
 
         // Clean up
         let _ = fs::remove_file(&test_path);

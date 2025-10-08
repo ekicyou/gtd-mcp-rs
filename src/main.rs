@@ -99,18 +99,35 @@ impl McpServer for GtdServerHandler {
         status: Option<String>,
     ) -> McpResult<String> {
         let data = self.data.lock().unwrap();
-        let mut tasks: Vec<&Task> = data.tasks.iter().collect();
+        let mut tasks: Vec<&Task> = Vec::new();
 
+        // Collect tasks from all status lists or just the filtered one
         if let Some(status_str) = status {
-            tasks.retain(|task| match status_str.as_str() {
-                "inbox" => matches!(task.status, TaskStatus::inbox),
-                "next_action" => matches!(task.status, TaskStatus::next_action),
-                "waiting_for" => matches!(task.status, TaskStatus::waiting_for),
-                "someday" => matches!(task.status, TaskStatus::someday),
-                "done" => matches!(task.status, TaskStatus::done),
-                "trash" => matches!(task.status, TaskStatus::trash),
-                _ => true,
-            });
+            match status_str.as_str() {
+                "inbox" => tasks.extend(data.inbox.iter()),
+                "next_action" => tasks.extend(data.next_action.iter()),
+                "waiting_for" => tasks.extend(data.waiting_for.iter()),
+                "someday" => tasks.extend(data.someday.iter()),
+                "done" => tasks.extend(data.done.iter()),
+                "trash" => tasks.extend(data.trash.iter()),
+                _ => {
+                    // If unknown status, return all tasks
+                    tasks.extend(data.inbox.iter());
+                    tasks.extend(data.next_action.iter());
+                    tasks.extend(data.waiting_for.iter());
+                    tasks.extend(data.someday.iter());
+                    tasks.extend(data.done.iter());
+                    tasks.extend(data.trash.iter());
+                }
+            }
+        } else {
+            // No filter, return all tasks
+            tasks.extend(data.inbox.iter());
+            tasks.extend(data.next_action.iter());
+            tasks.extend(data.waiting_for.iter());
+            tasks.extend(data.someday.iter());
+            tasks.extend(data.done.iter());
+            tasks.extend(data.trash.iter());
         }
 
         let mut result = String::new();
@@ -156,18 +173,8 @@ impl McpServer for GtdServerHandler {
     async fn empty_trash(&self) -> McpResult<String> {
         let mut data = self.data.lock().unwrap();
 
-        let trash_tasks: Vec<String> = data
-            .tasks
-            .iter()
-            .filter(|task| matches!(task.status, TaskStatus::trash))
-            .map(|task| task.id.clone())
-            .collect();
-
-        let count = trash_tasks.len();
-
-        for task_id in trash_tasks {
-            data.remove_task(&task_id);
-        }
+        let count = data.trash.len();
+        data.trash.clear();
 
         drop(data);
 
