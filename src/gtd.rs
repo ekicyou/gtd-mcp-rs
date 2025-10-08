@@ -13,19 +13,14 @@ pub struct Task {
     pub start_date: Option<NaiveDate>,
 }
 
+#[allow(non_camel_case_types)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TaskStatus {
-    #[allow(non_camel_case_types)]
     inbox,
-    #[allow(non_camel_case_types)]
     next_action,
-    #[allow(non_camel_case_types)]
     waiting_for,
-    #[allow(non_camel_case_types)]
     someday,
-    #[allow(non_camel_case_types)]
     done,
-    #[allow(non_camel_case_types)]
     trash,
 }
 
@@ -37,13 +32,11 @@ pub struct Project {
     pub status: ProjectStatus,
 }
 
+#[allow(non_camel_case_types)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ProjectStatus {
-    #[allow(non_camel_case_types)]
     active,
-    #[allow(non_camel_case_types)]
     on_hold,
-    #[allow(non_camel_case_types)]
     completed,
 }
 
@@ -664,7 +657,10 @@ mod tests {
         };
 
         let serialized = toml::to_string(&task).unwrap();
-        assert!(serialized.contains("next_action"), "Expected 'next_action' in TOML output");
+        assert!(
+            serialized.contains("next_action"),
+            "Expected 'next_action' in TOML output"
+        );
 
         let project = Project {
             id: "project-1".to_string(),
@@ -674,6 +670,9 @@ mod tests {
         };
 
         let serialized = toml::to_string(&project).unwrap();
-        assert!(serialized.contains("on_hold"), "Expected 'on_hold' in TOML output");
+        assert!(
+            serialized.contains("on_hold"),
+            "Expected 'on_hold' in TOML output"
+        );
     }
 }
