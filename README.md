@@ -1,4 +1,7 @@
 # gtd-mcp-rs
+
+[![CI](https://github.com/ekicyou/gtd-mcp-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/ekicyou/gtd-mcp-rs/actions/workflows/ci.yml)
+
 GTD MCP Server
 
 A Model Context Protocol (MCP) server for GTD (Getting Things Done) task management.
@@ -30,6 +33,49 @@ cargo build
 # Release build
 cargo build --release
 ```
+
+## Testing
+
+```bash
+# Run all tests
+cargo test
+
+# Run tests with output
+cargo test -- --nocapture
+```
+
+## Development
+
+### Code Quality Checks
+
+Before submitting a pull request, ensure your code passes all checks:
+
+```bash
+# Format code
+cargo fmt
+
+# Check formatting
+cargo fmt --check
+
+# Run linter
+cargo clippy --all-targets --all-features -- -D warnings
+
+# Run tests
+cargo test
+```
+
+See [BRANCH_PROTECTION.md](BRANCH_PROTECTION.md) for details on CI/CD and branch protection setup.
+
+## CI/CD
+
+This project uses GitHub Actions for continuous integration:
+
+- **Automated testing** on Linux, macOS, and Windows
+- **Code quality checks** (formatting, linting)
+- **Daily security audits** with cargo audit
+- **Automated dependency updates** via Dependabot
+
+See [CI_SUMMARY.md](CI_SUMMARY.md) for a complete overview of the CI/CD infrastructure.
 
 ## Usage
 
