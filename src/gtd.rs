@@ -793,4 +793,110 @@ mod tests {
             assert_eq!(project.id, format!("project-{}", i + 1));
         }
     }
+
+    // Complete TOML output test with all fields populated
+    // Verify the actual TOML text output with all fields set and check readability
+    #[test]
+    fn test_complete_toml_output() {
+        let mut data = GtdData::new();
+
+        // Add a task with all fields populated
+        data.add_task(Task {
+            id: "task-001".to_string(),
+            title: "Complete project documentation".to_string(),
+            status: TaskStatus::next_action,
+            project: Some("project-001".to_string()),
+            context: Some("context-001".to_string()),
+            notes: Some("Review all sections and update examples".to_string()),
+            start_date: NaiveDate::from_ymd_opt(2024, 3, 15),
+        });
+
+        // Add a task with minimal fields for comparison
+        data.add_task(Task {
+            id: "task-002".to_string(),
+            title: "Quick task".to_string(),
+            status: TaskStatus::inbox,
+            project: None,
+            context: None,
+            notes: None,
+            start_date: None,
+        });
+
+        // Add a project with all fields
+        data.add_project(Project {
+            id: "project-001".to_string(),
+            name: "Documentation Project".to_string(),
+            description: Some("Comprehensive project documentation update".to_string()),
+            status: ProjectStatus::active,
+        });
+
+        // Add a context
+        data.add_context(Context {
+            id: "context-001".to_string(),
+            name: "Office".to_string(),
+        });
+
+        // Generate TOML output
+        let toml_output = toml::to_string_pretty(&data).unwrap();
+
+        // Verify the TOML structure and readability
+        println!("\n=== TOML Output ===\n{}\n===================\n", toml_output);
+
+        // Expected TOML structure (with exact text matching)
+        let expected_toml = r#"[[tasks]]
+id = "task-001"
+title = "Complete project documentation"
+status = "next_action"
+project = "project-001"
+context = "context-001"
+notes = "Review all sections and update examples"
+start_date = "2024-03-15"
+
+[[tasks]]
+id = "task-002"
+title = "Quick task"
+status = "inbox"
+
+[[projects]]
+id = "project-001"
+name = "Documentation Project"
+description = "Comprehensive project documentation update"
+status = "active"
+
+[[contexts]]
+id = "context-001"
+name = "Office"
+"#;
+
+        // Assert exact TOML output matches expected format
+        assert_eq!(toml_output, expected_toml, "TOML output should match expected format");
+
+        // Verify deserialization works correctly
+        let deserialized: GtdData = toml::from_str(&toml_output).unwrap();
+
+        // Verify all task fields
+        assert_eq!(deserialized.tasks.len(), 2);
+        let task1 = &deserialized.tasks[0];
+        assert_eq!(task1.id, "task-001");
+        assert_eq!(task1.title, "Complete project documentation");
+        assert!(matches!(task1.status, TaskStatus::next_action));
+        assert_eq!(task1.project, Some("project-001".to_string()));
+        assert_eq!(task1.context, Some("context-001".to_string()));
+        assert_eq!(task1.notes, Some("Review all sections and update examples".to_string()));
+        assert_eq!(task1.start_date, NaiveDate::from_ymd_opt(2024, 3, 15));
+
+        // Verify project fields
+        assert_eq!(deserialized.projects.len(), 1);
+        let project1 = &deserialized.projects[0];
+        assert_eq!(project1.id, "project-001");
+        assert_eq!(project1.name, "Documentation Project");
+        assert_eq!(project1.description, Some("Comprehensive project documentation update".to_string()));
+        assert!(matches!(project1.status, ProjectStatus::active));
+
+        // Verify context fields
+        assert_eq!(deserialized.contexts.len(), 1);
+        let context1 = &deserialized.contexts[0];
+        assert_eq!(context1.id, "context-001");
+        assert_eq!(context1.name, "Office");
+    }
 }
