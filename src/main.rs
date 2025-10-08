@@ -56,7 +56,7 @@ impl McpServer for GtdServerHandler {
         };
 
         let mut data = self.data.lock().unwrap();
-        
+
         let today = local_date_today();
         let task = Task {
             id: data.generate_task_id(),
@@ -199,7 +199,7 @@ impl McpServer for GtdServerHandler {
         description: Option<String>,
     ) -> McpResult<String> {
         let mut data = self.data.lock().unwrap();
-        
+
         let project = Project {
             id: data.generate_project_id(),
             name,

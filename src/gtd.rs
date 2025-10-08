@@ -1620,11 +1620,11 @@ name = "Home"
     #[test]
     fn test_generate_task_id() {
         let mut data = GtdData::new();
-        
+
         let id1 = data.generate_task_id();
         let id2 = data.generate_task_id();
         let id3 = data.generate_task_id();
-        
+
         assert_eq!(id1, "#1");
         assert_eq!(id2, "#2");
         assert_eq!(id3, "#3");
@@ -1635,11 +1635,11 @@ name = "Home"
     #[test]
     fn test_generate_project_id() {
         let mut data = GtdData::new();
-        
+
         let id1 = data.generate_project_id();
         let id2 = data.generate_project_id();
         let id3 = data.generate_project_id();
-        
+
         assert_eq!(id1, "project-1");
         assert_eq!(id2, "project-2");
         assert_eq!(id3, "project-3");
@@ -1650,12 +1650,12 @@ name = "Home"
     #[test]
     fn test_task_and_project_counters_independent() {
         let mut data = GtdData::new();
-        
+
         let task_id1 = data.generate_task_id();
         let project_id1 = data.generate_project_id();
         let task_id2 = data.generate_task_id();
         let project_id2 = data.generate_project_id();
-        
+
         assert_eq!(task_id1, "#1");
         assert_eq!(task_id2, "#2");
         assert_eq!(project_id1, "project-1");
@@ -1668,24 +1668,30 @@ name = "Home"
     #[test]
     fn test_counter_serialization() {
         let mut data = GtdData::new();
-        
+
         // Generate some IDs
         data.generate_task_id();
         data.generate_task_id();
         data.generate_project_id();
-        
+
         // Serialize
         let serialized = toml::to_string_pretty(&data).unwrap();
-        
+
         // Check that counters are in the serialized output
-        assert!(serialized.contains("task_counter = 2"), "task_counter should be serialized");
-        assert!(serialized.contains("project_counter = 1"), "project_counter should be serialized");
-        
+        assert!(
+            serialized.contains("task_counter = 2"),
+            "task_counter should be serialized"
+        );
+        assert!(
+            serialized.contains("project_counter = 1"),
+            "project_counter should be serialized"
+        );
+
         // Deserialize
         let deserialized: GtdData = toml::from_str(&serialized).unwrap();
         assert_eq!(deserialized.task_counter, 2);
         assert_eq!(deserialized.project_counter, 1);
-        
+
         // Next IDs should continue from where we left off
         let mut data = deserialized;
         assert_eq!(data.generate_task_id(), "#3");
@@ -1696,11 +1702,17 @@ name = "Home"
     #[test]
     fn test_counter_skip_serializing_if_zero() {
         let data = GtdData::new();
-        
+
         let serialized = toml::to_string_pretty(&data).unwrap();
-        
+
         // Counters should not appear in serialized output when they are 0
-        assert!(!serialized.contains("task_counter"), "task_counter should not be serialized when 0");
-        assert!(!serialized.contains("project_counter"), "project_counter should not be serialized when 0");
+        assert!(
+            !serialized.contains("task_counter"),
+            "task_counter should not be serialized when 0"
+        );
+        assert!(
+            !serialized.contains("project_counter"),
+            "project_counter should not be serialized when 0"
+        );
     }
 }
