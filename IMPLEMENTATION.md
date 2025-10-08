@@ -19,8 +19,8 @@ This version uses `mcp-attr` v0.0.7, which provides better cross-platform compat
 ### Components
 
 1. **Data Structures** (`src/gtd.rs`)
-   - `Task`: Represents a GTD task with status (Inbox, NextAction, WaitingFor, Someday, Done, Trash) and optional start date for calendar management
-   - `Project`: Represents a project with status (Active, OnHold, Completed)
+   - `Task`: Represents a GTD task with status (inbox, next_action, waiting_for, someday, done, trash) and optional start date for calendar management
+   - `Project`: Represents a project with status (active, on_hold, completed)
    - `Context`: Represents a context (e.g., @office, @home)
    - `GtdData`: Container for all tasks, projects, and contexts
 
@@ -53,7 +53,7 @@ Adds a new task to the inbox.
 Lists all tasks with optional status filtering.
 
 **Parameters:**
-- `status` (optional): Filter by status (Inbox, NextAction, WaitingFor, Someday, Done, Trash)
+- `status` (optional): Filter by status (inbox, next_action, waiting_for, someday, done, trash)
 
 ### trash_task
 Moves a task to trash.

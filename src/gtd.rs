@@ -15,12 +15,18 @@ pub struct Task {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TaskStatus {
-    Inbox,
-    NextAction,
-    WaitingFor,
-    Someday,
-    Done,
-    Trash,
+    #[allow(non_camel_case_types)]
+    inbox,
+    #[allow(non_camel_case_types)]
+    next_action,
+    #[allow(non_camel_case_types)]
+    waiting_for,
+    #[allow(non_camel_case_types)]
+    someday,
+    #[allow(non_camel_case_types)]
+    done,
+    #[allow(non_camel_case_types)]
+    trash,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -33,9 +39,12 @@ pub struct Project {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ProjectStatus {
-    Active,
-    OnHold,
-    Completed,
+    #[allow(non_camel_case_types)]
+    active,
+    #[allow(non_camel_case_types)]
+    on_hold,
+    #[allow(non_camel_case_types)]
+    completed,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -80,7 +89,7 @@ mod tests {
         let task = Task {
             id: "task-1".to_string(),
             title: "Test Task".to_string(),
-            status: TaskStatus::Inbox,
+            status: TaskStatus::inbox,
             project: None,
             context: None,
             notes: None,
@@ -102,7 +111,7 @@ mod tests {
             let task = Task {
                 id: format!("task-{}", i),
                 title: format!("Test Task {}", i),
-                status: TaskStatus::Inbox,
+                status: TaskStatus::inbox,
                 project: None,
                 context: None,
                 notes: None,
@@ -123,7 +132,7 @@ mod tests {
         let task = Task {
             id: task_id.clone(),
             title: "Test Task".to_string(),
-            status: TaskStatus::Inbox,
+            status: TaskStatus::inbox,
             project: None,
             context: None,
             notes: None,
@@ -134,12 +143,12 @@ mod tests {
 
         // Update status
         if let Some(task) = data.tasks.get_mut(&task_id) {
-            task.status = TaskStatus::NextAction;
+            task.status = TaskStatus::next_action;
         }
 
         assert!(matches!(
             data.tasks.get(&task_id).unwrap().status,
-            TaskStatus::NextAction
+            TaskStatus::next_action
         ));
     }
 
@@ -152,7 +161,7 @@ mod tests {
         let task = Task {
             id: task_id.clone(),
             title: "Test Task".to_string(),
-            status: TaskStatus::Inbox,
+            status: TaskStatus::inbox,
             project: None,
             context: None,
             notes: None,
@@ -173,7 +182,7 @@ mod tests {
         let task = Task {
             id: "task-1".to_string(),
             title: "Test Task".to_string(),
-            status: TaskStatus::Inbox,
+            status: TaskStatus::inbox,
             project: Some("project-1".to_string()),
             context: Some("context-1".to_string()),
             notes: Some("Test notes".to_string()),
@@ -193,7 +202,7 @@ mod tests {
         let task = Task {
             id: "task-1".to_string(),
             title: "Test Task".to_string(),
-            status: TaskStatus::Inbox,
+            status: TaskStatus::inbox,
             project: None,
             context: None,
             notes: None,
@@ -208,12 +217,12 @@ mod tests {
     #[test]
     fn test_task_status_variants() {
         let statuses = vec![
-            TaskStatus::Inbox,
-            TaskStatus::NextAction,
-            TaskStatus::WaitingFor,
-            TaskStatus::Someday,
-            TaskStatus::Done,
-            TaskStatus::Trash,
+            TaskStatus::inbox,
+            TaskStatus::next_action,
+            TaskStatus::waiting_for,
+            TaskStatus::someday,
+            TaskStatus::done,
+            TaskStatus::trash,
         ];
 
         for status in statuses {
@@ -228,12 +237,12 @@ mod tests {
             };
 
             match status {
-                TaskStatus::Inbox => assert!(matches!(task.status, TaskStatus::Inbox)),
-                TaskStatus::NextAction => assert!(matches!(task.status, TaskStatus::NextAction)),
-                TaskStatus::WaitingFor => assert!(matches!(task.status, TaskStatus::WaitingFor)),
-                TaskStatus::Someday => assert!(matches!(task.status, TaskStatus::Someday)),
-                TaskStatus::Done => assert!(matches!(task.status, TaskStatus::Done)),
-                TaskStatus::Trash => assert!(matches!(task.status, TaskStatus::Trash)),
+                TaskStatus::inbox => assert!(matches!(task.status, TaskStatus::inbox)),
+                TaskStatus::next_action => assert!(matches!(task.status, TaskStatus::next_action)),
+                TaskStatus::waiting_for => assert!(matches!(task.status, TaskStatus::waiting_for)),
+                TaskStatus::someday => assert!(matches!(task.status, TaskStatus::someday)),
+                TaskStatus::done => assert!(matches!(task.status, TaskStatus::done)),
+                TaskStatus::trash => assert!(matches!(task.status, TaskStatus::trash)),
             }
         }
     }
@@ -246,13 +255,13 @@ mod tests {
             id: "project-1".to_string(),
             name: "Test Project".to_string(),
             description: Some("Test description".to_string()),
-            status: ProjectStatus::Active,
+            status: ProjectStatus::active,
         };
 
         assert_eq!(project.id, "project-1");
         assert_eq!(project.name, "Test Project");
         assert_eq!(project.description.as_ref().unwrap(), "Test description");
-        assert!(matches!(project.status, ProjectStatus::Active));
+        assert!(matches!(project.status, ProjectStatus::active));
     }
 
     // 説明なしプロジェクトのテスト
@@ -263,7 +272,7 @@ mod tests {
             id: "project-1".to_string(),
             name: "Test Project".to_string(),
             description: None,
-            status: ProjectStatus::Active,
+            status: ProjectStatus::active,
         };
 
         assert!(project.description.is_none());
@@ -274,9 +283,9 @@ mod tests {
     #[test]
     fn test_project_status_variants() {
         let statuses = vec![
-            ProjectStatus::Active,
-            ProjectStatus::OnHold,
-            ProjectStatus::Completed,
+            ProjectStatus::active,
+            ProjectStatus::on_hold,
+            ProjectStatus::completed,
         ];
 
         for status in statuses {
@@ -288,10 +297,10 @@ mod tests {
             };
 
             match status {
-                ProjectStatus::Active => assert!(matches!(project.status, ProjectStatus::Active)),
-                ProjectStatus::OnHold => assert!(matches!(project.status, ProjectStatus::OnHold)),
-                ProjectStatus::Completed => {
-                    assert!(matches!(project.status, ProjectStatus::Completed))
+                ProjectStatus::active => assert!(matches!(project.status, ProjectStatus::active)),
+                ProjectStatus::on_hold => assert!(matches!(project.status, ProjectStatus::on_hold)),
+                ProjectStatus::completed => {
+                    assert!(matches!(project.status, ProjectStatus::completed))
                 }
             }
         }
@@ -306,7 +315,7 @@ mod tests {
             id: "project-1".to_string(),
             name: "Test Project".to_string(),
             description: None,
-            status: ProjectStatus::Active,
+            status: ProjectStatus::active,
         };
 
         data.projects.insert(project.id.clone(), project.clone());
@@ -324,19 +333,19 @@ mod tests {
             id: project_id.clone(),
             name: "Test Project".to_string(),
             description: None,
-            status: ProjectStatus::Active,
+            status: ProjectStatus::active,
         };
 
         data.projects.insert(project_id.clone(), project);
 
         // Update status
         if let Some(project) = data.projects.get_mut(&project_id) {
-            project.status = ProjectStatus::Completed;
+            project.status = ProjectStatus::completed;
         }
 
         assert!(matches!(
             data.projects.get(&project_id).unwrap().status,
-            ProjectStatus::Completed
+            ProjectStatus::completed
         ));
     }
 
@@ -398,7 +407,7 @@ mod tests {
         let task = Task {
             id: "task-1".to_string(),
             title: "Test Task".to_string(),
-            status: TaskStatus::Inbox,
+            status: TaskStatus::inbox,
             project: Some("project-1".to_string()),
             context: Some("context-1".to_string()),
             notes: Some("Test notes".to_string()),
@@ -424,7 +433,7 @@ mod tests {
             id: "project-1".to_string(),
             name: "Test Project".to_string(),
             description: Some("Test description".to_string()),
-            status: ProjectStatus::Active,
+            status: ProjectStatus::active,
         };
 
         let serialized = toml::to_string(&project).unwrap();
@@ -460,7 +469,7 @@ mod tests {
         let task = Task {
             id: "task-1".to_string(),
             title: "Test Task".to_string(),
-            status: TaskStatus::Inbox,
+            status: TaskStatus::inbox,
             project: None,
             context: None,
             notes: None,
@@ -472,7 +481,7 @@ mod tests {
             id: "project-1".to_string(),
             name: "Test Project".to_string(),
             description: None,
-            status: ProjectStatus::Active,
+            status: ProjectStatus::active,
         };
         data.projects.insert(project.id.clone(), project);
 
@@ -497,12 +506,12 @@ mod tests {
         let mut data = GtdData::new();
 
         let statuses = vec![
-            TaskStatus::Inbox,
-            TaskStatus::NextAction,
-            TaskStatus::WaitingFor,
-            TaskStatus::Someday,
-            TaskStatus::Done,
-            TaskStatus::Trash,
+            TaskStatus::inbox,
+            TaskStatus::next_action,
+            TaskStatus::waiting_for,
+            TaskStatus::someday,
+            TaskStatus::done,
+            TaskStatus::trash,
         ];
 
         for (i, status) in statuses.iter().enumerate() {
@@ -522,7 +531,7 @@ mod tests {
         let inbox_tasks: Vec<_> = data
             .tasks
             .values()
-            .filter(|t| matches!(t.status, TaskStatus::Inbox))
+            .filter(|t| matches!(t.status, TaskStatus::inbox))
             .collect();
         assert_eq!(inbox_tasks.len(), 1);
 
@@ -530,7 +539,7 @@ mod tests {
         let done_tasks: Vec<_> = data
             .tasks
             .values()
-            .filter(|t| matches!(t.status, TaskStatus::Done))
+            .filter(|t| matches!(t.status, TaskStatus::done))
             .collect();
         assert_eq!(done_tasks.len(), 1);
     }
@@ -545,7 +554,7 @@ mod tests {
             let task = Task {
                 id: format!("task-{}", i),
                 title: format!("Task {}", i),
-                status: TaskStatus::Inbox,
+                status: TaskStatus::inbox,
                 project: if i % 2 == 0 {
                     Some("project-1".to_string())
                 } else {
@@ -576,7 +585,7 @@ mod tests {
             let task = Task {
                 id: format!("task-{}", i),
                 title: format!("Task {}", i),
-                status: TaskStatus::Inbox,
+                status: TaskStatus::inbox,
                 project: None,
                 context: if i % 2 == 0 {
                     Some("context-1".to_string())
@@ -627,7 +636,7 @@ mod tests {
         let task1 = Task {
             id: "task-1".to_string(),
             title: "Test Task".to_string(),
-            status: TaskStatus::Inbox,
+            status: TaskStatus::inbox,
             project: Some("project-1".to_string()),
             context: Some("context-1".to_string()),
             notes: Some("Test notes".to_string()),
@@ -638,5 +647,33 @@ mod tests {
         assert_eq!(task1.id, task2.id);
         assert_eq!(task1.title, task2.title);
         assert_eq!(task1.project, task2.project);
+    }
+
+    // TOML serialization verification test
+    // Verify that enum variants are serialized as snake_case in TOML format
+    #[test]
+    fn test_enum_snake_case_serialization() {
+        let task = Task {
+            id: "task-1".to_string(),
+            title: "Test Task".to_string(),
+            status: TaskStatus::next_action,
+            project: None,
+            context: None,
+            notes: None,
+            start_date: None,
+        };
+
+        let serialized = toml::to_string(&task).unwrap();
+        assert!(serialized.contains("next_action"), "Expected 'next_action' in TOML output");
+
+        let project = Project {
+            id: "project-1".to_string(),
+            name: "Test Project".to_string(),
+            description: None,
+            status: ProjectStatus::on_hold,
+        };
+
+        let serialized = toml::to_string(&project).unwrap();
+        assert!(serialized.contains("on_hold"), "Expected 'on_hold' in TOML output");
     }
 }
