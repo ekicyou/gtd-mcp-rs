@@ -13,6 +13,7 @@ This server now uses `mcp-attr` for better Windows compatibility. Previous versi
 - Task management (inbox, next actions, waiting for, someday/maybe, done, trash)
 - **Trash management**: Move tasks to trash and bulk delete
 - **Calendar management**: Tasks can have start dates for GTD tickler file workflow
+- **Task timestamps**: All tasks include creation date (`created_at`) and update date (`updated_at`) for tracking task age and modifications
 - **Referential integrity**: Validates that project and context references exist when creating tasks
 - Project management
 - Context management
@@ -68,6 +69,10 @@ Add a new task to the inbox.
 - `notes` (string, optional): Additional notes
 - `start_date` (string, optional): Start date in YYYY-MM-DD format (for GTD tickler file)
 
+**Automatic Fields:**
+- `created_at` (date): Automatically set to current local date when task is created
+- `updated_at` (date): Automatically set to current local date when task is created or modified
+
 **Note:** If a project or context is specified, the server validates that it exists before creating the task. This ensures referential integrity in your GTD system.
 
 **Example:**
@@ -81,7 +86,7 @@ Add a new task to the inbox.
 ```
 
 ### list_tasks
-List all tasks with optional status filter.
+List all tasks with optional status filter. Task listings now include creation and update dates for tracking task age and recent modifications.
 
 **Parameters:**
 - `status` (string, optional): Filter by status (inbox, next_action, waiting_for, someday, done, trash)

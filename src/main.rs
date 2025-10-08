@@ -140,8 +140,8 @@ impl McpServer for GtdServerHandler {
                 .map(|d| format!(" [start: {}]", d))
                 .unwrap_or_default();
             result.push_str(&format!(
-                "- [{}] {} (status: {:?}){}\n",
-                task.id, task.title, task.status, date_info
+                "- [{}] {} (status: {:?}){} [created: {}, updated: {}]\n",
+                task.id, task.title, task.status, date_info, task.created_at, task.updated_at
             ));
         }
 

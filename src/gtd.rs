@@ -1434,4 +1434,113 @@ name = "Home"
 
         assert!(!data.validate_task_references(&task));
     }
+
+    // 作成日と更新日のテスト
+    // タスクが作成されたとき、created_atとupdated_atが同じ日付に設定されることを確認
+    #[test]
+    fn test_task_created_at_and_updated_at() {
+        let date = NaiveDate::from_ymd_opt(2024, 3, 15).unwrap();
+        let task = Task {
+            id: "task-1".to_string(),
+            title: "Test Task".to_string(),
+            status: TaskStatus::inbox,
+            project: None,
+            context: None,
+            notes: None,
+            start_date: None,
+            created_at: date,
+            updated_at: date,
+        };
+
+        assert_eq!(task.created_at, date);
+        assert_eq!(task.updated_at, date);
+        assert_eq!(task.created_at, task.updated_at);
+    }
+
+    // 更新日の変更テスト
+    // タスクが更新されたとき、updated_atが変更されることを確認
+    #[test]
+    fn test_task_updated_at_changes() {
+        let created_date = NaiveDate::from_ymd_opt(2024, 3, 15).unwrap();
+        let updated_date = NaiveDate::from_ymd_opt(2024, 3, 20).unwrap();
+        
+        let mut task = Task {
+            id: "task-1".to_string(),
+            title: "Test Task".to_string(),
+            status: TaskStatus::inbox,
+            project: None,
+            context: None,
+            notes: None,
+            start_date: None,
+            created_at: created_date,
+            updated_at: created_date,
+        };
+
+        // タスクを更新
+        task.status = TaskStatus::next_action;
+        task.updated_at = updated_date;
+
+        assert_eq!(task.created_at, created_date);
+        assert_eq!(task.updated_at, updated_date);
+        assert_ne!(task.created_at, task.updated_at);
+    }
+
+    // 作成日は変更されないことを確認するテスト
+    // タスクのステータスが変更されても、created_atは変更されないことを確認
+    #[test]
+    fn test_task_created_at_immutable() {
+        let mut data = GtdData::new();
+        let created_date = NaiveDate::from_ymd_opt(2024, 3, 15).unwrap();
+        let task_id = "task-1".to_string();
+        
+        let task = Task {
+            id: task_id.clone(),
+            title: "Test Task".to_string(),
+            status: TaskStatus::inbox,
+            project: None,
+            context: None,
+            notes: None,
+            start_date: None,
+            created_at: created_date,
+            updated_at: created_date,
+        };
+
+        data.add_task(task);
+
+        // タスクのステータスを更新
+        if let Some(task) = data.find_task_by_id_mut(&task_id) {
+            task.status = TaskStatus::next_action;
+            task.updated_at = NaiveDate::from_ymd_opt(2024, 3, 20).unwrap();
+        }
+
+        // created_atは変更されていないことを確認
+        let task = data.find_task_by_id(&task_id).unwrap();
+        assert_eq!(task.created_at, created_date);
+        assert_ne!(task.updated_at, created_date);
+    }
+
+    // TOML シリアライゼーションに作成日と更新日が含まれることを確認
+    #[test]
+    fn test_task_dates_serialization() {
+        let date = NaiveDate::from_ymd_opt(2024, 3, 15).unwrap();
+        let task = Task {
+            id: "task-1".to_string(),
+            title: "Test Task".to_string(),
+            status: TaskStatus::inbox,
+            project: None,
+            context: None,
+            notes: None,
+            start_date: None,
+            created_at: date,
+            updated_at: date,
+        };
+
+        let serialized = toml::to_string(&task).unwrap();
+        assert!(serialized.contains("created_at = \"2024-03-15\""));
+        assert!(serialized.contains("updated_at = \"2024-03-15\""));
+
+        let deserialized: Task = toml::from_str(&serialized).unwrap();
+        assert_eq!(deserialized.created_at, date);
+        assert_eq!(deserialized.updated_at, date);
+    }
 }
