@@ -21,7 +21,7 @@ jobs:
         rust: [stable]
     
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@master
@@ -75,7 +75,7 @@ jobs:
     name: Security Audit
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     
     - name: Install cargo-audit
       run: cargo install cargo-audit
@@ -89,7 +89,7 @@ jobs:
     name: Minimum Supported Rust Version
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     
     - name: Install Rust 1.85.0
       uses: dtolnay/rust-toolchain@master
