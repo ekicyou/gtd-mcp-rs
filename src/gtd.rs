@@ -144,6 +144,7 @@ impl GtdData {
     }
 
     /// Get a reference to the task list for the given status
+    #[allow(dead_code)]
     fn get_task_list(&self, status: &TaskStatus) -> &Vec<Task> {
         match status {
             TaskStatus::inbox => &self.inbox,
@@ -219,6 +220,7 @@ impl GtdData {
         self.get_task_list_mut(&status).push(task);
     }
 
+    #[allow(dead_code)]
     pub fn remove_task(&mut self, id: &str) -> Option<Task> {
         for list in self.all_task_lists_mut() {
             if let Some(pos) = list.iter().position(|t| t.id == id) {
