@@ -42,20 +42,68 @@ pub enum ProjectStatus {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Context {
-    pub id: String,
     pub name: String,
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Default)]
 pub struct GtdData {
-    pub tasks: HashMap<String, Task>,
-    pub projects: HashMap<String, Project>,
+    pub tasks: Vec<Task>,
+    pub projects: Vec<Project>,
     pub contexts: HashMap<String, Context>,
 }
 
 impl GtdData {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    // Helper methods for task operations
+    #[allow(dead_code)]
+    pub fn find_task_by_id(&self, id: &str) -> Option<&Task> {
+        self.tasks.iter().find(|t| t.id == id)
+    }
+
+    pub fn find_task_by_id_mut(&mut self, id: &str) -> Option<&mut Task> {
+        self.tasks.iter_mut().find(|t| t.id == id)
+    }
+
+    pub fn add_task(&mut self, task: Task) {
+        self.tasks.push(task);
+    }
+
+    pub fn remove_task(&mut self, id: &str) -> Option<Task> {
+        if let Some(pos) = self.tasks.iter().position(|t| t.id == id) {
+            Some(self.tasks.remove(pos))
+        } else {
+            None
+        }
+    }
+
+    // Helper methods for project operations
+    #[allow(dead_code)]
+    pub fn find_project_by_id(&self, id: &str) -> Option<&Project> {
+        self.projects.iter().find(|p| p.id == id)
+    }
+
+    #[allow(dead_code)]
+    pub fn find_project_by_id_mut(&mut self, id: &str) -> Option<&mut Project> {
+        self.projects.iter_mut().find(|p| p.id == id)
+    }
+
+    pub fn add_project(&mut self, project: Project) {
+        self.projects.push(project);
+    }
+
+    // Helper methods for context operations
+    #[allow(dead_code)]
+    pub fn find_context_by_name(&self, name: &str) -> Option<&Context> {
+        self.contexts.get(name)
+    }
+
+    #[allow(dead_code)]
+    pub fn add_context(&mut self, context: Context) {
+        self.contexts.insert(context.name.clone(), context);
     }
 }
 
@@ -89,9 +137,9 @@ mod tests {
             start_date: None,
         };
 
-        data.tasks.insert(task.id.clone(), task.clone());
+        data.add_task(task.clone());
         assert_eq!(data.tasks.len(), 1);
-        assert_eq!(data.tasks.get("task-1").unwrap().title, "Test Task");
+        assert_eq!(data.find_task_by_id("task-1").unwrap().title, "Test Task");
     }
 
     // 複数タスクの挿入テスト
@@ -110,7 +158,7 @@ mod tests {
                 notes: None,
                 start_date: None,
             };
-            data.tasks.insert(task.id.clone(), task);
+            data.add_task(task);
         }
 
         assert_eq!(data.tasks.len(), 5);
@@ -132,15 +180,15 @@ mod tests {
             start_date: None,
         };
 
-        data.tasks.insert(task_id.clone(), task);
+        data.add_task(task);
 
         // Update status
-        if let Some(task) = data.tasks.get_mut(&task_id) {
+        if let Some(task) = data.find_task_by_id_mut(&task_id) {
             task.status = TaskStatus::next_action;
         }
 
         assert!(matches!(
-            data.tasks.get(&task_id).unwrap().status,
+            data.find_task_by_id(&task_id).unwrap().status,
             TaskStatus::next_action
         ));
     }
@@ -161,10 +209,10 @@ mod tests {
             start_date: None,
         };
 
-        data.tasks.insert(task_id.clone(), task);
+        data.add_task(task);
         assert_eq!(data.tasks.len(), 1);
 
-        data.tasks.remove(&task_id);
+        data.remove_task(&task_id);
         assert_eq!(data.tasks.len(), 0);
     }
 
@@ -311,9 +359,9 @@ mod tests {
             status: ProjectStatus::active,
         };
 
-        data.projects.insert(project.id.clone(), project.clone());
+        data.add_project(project.clone());
         assert_eq!(data.projects.len(), 1);
-        assert_eq!(data.projects.get("project-1").unwrap().name, "Test Project");
+        assert_eq!(data.find_project_by_id("project-1").unwrap().name, "Test Project");
     }
 
     // プロジェクトステータスの更新テスト
@@ -329,15 +377,15 @@ mod tests {
             status: ProjectStatus::active,
         };
 
-        data.projects.insert(project_id.clone(), project);
+        data.add_project(project);
 
         // Update status
-        if let Some(project) = data.projects.get_mut(&project_id) {
+        if let Some(project) = data.find_project_by_id_mut(&project_id) {
             project.status = ProjectStatus::completed;
         }
 
         assert!(matches!(
-            data.projects.get(&project_id).unwrap().status,
+            data.find_project_by_id(&project_id).unwrap().status,
             ProjectStatus::completed
         ));
     }
@@ -347,12 +395,25 @@ mod tests {
     #[test]
     fn test_context_creation() {
         let context = Context {
-            id: "context-1".to_string(),
             name: "Office".to_string(),
+            description: None,
         };
 
-        assert_eq!(context.id, "context-1");
         assert_eq!(context.name, "Office");
+        assert_eq!(context.description, None);
+    }
+
+    // コンテキストの説明付き作成テスト
+    // 説明フィールドを持つコンテキストが正しく作成されることを確認
+    #[test]
+    fn test_context_with_description() {
+        let context = Context {
+            name: "Office".to_string(),
+            description: Some("Work environment with desk and computer".to_string()),
+        };
+
+        assert_eq!(context.name, "Office");
+        assert_eq!(context.description, Some("Work environment with desk and computer".to_string()));
     }
 
     // GtdDataへのコンテキスト挿入テスト
@@ -361,13 +422,13 @@ mod tests {
     fn test_gtd_data_insert_context() {
         let mut data = GtdData::new();
         let context = Context {
-            id: "context-1".to_string(),
             name: "Office".to_string(),
+            description: None,
         };
 
-        data.contexts.insert(context.id.clone(), context.clone());
+        data.add_context(context.clone());
         assert_eq!(data.contexts.len(), 1);
-        assert_eq!(data.contexts.get("context-1").unwrap().name, "Office");
+        assert_eq!(data.find_context_by_name("Office").unwrap().name, "Office");
     }
 
     // 複数コンテキストの挿入テスト
@@ -376,18 +437,18 @@ mod tests {
     fn test_gtd_data_insert_multiple_contexts() {
         let mut data = GtdData::new();
         let contexts = vec![
-            ("ctx-1", "Office"),
-            ("ctx-2", "Home"),
-            ("ctx-3", "Phone"),
-            ("ctx-4", "Errands"),
+            "Office",
+            "Home",
+            "Phone",
+            "Errands",
         ];
 
-        for (id, name) in contexts {
+        for name in contexts {
             let context = Context {
-                id: id.to_string(),
                 name: name.to_string(),
+                description: None,
             };
-            data.contexts.insert(context.id.clone(), context);
+            data.add_context(context);
         }
 
         assert_eq!(data.contexts.len(), 4);
@@ -442,14 +503,13 @@ mod tests {
     #[test]
     fn test_context_serialization() {
         let context = Context {
-            id: "context-1".to_string(),
             name: "Office".to_string(),
+            description: None,
         };
 
         let serialized = toml::to_string(&context).unwrap();
         let deserialized: Context = toml::from_str(&serialized).unwrap();
 
-        assert_eq!(context.id, deserialized.id);
         assert_eq!(context.name, deserialized.name);
     }
 
@@ -468,7 +528,7 @@ mod tests {
             notes: None,
             start_date: None,
         };
-        data.tasks.insert(task.id.clone(), task);
+        data.add_task(task);
 
         let project = Project {
             id: "project-1".to_string(),
@@ -476,13 +536,13 @@ mod tests {
             description: None,
             status: ProjectStatus::active,
         };
-        data.projects.insert(project.id.clone(), project);
+        data.add_project(project);
 
         let context = Context {
-            id: "context-1".to_string(),
             name: "Office".to_string(),
+            description: None,
         };
-        data.contexts.insert(context.id.clone(), context);
+        data.add_context(context);
 
         let serialized = toml::to_string(&data).unwrap();
         let deserialized: GtdData = toml::from_str(&serialized).unwrap();
@@ -517,13 +577,13 @@ mod tests {
                 notes: None,
                 start_date: None,
             };
-            data.tasks.insert(task.id.clone(), task);
+            data.add_task(task);
         }
 
         // Filter by Inbox
         let inbox_tasks: Vec<_> = data
             .tasks
-            .values()
+            .iter()
             .filter(|t| matches!(t.status, TaskStatus::inbox))
             .collect();
         assert_eq!(inbox_tasks.len(), 1);
@@ -531,7 +591,7 @@ mod tests {
         // Filter by Done
         let done_tasks: Vec<_> = data
             .tasks
-            .values()
+            .iter()
             .filter(|t| matches!(t.status, TaskStatus::done))
             .collect();
         assert_eq!(done_tasks.len(), 1);
@@ -557,12 +617,12 @@ mod tests {
                 notes: None,
                 start_date: None,
             };
-            data.tasks.insert(task.id.clone(), task);
+            data.add_task(task);
         }
 
         let project_tasks: Vec<_> = data
             .tasks
-            .values()
+            .iter()
             .filter(|t| t.project.as_ref().map_or(false, |p| p == "project-1"))
             .collect();
         assert_eq!(project_tasks.len(), 2);
@@ -588,12 +648,12 @@ mod tests {
                 notes: None,
                 start_date: None,
             };
-            data.tasks.insert(task.id.clone(), task);
+            data.add_task(task);
         }
 
         let context_tasks: Vec<_> = data
             .tasks
-            .values()
+            .iter()
             .filter(|t| t.context.as_ref().map_or(false, |c| c == "context-1"))
             .collect();
         assert_eq!(context_tasks.len(), 2);
@@ -674,5 +734,184 @@ mod tests {
             serialized.contains("on_hold"),
             "Expected 'on_hold' in TOML output"
         );
+    }
+
+    // Insertion order preservation test
+    // Verify that tasks maintain their insertion order (Vec-based instead of HashMap)
+    #[test]
+    fn test_gtd_data_insertion_order() {
+        let mut data = GtdData::new();
+
+        // 特定の順序でタスクを追加
+        for i in 1..=5 {
+            let task = Task {
+                id: format!("task-{}", i),
+                title: format!("Task {}", i),
+                status: TaskStatus::inbox,
+                project: None,
+                context: None,
+                notes: None,
+                start_date: None,
+            };
+            data.add_task(task);
+        }
+
+        // Verify that tasks maintain insertion order
+        assert_eq!(data.tasks.len(), 5);
+        for (i, task) in data.tasks.iter().enumerate() {
+            assert_eq!(task.id, format!("task-{}", i + 1));
+            assert_eq!(task.title, format!("Task {}", i + 1));
+        }
+    }
+
+    // TOML serialization order preservation test
+    // Verify that TOML serialization maintains insertion order
+    #[test]
+    fn test_toml_serialization_order() {
+        let mut data = GtdData::new();
+
+        // 特定の順序でアイテムを追加
+        for i in 1..=3 {
+            data.add_task(Task {
+                id: format!("task-{}", i),
+                title: format!("Task {}", i),
+                status: TaskStatus::inbox,
+                project: None,
+                context: None,
+                notes: None,
+                start_date: None,
+            });
+        }
+
+        for i in 1..=2 {
+            data.add_project(Project {
+                id: format!("project-{}", i),
+                name: format!("Project {}", i),
+                description: None,
+                status: ProjectStatus::active,
+            });
+        }
+
+        let toml_str = toml::to_string(&data).unwrap();
+        let deserialized: GtdData = toml::from_str(&toml_str).unwrap();
+
+        // Verify deserialized data maintains insertion order
+        assert_eq!(deserialized.tasks.len(), 3);
+        for (i, task) in deserialized.tasks.iter().enumerate() {
+            assert_eq!(task.id, format!("task-{}", i + 1));
+        }
+
+        assert_eq!(deserialized.projects.len(), 2);
+        for (i, project) in deserialized.projects.iter().enumerate() {
+            assert_eq!(project.id, format!("project-{}", i + 1));
+        }
+    }
+
+    // 完全なTOML出力テスト（全フィールド設定）
+    // 全フィールドを設定した状態でTOML出力を検証し、意図したテキスト形式で出力されることを確認する
+    // このテストは出力形式の変更を検出するため、期待されるTOMLテキストとの完全一致を検証する
+    #[test]
+    fn test_complete_toml_output() {
+        let mut data = GtdData::new();
+
+        // 全フィールドを設定したタスクを追加
+        data.add_task(Task {
+            id: "task-001".to_string(),
+            title: "Complete project documentation".to_string(),
+            status: TaskStatus::next_action,
+            project: Some("project-001".to_string()),
+            context: Some("context-001".to_string()),
+            notes: Some("Review all sections and update examples".to_string()),
+            start_date: NaiveDate::from_ymd_opt(2024, 3, 15),
+        });
+
+        // 最小限のフィールドを設定したタスクを追加（比較用）
+        data.add_task(Task {
+            id: "task-002".to_string(),
+            title: "Quick task".to_string(),
+            status: TaskStatus::inbox,
+            project: None,
+            context: None,
+            notes: None,
+            start_date: None,
+        });
+
+        // 全フィールドを設定したプロジェクトを追加
+        data.add_project(Project {
+            id: "project-001".to_string(),
+            name: "Documentation Project".to_string(),
+            description: Some("Comprehensive project documentation update".to_string()),
+            status: ProjectStatus::active,
+        });
+
+        // 説明付きコンテキストを追加
+        data.add_context(Context {
+            name: "Office".to_string(),
+            description: Some("Work environment with desk and computer".to_string()),
+        });
+
+        // TOML出力を生成
+        let toml_output = toml::to_string_pretty(&data).unwrap();
+
+        // TOML構造と可読性を確認
+        println!("\n=== TOML Output ===\n{}\n===================\n", toml_output);
+
+        // 期待されるTOML構造（テキスト完全一致）
+        let expected_toml = r#"[[tasks]]
+id = "task-001"
+title = "Complete project documentation"
+status = "next_action"
+project = "project-001"
+context = "context-001"
+notes = "Review all sections and update examples"
+start_date = "2024-03-15"
+
+[[tasks]]
+id = "task-002"
+title = "Quick task"
+status = "inbox"
+
+[[projects]]
+id = "project-001"
+name = "Documentation Project"
+description = "Comprehensive project documentation update"
+status = "active"
+
+[contexts.Office]
+name = "Office"
+description = "Work environment with desk and computer"
+"#;
+
+        // TOML出力が期待される形式と完全一致することを確認
+        assert_eq!(toml_output, expected_toml, "TOML output should match expected format");
+
+        // デシリアライゼーションが正しく動作することを確認
+        let deserialized: GtdData = toml::from_str(&toml_output).unwrap();
+
+        // 全タスクフィールドを検証
+        assert_eq!(deserialized.tasks.len(), 2);
+        let task1 = &deserialized.tasks[0];
+        assert_eq!(task1.id, "task-001");
+        assert_eq!(task1.title, "Complete project documentation");
+        assert!(matches!(task1.status, TaskStatus::next_action));
+        assert_eq!(task1.project, Some("project-001".to_string()));
+        assert_eq!(task1.context, Some("context-001".to_string()));
+        assert_eq!(task1.notes, Some("Review all sections and update examples".to_string()));
+        assert_eq!(task1.start_date, NaiveDate::from_ymd_opt(2024, 3, 15));
+
+        // プロジェクトフィールドを検証
+        assert_eq!(deserialized.projects.len(), 1);
+        let project1 = &deserialized.projects[0];
+        assert_eq!(project1.id, "project-001");
+        assert_eq!(project1.name, "Documentation Project");
+        assert_eq!(project1.description, Some("Comprehensive project documentation update".to_string()));
+        assert!(matches!(project1.status, ProjectStatus::active));
+
+        // コンテキストフィールドを検証
+        assert_eq!(deserialized.contexts.len(), 1);
+        
+        let context_office = deserialized.contexts.get("Office").unwrap();
+        assert_eq!(context_office.name, "Office");
+        assert_eq!(context_office.description, Some("Work environment with desk and computer".to_string()));
     }
 }

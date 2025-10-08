@@ -116,7 +116,7 @@ mod tests {
             notes: Some("Test notes".to_string()),
             start_date: NaiveDate::from_ymd_opt(2024, 12, 25),
         };
-        data.tasks.insert(task.id.clone(), task.clone());
+        data.add_task(task.clone());
 
         let save_result = storage.save(&data);
         assert!(save_result.is_ok());
@@ -127,7 +127,7 @@ mod tests {
         let loaded_data = load_result.unwrap();
         assert_eq!(loaded_data.tasks.len(), 1);
 
-        let loaded_task = loaded_data.tasks.get("task-1").unwrap();
+        let loaded_task = loaded_data.find_task_by_id("task-1").unwrap();
         assert_eq!(loaded_task.title, "Test Task");
         assert_eq!(loaded_task.project, Some("project-1".to_string()));
         assert_eq!(loaded_task.context, Some("context-1".to_string()));
@@ -158,7 +158,7 @@ mod tests {
             description: Some("Test description".to_string()),
             status: ProjectStatus::active,
         };
-        data.projects.insert(project.id.clone(), project.clone());
+        data.add_project(project.clone());
 
         let save_result = storage.save(&data);
         assert!(save_result.is_ok());
@@ -169,7 +169,7 @@ mod tests {
         let loaded_data = load_result.unwrap();
         assert_eq!(loaded_data.projects.len(), 1);
 
-        let loaded_project = loaded_data.projects.get("project-1").unwrap();
+        let loaded_project = loaded_data.find_project_by_id("project-1").unwrap();
         assert_eq!(loaded_project.name, "Test Project");
         assert_eq!(
             loaded_project.description,
@@ -192,10 +192,10 @@ mod tests {
         let mut data = GtdData::new();
 
         let context = Context {
-            id: "context-1".to_string(),
             name: "Office".to_string(),
+            description: None,
         };
-        data.contexts.insert(context.id.clone(), context.clone());
+        data.add_context(context.clone());
 
         let save_result = storage.save(&data);
         assert!(save_result.is_ok());
@@ -206,7 +206,7 @@ mod tests {
         let loaded_data = load_result.unwrap();
         assert_eq!(loaded_data.contexts.len(), 1);
 
-        let loaded_context = loaded_data.contexts.get("context-1").unwrap();
+        let loaded_context = loaded_data.find_context_by_name("Office").unwrap();
         assert_eq!(loaded_context.name, "Office");
 
         // Clean up
@@ -235,7 +235,7 @@ mod tests {
                 notes: None,
                 start_date: None,
             };
-            data.tasks.insert(task.id.clone(), task);
+            data.add_task(task);
         }
 
         // Add multiple projects
@@ -246,16 +246,16 @@ mod tests {
                 description: None,
                 status: ProjectStatus::active,
             };
-            data.projects.insert(project.id.clone(), project);
+            data.add_project(project);
         }
 
         // Add multiple contexts
         for i in 1..=2 {
             let context = Context {
-                id: format!("context-{}", i),
                 name: format!("Context {}", i),
+                description: None,
             };
-            data.contexts.insert(context.id.clone(), context);
+            data.add_context(context);
         }
 
         let save_result = storage.save(&data);
@@ -294,7 +294,7 @@ mod tests {
             notes: None,
             start_date: None,
         };
-        data1.tasks.insert(task1.id.clone(), task1);
+        data1.add_task(task1);
         storage.save(&data1).unwrap();
 
         // Second save (overwrite)
@@ -308,14 +308,14 @@ mod tests {
             notes: None,
             start_date: None,
         };
-        data2.tasks.insert(task2.id.clone(), task2);
+        data2.add_task(task2);
         storage.save(&data2).unwrap();
 
         // Load and verify
         let loaded_data = storage.load().unwrap();
         assert_eq!(loaded_data.tasks.len(), 1);
-        assert!(loaded_data.tasks.contains_key("task-2"));
-        assert!(!loaded_data.tasks.contains_key("task-1"));
+        assert!(loaded_data.find_task_by_id("task-2").is_some());
+        assert!(loaded_data.find_task_by_id("task-1").is_none());
 
         // Clean up
         let _ = fs::remove_file(&test_path);
@@ -368,7 +368,7 @@ mod tests {
                 notes: None,
                 start_date: None,
             };
-            data.tasks.insert(task.id.clone(), task);
+            data.add_task(task);
         }
 
         storage.save(&data).unwrap();
