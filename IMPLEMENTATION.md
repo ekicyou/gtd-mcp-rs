@@ -148,13 +148,14 @@ Or with the release build:
 
 The server uses sequential counter-based IDs instead of UUIDs for better LLM interaction:
 
-- **Task IDs**: `T1`, `T2`, `T3`, ... (2-3 characters)
-- **Project IDs**: `P1`, `P2`, `P3`, ... (2-3 characters)
+- **Task IDs**: `#1`, `#2`, `#3`, ... (2-3 characters, GitHub issue tracker style)
+- **Project IDs**: `project-1`, `project-2`, `project-3`, ... (9-11 characters, descriptive format)
 
 ### Benefits:
-- ✅ **90%+ reduction** in character count compared to UUIDs (36 chars)
-- ✅ **Ultra-short format** similar to GitHub issue tracker (`T42`, `P5`)
-- ✅ **Human-readable** and easy to remember (`T42` vs `d8f5f3c1-7e4d-4b2a-9f8e-1c2d3e4f5a6b`)
+- ✅ **94%+ reduction** in character count for task IDs compared to UUIDs (36 chars → 2-3 chars)
+- ✅ **GitHub issue tracker style** for tasks (`#1`, `#2`, `#42`) - instantly familiar
+- ✅ **Descriptive project IDs** (`project-1`) - more readable as projects are fewer
+- ✅ **Human-readable** and easy to remember (`#42` vs `d8f5f3c1-7e4d-4b2a-9f8e-1c2d3e4f5a6b`)
 - ✅ **LLM-friendly** - easier for language models to reference and recall
 - ✅ **Lower token cost** when transmitting task lists to LLMs
 - ✅ **Persistent counters** stored in `gtd.toml` ensure uniqueness across sessions
@@ -162,7 +163,7 @@ The server uses sequential counter-based IDs instead of UUIDs for better LLM int
 Example output:
 ```
 Old: - [d8f5f3c1-7e4d-4b2a-9f8e-1c2d3e4f5a6b] Complete documentation
-New: - [T1] Complete documentation
+New: - [#1] Complete documentation
 ```
 
 ## Future Enhancements

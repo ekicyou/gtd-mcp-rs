@@ -167,13 +167,13 @@ impl GtdData {
     /// Generate a new unique task ID
     pub fn generate_task_id(&mut self) -> String {
         self.task_counter += 1;
-        format!("T{}", self.task_counter)
+        format!("#{}", self.task_counter)
     }
 
     /// Generate a new unique project ID
     pub fn generate_project_id(&mut self) -> String {
         self.project_counter += 1;
-        format!("P{}", self.project_counter)
+        format!("project-{}", self.project_counter)
     }
 
     /// Get a reference to the task list for the given status
@@ -1579,9 +1579,9 @@ name = "Home"
         let id2 = data.generate_task_id();
         let id3 = data.generate_task_id();
         
-        assert_eq!(id1, "T1");
-        assert_eq!(id2, "T2");
-        assert_eq!(id3, "T3");
+        assert_eq!(id1, "#1");
+        assert_eq!(id2, "#2");
+        assert_eq!(id3, "#3");
         assert_eq!(data.task_counter, 3);
     }
 
@@ -1594,9 +1594,9 @@ name = "Home"
         let id2 = data.generate_project_id();
         let id3 = data.generate_project_id();
         
-        assert_eq!(id1, "P1");
-        assert_eq!(id2, "P2");
-        assert_eq!(id3, "P3");
+        assert_eq!(id1, "project-1");
+        assert_eq!(id2, "project-2");
+        assert_eq!(id3, "project-3");
         assert_eq!(data.project_counter, 3);
     }
 
@@ -1610,10 +1610,10 @@ name = "Home"
         let task_id2 = data.generate_task_id();
         let project_id2 = data.generate_project_id();
         
-        assert_eq!(task_id1, "T1");
-        assert_eq!(task_id2, "T2");
-        assert_eq!(project_id1, "P1");
-        assert_eq!(project_id2, "P2");
+        assert_eq!(task_id1, "#1");
+        assert_eq!(task_id2, "#2");
+        assert_eq!(project_id1, "project-1");
+        assert_eq!(project_id2, "project-2");
         assert_eq!(data.task_counter, 2);
         assert_eq!(data.project_counter, 2);
     }
@@ -1642,8 +1642,8 @@ name = "Home"
         
         // Next IDs should continue from where we left off
         let mut data = deserialized;
-        assert_eq!(data.generate_task_id(), "T3");
-        assert_eq!(data.generate_project_id(), "P2");
+        assert_eq!(data.generate_task_id(), "#3");
+        assert_eq!(data.generate_project_id(), "project-2");
     }
 
     // ID生成テスト - カウンターが0の場合はTOMLに含まれないことを確認

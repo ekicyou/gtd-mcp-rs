@@ -10,7 +10,7 @@ This server now uses `mcp-attr` for better Windows compatibility. Previous versi
 ## Features
 
 - ✅ **Cross-Platform**: Works on Windows, Linux, and macOS
-- ✅ **LLM-Friendly IDs**: Uses ultra-short IDs (e.g., `T1`, `P1`) similar to GitHub issue tracker for better LLM interaction
+- ✅ **LLM-Friendly IDs**: Uses GitHub-style IDs (`#1`, `#2` for tasks, `project-1`, `project-2` for projects) for optimal readability and LLM interaction
 - Task management (inbox, next actions, waiting for, someday/maybe, done, trash)
 - **Trash management**: Move tasks to trash and bulk delete
 - **Calendar management**: Tasks can have start dates for GTD tickler file workflow
@@ -80,13 +80,13 @@ Add a new task to the inbox.
 ```json
 {
   "title": "Review project proposal",
-  "project": "P1",
+  "project": "project-1",
   "context": "Office",
   "start_date": "2024-12-25"
 }
 ```
 
-**Note:** IDs are automatically generated in an ultra-short format (e.g., `T1`, `T2` for tasks, `P1`, `P2` for projects) similar to GitHub issue tracker, making them easier to reference in conversations.
+**Note:** IDs are automatically generated as `#1`, `#2`, `#3` for tasks (GitHub issue tracker style) and `project-1`, `project-2` for projects, making them highly readable and easy to reference in conversations.
 
 ### list_tasks
 List all tasks with optional status filter. Task listings now include creation and update dates for tracking task age and recent modifications.
@@ -110,7 +110,7 @@ Move a task to trash.
 **Example:**
 ```json
 {
-  "task_id": "T1"
+  "task_id": "#1"
 }
 ```
 
@@ -152,16 +152,16 @@ Tasks and projects are stored in `gtd.toml` in the current directory. This file 
 
 ```toml
 [[inbox]]
-id = "T1"
+id = "#1"
 title = "Review project proposal"
-project = "P1"
+project = "project-1"
 context = "Office"
 start_date = "2024-12-25"
 created_at = "2024-01-01"
 updated_at = "2024-01-01"
 
 [[projects]]
-id = "P1"
+id = "project-1"
 name = "Q1 Marketing Campaign"
 description = "Launch new product marketing campaign"
 status = "active"
