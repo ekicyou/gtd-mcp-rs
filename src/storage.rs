@@ -192,7 +192,6 @@ mod tests {
         let mut data = GtdData::new();
 
         let context = Context {
-            id: "context-1".to_string(),
             name: "Office".to_string(),
         };
         data.add_context(context.clone());
@@ -206,7 +205,7 @@ mod tests {
         let loaded_data = load_result.unwrap();
         assert_eq!(loaded_data.contexts.len(), 1);
 
-        let loaded_context = loaded_data.find_context_by_id("context-1").unwrap();
+        let loaded_context = loaded_data.find_context_by_name("Office").unwrap();
         assert_eq!(loaded_context.name, "Office");
 
         // Clean up
@@ -252,7 +251,6 @@ mod tests {
         // Add multiple contexts
         for i in 1..=2 {
             let context = Context {
-                id: format!("context-{}", i),
                 name: format!("Context {}", i),
             };
             data.add_context(context);

@@ -1,5 +1,6 @@
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Task {
@@ -41,7 +42,6 @@ pub enum ProjectStatus {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Context {
-    pub id: String,
     pub name: String,
 }
 
@@ -49,7 +49,7 @@ pub struct Context {
 pub struct GtdData {
     pub tasks: Vec<Task>,
     pub projects: Vec<Project>,
-    pub contexts: Vec<Context>,
+    pub contexts: HashMap<String, Context>,
 }
 
 impl GtdData {
@@ -96,13 +96,13 @@ impl GtdData {
 
     // Helper methods for context operations
     #[allow(dead_code)]
-    pub fn find_context_by_id(&self, id: &str) -> Option<&Context> {
-        self.contexts.iter().find(|c| c.id == id)
+    pub fn find_context_by_name(&self, name: &str) -> Option<&Context> {
+        self.contexts.get(name)
     }
 
     #[allow(dead_code)]
     pub fn add_context(&mut self, context: Context) {
-        self.contexts.push(context);
+        self.contexts.insert(context.name.clone(), context);
     }
 }
 
@@ -394,11 +394,9 @@ mod tests {
     #[test]
     fn test_context_creation() {
         let context = Context {
-            id: "context-1".to_string(),
             name: "Office".to_string(),
         };
 
-        assert_eq!(context.id, "context-1");
         assert_eq!(context.name, "Office");
     }
 
@@ -408,13 +406,12 @@ mod tests {
     fn test_gtd_data_insert_context() {
         let mut data = GtdData::new();
         let context = Context {
-            id: "context-1".to_string(),
             name: "Office".to_string(),
         };
 
         data.add_context(context.clone());
         assert_eq!(data.contexts.len(), 1);
-        assert_eq!(data.find_context_by_id("context-1").unwrap().name, "Office");
+        assert_eq!(data.find_context_by_name("Office").unwrap().name, "Office");
     }
 
     // 複数コンテキストの挿入テスト
@@ -423,15 +420,14 @@ mod tests {
     fn test_gtd_data_insert_multiple_contexts() {
         let mut data = GtdData::new();
         let contexts = vec![
-            ("ctx-1", "Office"),
-            ("ctx-2", "Home"),
-            ("ctx-3", "Phone"),
-            ("ctx-4", "Errands"),
+            "Office",
+            "Home",
+            "Phone",
+            "Errands",
         ];
 
-        for (id, name) in contexts {
+        for name in contexts {
             let context = Context {
-                id: id.to_string(),
                 name: name.to_string(),
             };
             data.add_context(context);
@@ -489,14 +485,12 @@ mod tests {
     #[test]
     fn test_context_serialization() {
         let context = Context {
-            id: "context-1".to_string(),
             name: "Office".to_string(),
         };
 
         let serialized = toml::to_string(&context).unwrap();
         let deserialized: Context = toml::from_str(&serialized).unwrap();
 
-        assert_eq!(context.id, deserialized.id);
         assert_eq!(context.name, deserialized.name);
     }
 
@@ -526,7 +520,6 @@ mod tests {
         data.add_project(project);
 
         let context = Context {
-            id: "context-1".to_string(),
             name: "Office".to_string(),
         };
         data.add_context(context);
@@ -832,7 +825,6 @@ mod tests {
 
         // Add a context
         data.add_context(Context {
-            id: "context-001".to_string(),
             name: "Office".to_string(),
         });
 
@@ -863,8 +855,7 @@ name = "Documentation Project"
 description = "Comprehensive project documentation update"
 status = "active"
 
-[[contexts]]
-id = "context-001"
+[contexts.Office]
 name = "Office"
 "#;
 
@@ -895,8 +886,7 @@ name = "Office"
 
         // Verify context fields
         assert_eq!(deserialized.contexts.len(), 1);
-        let context1 = &deserialized.contexts[0];
-        assert_eq!(context1.id, "context-001");
+        let context1 = deserialized.contexts.get("Office").unwrap();
         assert_eq!(context1.name, "Office");
     }
 }
