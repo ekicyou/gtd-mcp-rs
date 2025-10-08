@@ -13,6 +13,7 @@ This server now uses `mcp-attr` for better Windows compatibility. Previous versi
 - Task management (inbox, next actions, waiting for, someday/maybe, done, trash)
 - **Trash management**: Move tasks to trash and bulk delete
 - **Calendar management**: Tasks can have start dates for GTD tickler file workflow
+- **Referential integrity**: Validates that project and context references exist when creating tasks
 - Project management
 - Context management
 - TOML-based storage (gtd.toml)
@@ -62,17 +63,19 @@ Add a new task to the inbox.
 
 **Parameters:**
 - `title` (string, required): Task title
-- `project` (string, optional): Project ID
-- `context` (string, optional): Context ID
+- `project` (string, optional): Project ID (must exist if specified)
+- `context` (string, optional): Context name (must exist if specified)
 - `notes` (string, optional): Additional notes
 - `start_date` (string, optional): Start date in YYYY-MM-DD format (for GTD tickler file)
+
+**Note:** If a project or context is specified, the server validates that it exists before creating the task. This ensures referential integrity in your GTD system.
 
 **Example:**
 ```json
 {
   "title": "Review project proposal",
   "project": "proj-123",
-  "context": "ctx-office",
+  "context": "Office",
   "start_date": "2024-12-25"
 }
 ```
@@ -140,22 +143,23 @@ Tasks and projects are stored in `gtd.toml` in the current directory. This file 
 ### Example gtd.toml
 
 ```toml
-[tasks]
-
-[tasks."abc-123"]
-id = "abc-123"
+[[tasks]]
+id = "task-001"
 title = "Review project proposal"
-status = "Inbox"
+status = "inbox"
+project = "proj-456"
+context = "Office"
 start_date = "2024-12-25"
 
-[projects]
-
-[projects."proj-456"]
+[[projects]]
 id = "proj-456"
 name = "Q1 Marketing Campaign"
-status = "Active"
+description = "Launch new product marketing campaign"
+status = "active"
 
-[contexts]
+[contexts.Office]
+name = "Office"
+description = "Work environment with desk and computer"
 ```
 
 ## Git Integration

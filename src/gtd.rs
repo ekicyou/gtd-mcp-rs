@@ -105,6 +105,30 @@ impl GtdData {
     pub fn add_context(&mut self, context: Context) {
         self.contexts.insert(context.name.clone(), context);
     }
+
+    /// Validate that a task's project reference exists (if specified)
+    /// Returns true if the task has no project reference or if the reference is valid
+    pub fn validate_task_project(&self, task: &Task) -> bool {
+        match &task.project {
+            None => true,
+            Some(project_id) => self.find_project_by_id(project_id).is_some(),
+        }
+    }
+
+    /// Validate that a task's context reference exists (if specified)
+    /// Returns true if the task has no context reference or if the reference is valid
+    pub fn validate_task_context(&self, task: &Task) -> bool {
+        match &task.context {
+            None => true,
+            Some(context_name) => self.find_context_by_name(context_name).is_some(),
+        }
+    }
+
+    /// Validate that a task's references (project and context) exist
+    /// Returns true if all references are valid or not specified
+    pub fn validate_task_references(&self, task: &Task) -> bool {
+        self.validate_task_project(task) && self.validate_task_context(task)
+    }
 }
 
 #[cfg(test)]
@@ -820,7 +844,7 @@ mod tests {
             title: "Complete project documentation".to_string(),
             status: TaskStatus::next_action,
             project: Some("project-001".to_string()),
-            context: Some("context-001".to_string()),
+            context: Some("Office".to_string()),
             notes: Some("Review all sections and update examples".to_string()),
             start_date: NaiveDate::from_ymd_opt(2024, 3, 15),
         });
@@ -862,7 +886,7 @@ id = "task-001"
 title = "Complete project documentation"
 status = "next_action"
 project = "project-001"
-context = "context-001"
+context = "Office"
 notes = "Review all sections and update examples"
 start_date = "2024-03-15"
 
@@ -895,7 +919,7 @@ description = "Work environment with desk and computer"
         assert_eq!(task1.title, "Complete project documentation");
         assert!(matches!(task1.status, TaskStatus::next_action));
         assert_eq!(task1.project, Some("project-001".to_string()));
-        assert_eq!(task1.context, Some("context-001".to_string()));
+        assert_eq!(task1.context, Some("Office".to_string()));
         assert_eq!(task1.notes, Some("Review all sections and update examples".to_string()));
         assert_eq!(task1.start_date, NaiveDate::from_ymd_opt(2024, 3, 15));
 
@@ -913,5 +937,231 @@ description = "Work environment with desk and computer"
         let context_office = deserialized.contexts.get("Office").unwrap();
         assert_eq!(context_office.name, "Office");
         assert_eq!(context_office.description, Some("Work environment with desk and computer".to_string()));
+    }
+
+    // 参照整合性検証テスト - プロジェクト参照が有効
+    // タスクのプロジェクト参照が存在するプロジェクトを指している場合、検証が成功することを確認
+    #[test]
+    fn test_validate_task_project_valid() {
+        let mut data = GtdData::new();
+        
+        data.add_project(Project {
+            id: "project-1".to_string(),
+            name: "Test Project".to_string(),
+            description: None,
+            status: ProjectStatus::active,
+        });
+
+        let task = Task {
+            id: "task-1".to_string(),
+            title: "Test Task".to_string(),
+            status: TaskStatus::inbox,
+            project: Some("project-1".to_string()),
+            context: None,
+            notes: None,
+            start_date: None,
+        };
+
+        assert!(data.validate_task_project(&task));
+    }
+
+    // 参照整合性検証テスト - プロジェクト参照が無効
+    // タスクのプロジェクト参照が存在しないプロジェクトを指している場合、検証が失敗することを確認
+    #[test]
+    fn test_validate_task_project_invalid() {
+        let data = GtdData::new();
+        
+        let task = Task {
+            id: "task-1".to_string(),
+            title: "Test Task".to_string(),
+            status: TaskStatus::inbox,
+            project: Some("non-existent-project".to_string()),
+            context: None,
+            notes: None,
+            start_date: None,
+        };
+
+        assert!(!data.validate_task_project(&task));
+    }
+
+    // 参照整合性検証テスト - プロジェクト参照がNone
+    // タスクのプロジェクト参照がNoneの場合、検証が成功することを確認
+    #[test]
+    fn test_validate_task_project_none() {
+        let data = GtdData::new();
+        
+        let task = Task {
+            id: "task-1".to_string(),
+            title: "Test Task".to_string(),
+            status: TaskStatus::inbox,
+            project: None,
+            context: None,
+            notes: None,
+            start_date: None,
+        };
+
+        assert!(data.validate_task_project(&task));
+    }
+
+    // 参照整合性検証テスト - コンテキスト参照が有効
+    // タスクのコンテキスト参照が存在するコンテキストを指している場合、検証が成功することを確認
+    #[test]
+    fn test_validate_task_context_valid() {
+        let mut data = GtdData::new();
+        
+        data.add_context(Context {
+            name: "Office".to_string(),
+            description: None,
+        });
+
+        let task = Task {
+            id: "task-1".to_string(),
+            title: "Test Task".to_string(),
+            status: TaskStatus::inbox,
+            project: None,
+            context: Some("Office".to_string()),
+            notes: None,
+            start_date: None,
+        };
+
+        assert!(data.validate_task_context(&task));
+    }
+
+    // 参照整合性検証テスト - コンテキスト参照が無効
+    // タスクのコンテキスト参照が存在しないコンテキストを指している場合、検証が失敗することを確認
+    #[test]
+    fn test_validate_task_context_invalid() {
+        let data = GtdData::new();
+        
+        let task = Task {
+            id: "task-1".to_string(),
+            title: "Test Task".to_string(),
+            status: TaskStatus::inbox,
+            project: None,
+            context: Some("NonExistent".to_string()),
+            notes: None,
+            start_date: None,
+        };
+
+        assert!(!data.validate_task_context(&task));
+    }
+
+    // 参照整合性検証テスト - コンテキスト参照がNone
+    // タスクのコンテキスト参照がNoneの場合、検証が成功することを確認
+    #[test]
+    fn test_validate_task_context_none() {
+        let data = GtdData::new();
+        
+        let task = Task {
+            id: "task-1".to_string(),
+            title: "Test Task".to_string(),
+            status: TaskStatus::inbox,
+            project: None,
+            context: None,
+            notes: None,
+            start_date: None,
+        };
+
+        assert!(data.validate_task_context(&task));
+    }
+
+    // 参照整合性検証テスト - 全ての参照が有効
+    // タスクのプロジェクトとコンテキストの両方の参照が有効な場合、検証が成功することを確認
+    #[test]
+    fn test_validate_task_references_all_valid() {
+        let mut data = GtdData::new();
+        
+        data.add_project(Project {
+            id: "project-1".to_string(),
+            name: "Test Project".to_string(),
+            description: None,
+            status: ProjectStatus::active,
+        });
+
+        data.add_context(Context {
+            name: "Office".to_string(),
+            description: None,
+        });
+
+        let task = Task {
+            id: "task-1".to_string(),
+            title: "Test Task".to_string(),
+            status: TaskStatus::inbox,
+            project: Some("project-1".to_string()),
+            context: Some("Office".to_string()),
+            notes: None,
+            start_date: None,
+        };
+
+        assert!(data.validate_task_references(&task));
+    }
+
+    // 参照整合性検証テスト - プロジェクト参照のみ無効
+    // プロジェクト参照が無効でコンテキスト参照が有効な場合、検証が失敗することを確認
+    #[test]
+    fn test_validate_task_references_invalid_project() {
+        let mut data = GtdData::new();
+        
+        data.add_context(Context {
+            name: "Office".to_string(),
+            description: None,
+        });
+
+        let task = Task {
+            id: "task-1".to_string(),
+            title: "Test Task".to_string(),
+            status: TaskStatus::inbox,
+            project: Some("non-existent-project".to_string()),
+            context: Some("Office".to_string()),
+            notes: None,
+            start_date: None,
+        };
+
+        assert!(!data.validate_task_references(&task));
+    }
+
+    // 参照整合性検証テスト - コンテキスト参照のみ無効
+    // コンテキスト参照が無効でプロジェクト参照が有効な場合、検証が失敗することを確認
+    #[test]
+    fn test_validate_task_references_invalid_context() {
+        let mut data = GtdData::new();
+        
+        data.add_project(Project {
+            id: "project-1".to_string(),
+            name: "Test Project".to_string(),
+            description: None,
+            status: ProjectStatus::active,
+        });
+
+        let task = Task {
+            id: "task-1".to_string(),
+            title: "Test Task".to_string(),
+            status: TaskStatus::inbox,
+            project: Some("project-1".to_string()),
+            context: Some("NonExistent".to_string()),
+            notes: None,
+            start_date: None,
+        };
+
+        assert!(!data.validate_task_references(&task));
+    }
+
+    // 参照整合性検証テスト - 両方の参照が無効
+    // プロジェクトとコンテキストの両方の参照が無効な場合、検証が失敗することを確認
+    #[test]
+    fn test_validate_task_references_both_invalid() {
+        let data = GtdData::new();
+        
+        let task = Task {
+            id: "task-1".to_string(),
+            title: "Test Task".to_string(),
+            status: TaskStatus::inbox,
+            project: Some("non-existent-project".to_string()),
+            context: Some("NonExistent".to_string()),
+            notes: None,
+            start_date: None,
+        };
+
+        assert!(!data.validate_task_references(&task));
     }
 }

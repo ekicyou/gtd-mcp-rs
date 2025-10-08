@@ -66,6 +66,20 @@ impl McpServer for GtdServerHandler {
         };
 
         let mut data = self.data.lock().unwrap();
+        
+        // Validate references before adding the task
+        if !data.validate_task_references(&task) {
+            let mut errors = Vec::new();
+            if !data.validate_task_project(&task) {
+                errors.push("Invalid project reference");
+            }
+            if !data.validate_task_context(&task) {
+                errors.push("Invalid context reference");
+            }
+            drop(data);
+            bail!("Failed to add task: {}", errors.join(", "));
+        }
+        
         let task_id = task.id.clone();
         data.add_task(task);
         drop(data);
