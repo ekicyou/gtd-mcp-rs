@@ -742,7 +742,7 @@ mod tests {
     fn test_gtd_data_insertion_order() {
         let mut data = GtdData::new();
 
-        // Add tasks in specific order
+        // 特定の順序でタスクを追加
         for i in 1..=5 {
             let task = Task {
                 id: format!("task-{}", i),
@@ -770,7 +770,7 @@ mod tests {
     fn test_toml_serialization_order() {
         let mut data = GtdData::new();
 
-        // Add items in specific order
+        // 特定の順序でアイテムを追加
         for i in 1..=3 {
             data.add_task(Task {
                 id: format!("task-{}", i),
@@ -807,13 +807,14 @@ mod tests {
         }
     }
 
-    // Complete TOML output test with all fields populated
-    // Verify the actual TOML text output with all fields set and check readability
+    // 完全なTOML出力テスト（全フィールド設定）
+    // 全フィールドを設定した状態でTOML出力を検証し、意図したテキスト形式で出力されることを確認する
+    // このテストは出力形式の変更を検出するため、期待されるTOMLテキストとの完全一致を検証する
     #[test]
     fn test_complete_toml_output() {
         let mut data = GtdData::new();
 
-        // Add a task with all fields populated
+        // 全フィールドを設定したタスクを追加
         data.add_task(Task {
             id: "task-001".to_string(),
             title: "Complete project documentation".to_string(),
@@ -824,7 +825,7 @@ mod tests {
             start_date: NaiveDate::from_ymd_opt(2024, 3, 15),
         });
 
-        // Add a task with minimal fields for comparison
+        // 最小限のフィールドを設定したタスクを追加（比較用）
         data.add_task(Task {
             id: "task-002".to_string(),
             title: "Quick task".to_string(),
@@ -835,7 +836,7 @@ mod tests {
             start_date: None,
         });
 
-        // Add a project with all fields
+        // 全フィールドを設定したプロジェクトを追加
         data.add_project(Project {
             id: "project-001".to_string(),
             name: "Documentation Project".to_string(),
@@ -843,46 +844,51 @@ mod tests {
             status: ProjectStatus::active,
         });
 
-        // Add contexts - one without and one with description
+        // 説明付きコンテキストを追加
         data.add_context(Context {
             name: "Office".to_string(),
-            description: None,
+            description: Some("Work environment with desk and computer".to_string()),
         });
 
-        data.add_context(Context {
-            name: "Home".to_string(),
-            description: Some("Personal workspace for evening tasks".to_string()),
-        });
-
-        // Generate TOML output
+        // TOML出力を生成
         let toml_output = toml::to_string_pretty(&data).unwrap();
 
-        // Verify the TOML structure and readability
+        // TOML構造と可読性を確認
         println!("\n=== TOML Output ===\n{}\n===================\n", toml_output);
 
-        // Verify the TOML contains expected sections (order of contexts in HashMap is not guaranteed)
-        assert!(toml_output.contains("[[tasks]]"), "TOML should contain tasks section");
-        assert!(toml_output.contains("[[projects]]"), "TOML should contain projects section");
-        assert!(toml_output.contains("[contexts.Office]"), "TOML should contain Office context");
-        assert!(toml_output.contains("[contexts.Home]"), "TOML should contain Home context");
-        
-        // Verify task content
-        assert!(toml_output.contains("id = \"task-001\""));
-        assert!(toml_output.contains("title = \"Complete project documentation\""));
-        assert!(toml_output.contains("status = \"next_action\""));
-        assert!(toml_output.contains("start_date = \"2024-03-15\""));
-        
-        // Verify project content
-        assert!(toml_output.contains("name = \"Documentation Project\""));
-        assert!(toml_output.contains("description = \"Comprehensive project documentation update\""));
-        
-        // Verify context with description
-        assert!(toml_output.contains("description = \"Personal workspace for evening tasks\""));
+        // 期待されるTOML構造（テキスト完全一致）
+        let expected_toml = r#"[[tasks]]
+id = "task-001"
+title = "Complete project documentation"
+status = "next_action"
+project = "project-001"
+context = "context-001"
+notes = "Review all sections and update examples"
+start_date = "2024-03-15"
 
-        // Verify deserialization works correctly
+[[tasks]]
+id = "task-002"
+title = "Quick task"
+status = "inbox"
+
+[[projects]]
+id = "project-001"
+name = "Documentation Project"
+description = "Comprehensive project documentation update"
+status = "active"
+
+[contexts.Office]
+name = "Office"
+description = "Work environment with desk and computer"
+"#;
+
+        // TOML出力が期待される形式と完全一致することを確認
+        assert_eq!(toml_output, expected_toml, "TOML output should match expected format");
+
+        // デシリアライゼーションが正しく動作することを確認
         let deserialized: GtdData = toml::from_str(&toml_output).unwrap();
 
-        // Verify all task fields
+        // 全タスクフィールドを検証
         assert_eq!(deserialized.tasks.len(), 2);
         let task1 = &deserialized.tasks[0];
         assert_eq!(task1.id, "task-001");
@@ -893,7 +899,7 @@ mod tests {
         assert_eq!(task1.notes, Some("Review all sections and update examples".to_string()));
         assert_eq!(task1.start_date, NaiveDate::from_ymd_opt(2024, 3, 15));
 
-        // Verify project fields
+        // プロジェクトフィールドを検証
         assert_eq!(deserialized.projects.len(), 1);
         let project1 = &deserialized.projects[0];
         assert_eq!(project1.id, "project-001");
@@ -901,15 +907,11 @@ mod tests {
         assert_eq!(project1.description, Some("Comprehensive project documentation update".to_string()));
         assert!(matches!(project1.status, ProjectStatus::active));
 
-        // Verify context fields
-        assert_eq!(deserialized.contexts.len(), 2);
+        // コンテキストフィールドを検証
+        assert_eq!(deserialized.contexts.len(), 1);
         
         let context_office = deserialized.contexts.get("Office").unwrap();
         assert_eq!(context_office.name, "Office");
-        assert_eq!(context_office.description, None);
-        
-        let context_home = deserialized.contexts.get("Home").unwrap();
-        assert_eq!(context_home.name, "Home");
-        assert_eq!(context_home.description, Some("Personal workspace for evening tasks".to_string()));
+        assert_eq!(context_office.description, Some("Work environment with desk and computer".to_string()));
     }
 }
