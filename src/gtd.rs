@@ -750,4 +750,47 @@ mod tests {
             assert_eq!(task.title, format!("Task {}", i + 1));
         }
     }
+
+    // TOML serialization order preservation test
+    // Verify that TOML serialization maintains insertion order
+    #[test]
+    fn test_toml_serialization_order() {
+        let mut data = GtdData::new();
+
+        // Add items in specific order
+        for i in 1..=3 {
+            data.add_task(Task {
+                id: format!("task-{}", i),
+                title: format!("Task {}", i),
+                status: TaskStatus::inbox,
+                project: None,
+                context: None,
+                notes: None,
+                start_date: None,
+            });
+        }
+
+        for i in 1..=2 {
+            data.add_project(Project {
+                id: format!("project-{}", i),
+                name: format!("Project {}", i),
+                description: None,
+                status: ProjectStatus::active,
+            });
+        }
+
+        let toml_str = toml::to_string(&data).unwrap();
+        let deserialized: GtdData = toml::from_str(&toml_str).unwrap();
+
+        // Verify deserialized data maintains insertion order
+        assert_eq!(deserialized.tasks.len(), 3);
+        for (i, task) in deserialized.tasks.iter().enumerate() {
+            assert_eq!(task.id, format!("task-{}", i + 1));
+        }
+
+        assert_eq!(deserialized.projects.len(), 2);
+        for (i, project) in deserialized.projects.iter().enumerate() {
+            assert_eq!(project.id, format!("project-{}", i + 1));
+        }
+    }
 }
