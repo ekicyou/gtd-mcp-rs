@@ -1,5 +1,5 @@
 use chrono::NaiveDate;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -40,17 +40,51 @@ pub enum ProjectStatus {
     completed,
 }
 
+/// Context represents a GTD context (e.g., @office, @home)
+/// The name field is maintained internally but not serialized to TOML
+/// to avoid redundancy with the HashMap key
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Context {
+    #[serde(skip_serializing, default)]
     pub name: String,
     pub description: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Default)]
 pub struct GtdData {
     pub tasks: Vec<Task>,
     pub projects: Vec<Project>,
     pub contexts: HashMap<String, Context>,
+}
+
+impl<'de> Deserialize<'de> for GtdData {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct GtdDataHelper {
+            #[serde(default)]
+            tasks: Vec<Task>,
+            #[serde(default)]
+            projects: Vec<Project>,
+            #[serde(default)]
+            contexts: HashMap<String, Context>,
+        }
+        
+        let mut helper = GtdDataHelper::deserialize(deserializer)?;
+        
+        // Populate the name field in each Context from the HashMap key
+        for (key, context) in helper.contexts.iter_mut() {
+            context.name = key.clone();
+        }
+        
+        Ok(GtdData {
+            tasks: helper.tasks,
+            projects: helper.projects,
+            contexts: helper.contexts,
+        })
+    }
 }
 
 impl GtdData {
@@ -524,6 +558,7 @@ mod tests {
 
     // コンテキストのシリアライゼーションテスト
     // コンテキストをTOML形式にシリアライズし、デシリアライズして元のデータと一致することを確認
+    // Note: name フィールドは skip_serializing されるため、TOML には含まれない
     #[test]
     fn test_context_serialization() {
         let context = Context {
@@ -532,9 +567,13 @@ mod tests {
         };
 
         let serialized = toml::to_string(&context).unwrap();
+        // name フィールドは serialization でスキップされるため、TOML には含まれない
+        assert!(!serialized.contains("name"), "name field should not be serialized");
+        
         let deserialized: Context = toml::from_str(&serialized).unwrap();
-
-        assert_eq!(context.name, deserialized.name);
+        // standalone でデシリアライズすると name は空文字列になる（default）
+        assert_eq!(deserialized.name, "");
+        assert_eq!(deserialized.description, None);
     }
 
     // GtdData全体のシリアライゼーションテスト
@@ -902,7 +941,6 @@ description = "Comprehensive project documentation update"
 status = "active"
 
 [contexts.Office]
-name = "Office"
 description = "Work environment with desk and computer"
 "#;
 
@@ -937,6 +975,45 @@ description = "Work environment with desk and computer"
         let context_office = deserialized.contexts.get("Office").unwrap();
         assert_eq!(context_office.name, "Office");
         assert_eq!(context_office.description, Some("Work environment with desk and computer".to_string()));
+    }
+
+    // 後方互換性テスト: 旧形式（nameフィールド付き）のTOMLも正しく読み込めることを確認
+    #[test]
+    fn test_backward_compatibility_with_name_field() {
+        // 旧形式のTOML（nameフィールドが含まれている）
+        let old_format_toml = r#"
+[[tasks]]
+id = "task-001"
+title = "Test task"
+status = "inbox"
+
+[contexts.Office]
+name = "Office"
+description = "Work environment with desk and computer"
+
+[contexts.Home]
+name = "Home"
+"#;
+
+        // 旧形式のTOMLを読み込めることを確認
+        let deserialized: GtdData = toml::from_str(old_format_toml).unwrap();
+        
+        assert_eq!(deserialized.contexts.len(), 2);
+        
+        // Officeコンテキストを検証
+        let office = deserialized.contexts.get("Office").unwrap();
+        assert_eq!(office.name, "Office");
+        assert_eq!(office.description, Some("Work environment with desk and computer".to_string()));
+        
+        // Homeコンテキストを検証
+        let home = deserialized.contexts.get("Home").unwrap();
+        assert_eq!(home.name, "Home");
+        assert_eq!(home.description, None);
+        
+        // 再シリアライズすると新形式（nameフィールドなし）になることを確認
+        let reserialized = toml::to_string_pretty(&deserialized).unwrap();
+        assert!(!reserialized.contains("name = \"Office\""), "Reserialized TOML should not contain redundant name field");
+        assert!(!reserialized.contains("name = \"Home\""), "Reserialized TOML should not contain redundant name field");
     }
 
     // 参照整合性検証テスト - プロジェクト参照が有効
