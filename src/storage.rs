@@ -23,8 +23,8 @@ impl Storage {
 
     pub fn load(&self) -> Result<GtdData> {
         // Pull from git before loading if sync is enabled
-        if self.sync_git && self.git_ops.is_git_managed() && self.git_ops.pull().is_err() {
-            eprintln!("Warning: Git pull failed on load. Continuing with local data.");
+        if self.sync_git && self.git_ops.is_git_managed() {
+            self.git_ops.pull()?;
         }
 
         if !self.file_path.exists() {
@@ -37,6 +37,10 @@ impl Storage {
     }
 
     pub fn save(&self, data: &GtdData) -> Result<()> {
+        self.save_with_message(data, "Update GTD data")
+    }
+
+    pub fn save_with_message(&self, data: &GtdData, commit_message: &str) -> Result<()> {
         let content = toml::to_string_pretty(data)?;
 
         // Ensure parent directory exists
@@ -48,11 +52,8 @@ impl Storage {
 
         // Perform git operations only if sync_git flag is enabled and in a git repository
         if self.sync_git && self.git_ops.is_git_managed() {
-            // Try to sync with git, but don't fail if git operations fail
-            // This allows the application to continue working even if git is not configured
-            if let Err(e) = self.git_ops.sync(&self.file_path, "Update GTD data") {
-                eprintln!("Warning: Git sync failed: {}. Data saved locally.", e);
-            }
+            // Propagate git errors to the caller so they can be returned to MCP client
+            self.git_ops.sync(&self.file_path, commit_message)?;
         }
 
         Ok(())
@@ -60,8 +61,8 @@ impl Storage {
 
     /// Push changes to git on shutdown
     pub fn shutdown(&self) -> Result<()> {
-        if self.sync_git && self.git_ops.is_git_managed() && self.git_ops.push().is_err() {
-            eprintln!("Warning: Git push failed on shutdown.");
+        if self.sync_git && self.git_ops.is_git_managed() {
+            self.git_ops.push()?;
         }
         Ok(())
     }

@@ -41,6 +41,12 @@ impl GtdServerHandler {
         self.storage.save(&data)?;
         Ok(())
     }
+
+    fn save_data_with_message(&self, message: &str) -> Result<()> {
+        let data = self.data.lock().unwrap();
+        self.storage.save_with_message(&data, message)?;
+        Ok(())
+    }
 }
 
 impl Drop for GtdServerHandler {
@@ -84,7 +90,7 @@ impl McpServer for GtdServerHandler {
         let today = local_date_today();
         let task = Task {
             id: data.generate_task_id(),
-            title,
+            title: title.clone(),
             status: TaskStatus::inbox,
             project,
             context,
@@ -111,7 +117,7 @@ impl McpServer for GtdServerHandler {
         data.add_task(task);
         drop(data);
 
-        if let Err(e) = self.save_data() {
+        if let Err(e) = self.save_data_with_message(&format!("Add task to inbox: {}", title)) {
             bail!("Failed to save: {}", e);
         }
 
@@ -189,7 +195,7 @@ impl McpServer for GtdServerHandler {
             }
             drop(data);
 
-            if let Err(e) = self.save_data() {
+            if let Err(e) = self.save_data_with_message(&format!("Move task {} to trash", task_id)) {
                 bail!("Failed to save: {}", e);
             }
 
@@ -216,7 +222,7 @@ impl McpServer for GtdServerHandler {
             }
             drop(data);
 
-            if let Err(e) = self.save_data() {
+            if let Err(e) = self.save_data_with_message(&format!("Move task {} to inbox", task_id)) {
                 bail!("Failed to save: {}", e);
             }
 
@@ -246,7 +252,7 @@ impl McpServer for GtdServerHandler {
             }
             drop(data);
 
-            if let Err(e) = self.save_data() {
+            if let Err(e) = self.save_data_with_message(&format!("Move task {} to next_action", task_id)) {
                 bail!("Failed to save: {}", e);
             }
 
@@ -276,7 +282,7 @@ impl McpServer for GtdServerHandler {
             }
             drop(data);
 
-            if let Err(e) = self.save_data() {
+            if let Err(e) = self.save_data_with_message(&format!("Move task {} to waiting_for", task_id)) {
                 bail!("Failed to save: {}", e);
             }
 
@@ -303,7 +309,7 @@ impl McpServer for GtdServerHandler {
             }
             drop(data);
 
-            if let Err(e) = self.save_data() {
+            if let Err(e) = self.save_data_with_message(&format!("Move task {} to someday", task_id)) {
                 bail!("Failed to save: {}", e);
             }
 
@@ -330,7 +336,7 @@ impl McpServer for GtdServerHandler {
             }
             drop(data);
 
-            if let Err(e) = self.save_data() {
+            if let Err(e) = self.save_data_with_message(&format!("Mark task {} as done", task_id)) {
                 bail!("Failed to save: {}", e);
             }
 
@@ -350,7 +356,7 @@ impl McpServer for GtdServerHandler {
 
         drop(data);
 
-        if let Err(e) = self.save_data() {
+        if let Err(e) = self.save_data_with_message("Empty trash") {
             bail!("Failed to save: {}", e);
         }
 
@@ -370,7 +376,7 @@ impl McpServer for GtdServerHandler {
 
         let project = Project {
             id: data.generate_project_id(),
-            name,
+            name: name.clone(),
             description,
             status: ProjectStatus::active,
         };
@@ -379,7 +385,7 @@ impl McpServer for GtdServerHandler {
         data.add_project(project);
         drop(data);
 
-        if let Err(e) = self.save_data() {
+        if let Err(e) = self.save_data_with_message(&format!("Add project: {}", name)) {
             bail!("Failed to save: {}", e);
         }
 
@@ -493,7 +499,7 @@ impl McpServer for GtdServerHandler {
 
         drop(data);
 
-        if let Err(e) = self.save_data() {
+        if let Err(e) = self.save_data_with_message(&format!("Update task {}", task_id)) {
             bail!("Failed to save: {}", e);
         }
 
@@ -553,7 +559,7 @@ impl McpServer for GtdServerHandler {
 
         drop(data);
 
-        if let Err(e) = self.save_data() {
+        if let Err(e) = self.save_data_with_message(&format!("Update project {}", project_id)) {
             bail!("Failed to save: {}", e);
         }
 
@@ -585,7 +591,7 @@ impl McpServer for GtdServerHandler {
         data.add_context(context);
         drop(data);
 
-        if let Err(e) = self.save_data() {
+        if let Err(e) = self.save_data_with_message(&format!("Add context: {}", name)) {
             bail!("Failed to save: {}", e);
         }
 
@@ -647,7 +653,7 @@ impl McpServer for GtdServerHandler {
         data.contexts.insert(name.clone(), context);
         drop(data);
 
-        if let Err(e) = self.save_data() {
+        if let Err(e) = self.save_data_with_message(&format!("Update context {}", name)) {
             bail!("Failed to save: {}", e);
         }
 
@@ -671,7 +677,7 @@ impl McpServer for GtdServerHandler {
 
         drop(data);
 
-        if let Err(e) = self.save_data() {
+        if let Err(e) = self.save_data_with_message(&format!("Delete context {}", name)) {
             bail!("Failed to save: {}", e);
         }
 
