@@ -4,11 +4,21 @@ mod storage;
 
 use anyhow::Result;
 use chrono::NaiveDate;
+use clap::Parser;
 use gtd::{GtdData, Project, ProjectStatus, Task, TaskStatus, local_date_today};
 use mcp_attr::server::{McpServer, mcp_server, serve_stdio};
 use mcp_attr::{Result as McpResult, bail};
 use std::sync::Mutex;
 use storage::Storage;
+
+/// GTD MCP Server - Getting Things Done task management via Model Context Protocol
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    /// Enable git synchronization on save
+    #[arg(long)]
+    sync_git: bool,
+}
 
 struct GtdServerHandler {
     data: Mutex<GtdData>,
@@ -16,8 +26,8 @@ struct GtdServerHandler {
 }
 
 impl GtdServerHandler {
-    fn new(storage_path: &str) -> Result<Self> {
-        let storage = Storage::new(storage_path);
+    fn new(storage_path: &str, sync_git: bool) -> Result<Self> {
+        let storage = Storage::new(storage_path, sync_git);
         let data = Mutex::new(storage.load()?);
         Ok(Self { data, storage })
     }
@@ -658,7 +668,8 @@ impl McpServer for GtdServerHandler {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let handler = GtdServerHandler::new("gtd.toml")?;
+    let args = Args::parse();
+    let handler = GtdServerHandler::new("gtd.toml", args.sync_git)?;
     serve_stdio(handler).await?;
     Ok(())
 }
@@ -671,7 +682,7 @@ mod tests {
 
     fn get_test_handler() -> (GtdServerHandler, NamedTempFile) {
         let temp_file = NamedTempFile::new().unwrap();
-        let handler = GtdServerHandler::new(temp_file.path().to_str().unwrap()).unwrap();
+        let handler = GtdServerHandler::new(temp_file.path().to_str().unwrap(), false).unwrap();
         (handler, temp_file)
     }
 

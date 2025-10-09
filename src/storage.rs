@@ -7,13 +7,18 @@ use std::path::{Path, PathBuf};
 pub struct Storage {
     pub file_path: PathBuf,
     git_ops: GitOps,
+    sync_git: bool,
 }
 
 impl Storage {
-    pub fn new(file_path: impl AsRef<Path>) -> Self {
+    pub fn new(file_path: impl AsRef<Path>, sync_git: bool) -> Self {
         let file_path = file_path.as_ref().to_path_buf();
         let git_ops = GitOps::new(&file_path);
-        Self { file_path, git_ops }
+        Self {
+            file_path,
+            git_ops,
+            sync_git,
+        }
     }
 
     pub fn load(&self) -> Result<GtdData> {
@@ -30,8 +35,8 @@ impl Storage {
         let content = toml::to_string_pretty(data)?;
         fs::write(&self.file_path, content)?;
 
-        // Perform git operations if in a git repository
-        if self.git_ops.is_git_managed() {
+        // Perform git operations only if sync_git flag is enabled and in a git repository
+        if self.sync_git && self.git_ops.is_git_managed() {
             // Try to sync with git, but don't fail if git operations fail
             // This allows the application to continue working even if git is not configured
             if let Err(e) = self.git_ops.sync(&self.file_path, "Update GTD data") {
@@ -60,7 +65,7 @@ mod tests {
     #[test]
     fn test_storage_new() {
         let test_path = get_test_path("test_gtd.toml");
-        let storage = Storage::new(&test_path);
+        let storage = Storage::new(&test_path, false);
         assert_eq!(storage.file_path, test_path);
     }
 
@@ -72,7 +77,7 @@ mod tests {
         // Ensure file doesn't exist
         let _ = fs::remove_file(&test_path);
 
-        let storage = Storage::new(&test_path);
+        let storage = Storage::new(&test_path, false);
         let result = storage.load();
 
         assert!(result.is_ok());
@@ -90,7 +95,7 @@ mod tests {
         // Clean up if exists
         let _ = fs::remove_file(&test_path);
 
-        let storage = Storage::new(&test_path);
+        let storage = Storage::new(&test_path, false);
         let data = GtdData::new();
 
         let save_result = storage.save(&data);
@@ -116,7 +121,7 @@ mod tests {
         // Clean up if exists
         let _ = fs::remove_file(&test_path);
 
-        let storage = Storage::new(&test_path);
+        let storage = Storage::new(&test_path, false);
         let mut data = GtdData::new();
 
         let task = Task {
@@ -163,7 +168,7 @@ mod tests {
         // Clean up if exists
         let _ = fs::remove_file(&test_path);
 
-        let storage = Storage::new(&test_path);
+        let storage = Storage::new(&test_path, false);
         let mut data = GtdData::new();
 
         let project = Project {
@@ -202,7 +207,7 @@ mod tests {
         // Clean up if exists
         let _ = fs::remove_file(&test_path);
 
-        let storage = Storage::new(&test_path);
+        let storage = Storage::new(&test_path, false);
         let mut data = GtdData::new();
 
         let context = Context {
@@ -235,7 +240,7 @@ mod tests {
         // Clean up if exists
         let _ = fs::remove_file(&test_path);
 
-        let storage = Storage::new(&test_path);
+        let storage = Storage::new(&test_path, false);
         let mut data = GtdData::new();
 
         // Add multiple tasks
@@ -297,7 +302,7 @@ mod tests {
         // Clean up if exists
         let _ = fs::remove_file(&test_path);
 
-        let storage = Storage::new(&test_path);
+        let storage = Storage::new(&test_path, false);
 
         // First save
         let mut data1 = GtdData::new();
@@ -350,7 +355,7 @@ mod tests {
         // Write invalid TOML
         fs::write(&test_path, "this is not valid toml {{{{").unwrap();
 
-        let storage = Storage::new(&test_path);
+        let storage = Storage::new(&test_path, false);
         let load_result = storage.load();
 
         assert!(load_result.is_err());
@@ -366,7 +371,7 @@ mod tests {
         let test_path = get_test_path("test_status_gtd.toml");
         let _ = fs::remove_file(&test_path);
 
-        let storage = Storage::new(&test_path);
+        let storage = Storage::new(&test_path, false);
         let mut data = GtdData::new();
 
         let statuses = [
@@ -397,6 +402,48 @@ mod tests {
         let loaded_data = storage.load().unwrap();
 
         assert_eq!(loaded_data.task_count(), 6);
+
+        // Clean up
+        let _ = fs::remove_file(&test_path);
+    }
+
+    // sync_gitフラグがfalseの場合、git同期が行われないことを確認
+    #[test]
+    fn test_storage_sync_git_flag_false() {
+        let test_path = get_test_path("test_sync_git_false_gtd.toml");
+        let _ = fs::remove_file(&test_path);
+
+        // sync_git=falseでStorageを作成
+        let storage = Storage::new(&test_path, false);
+        let data = GtdData::new();
+
+        // 保存が成功することを確認（git同期は行われない）
+        let save_result = storage.save(&data);
+        assert!(save_result.is_ok());
+
+        // ファイルが作成されていることを確認
+        assert!(test_path.exists());
+
+        // Clean up
+        let _ = fs::remove_file(&test_path);
+    }
+
+    // sync_gitフラグがtrueの場合でも、git管理されていないファイルでは問題なく動作することを確認
+    #[test]
+    fn test_storage_sync_git_flag_true_non_git() {
+        let test_path = get_test_path("test_sync_git_true_gtd.toml");
+        let _ = fs::remove_file(&test_path);
+
+        // sync_git=trueでStorageを作成（ただしgit管理されていない場所）
+        let storage = Storage::new(&test_path, true);
+        let data = GtdData::new();
+
+        // 保存が成功することを確認（git管理されていないので同期は行われない）
+        let save_result = storage.save(&data);
+        assert!(save_result.is_ok());
+
+        // ファイルが作成されていることを確認
+        assert!(test_path.exists());
 
         // Clean up
         let _ = fs::remove_file(&test_path);
