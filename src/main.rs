@@ -535,6 +535,124 @@ impl McpServer for GtdServerHandler {
 
         Ok(format!("Project {} updated successfully", project_id))
     }
+
+    /// Add a new context
+    #[tool]
+    async fn add_context(
+        &self,
+        /// Context name
+        name: String,
+        /// Optional context description
+        description: Option<String>,
+    ) -> McpResult<String> {
+        let mut data = self.data.lock().unwrap();
+
+        // Check if context already exists
+        if data.find_context_by_name(&name).is_some() {
+            drop(data);
+            bail!("Context already exists: {}", name);
+        }
+
+        let context = gtd::Context {
+            name: name.clone(),
+            description,
+        };
+
+        data.add_context(context);
+        drop(data);
+
+        if let Err(e) = self.save_data() {
+            bail!("Failed to save: {}", e);
+        }
+
+        Ok(format!("Context created: {}", name))
+    }
+
+    /// List all contexts
+    #[tool]
+    async fn list_contexts(&self) -> McpResult<String> {
+        let data = self.data.lock().unwrap();
+
+        if data.contexts.is_empty() {
+            return Ok("No contexts found".to_string());
+        }
+
+        let mut result = String::new();
+        let mut contexts: Vec<_> = data.contexts.values().collect();
+        contexts.sort_by_key(|c| &c.name);
+
+        for context in contexts {
+            let desc = context
+                .description
+                .as_ref()
+                .map(|d| format!(": {}", d))
+                .unwrap_or_default();
+            result.push_str(&format!("- {}{}\n", context.name, desc));
+        }
+
+        Ok(result)
+    }
+
+    /// Update an existing context
+    #[tool]
+    async fn update_context(
+        &self,
+        /// Context name
+        name: String,
+        /// Optional new description (use empty string to remove)
+        description: Option<String>,
+    ) -> McpResult<String> {
+        let mut data = self.data.lock().unwrap();
+
+        // Check if context exists
+        if data.find_context_by_name(&name).is_none() {
+            drop(data);
+            bail!("Context not found: {}", name);
+        }
+
+        // Remove and re-add with updated description
+        let context = gtd::Context {
+            name: name.clone(),
+            description: if let Some(desc) = description {
+                if desc.is_empty() { None } else { Some(desc) }
+            } else {
+                data.contexts.get(&name).and_then(|c| c.description.clone())
+            },
+        };
+
+        data.contexts.insert(name.clone(), context);
+        drop(data);
+
+        if let Err(e) = self.save_data() {
+            bail!("Failed to save: {}", e);
+        }
+
+        Ok(format!("Context {} updated successfully", name))
+    }
+
+    /// Delete a context
+    #[tool]
+    async fn delete_context(
+        &self,
+        /// Context name to delete
+        name: String,
+    ) -> McpResult<String> {
+        let mut data = self.data.lock().unwrap();
+
+        // Check if context exists
+        if data.contexts.remove(&name).is_none() {
+            drop(data);
+            bail!("Context not found: {}", name);
+        }
+
+        drop(data);
+
+        if let Err(e) = self.save_data() {
+            bail!("Failed to save: {}", e);
+        }
+
+        Ok(format!("Context {} deleted successfully", name))
+    }
 }
 
 #[tokio::main]
@@ -1308,6 +1426,137 @@ mod tests {
         assert!(result.is_err());
 
         let result = handler.trash_task("nonexistent-id".to_string()).await;
+        assert!(result.is_err());
+    }
+
+    // Tests for context management
+
+    #[tokio::test]
+    async fn test_add_context() {
+        let (handler, _temp_file) = get_test_handler();
+
+        let result = handler
+            .add_context("Office".to_string(), Some("Work environment".to_string()))
+            .await;
+        assert!(result.is_ok());
+        assert!(result.unwrap().contains("Office"));
+
+        let data = handler.data.lock().unwrap();
+        assert_eq!(data.contexts.len(), 1);
+        let context = data.find_context_by_name("Office").unwrap();
+        assert_eq!(context.name, "Office");
+        assert_eq!(context.description, Some("Work environment".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_add_context_duplicate() {
+        let (handler, _temp_file) = get_test_handler();
+
+        let result = handler.add_context("Office".to_string(), None).await;
+        assert!(result.is_ok());
+
+        // Try to add duplicate
+        let result = handler.add_context("Office".to_string(), None).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_list_contexts_empty() {
+        let (handler, _temp_file) = get_test_handler();
+
+        let result = handler.list_contexts().await;
+        assert!(result.is_ok());
+        assert!(result.unwrap().contains("No contexts found"));
+    }
+
+    #[tokio::test]
+    async fn test_list_contexts() {
+        let (handler, _temp_file) = get_test_handler();
+
+        handler
+            .add_context("Office".to_string(), Some("Work environment".to_string()))
+            .await
+            .unwrap();
+        handler.add_context("Home".to_string(), None).await.unwrap();
+
+        let result = handler.list_contexts().await;
+        assert!(result.is_ok());
+        let output = result.unwrap();
+        assert!(output.contains("Office"));
+        assert!(output.contains("Home"));
+        assert!(output.contains("Work environment"));
+    }
+
+    #[tokio::test]
+    async fn test_update_context() {
+        let (handler, _temp_file) = get_test_handler();
+
+        handler
+            .add_context("Office".to_string(), Some("Old description".to_string()))
+            .await
+            .unwrap();
+
+        let result = handler
+            .update_context("Office".to_string(), Some("New description".to_string()))
+            .await;
+        assert!(result.is_ok());
+
+        let data = handler.data.lock().unwrap();
+        let context = data.find_context_by_name("Office").unwrap();
+        assert_eq!(context.description, Some("New description".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_update_context_remove_description() {
+        let (handler, _temp_file) = get_test_handler();
+
+        handler
+            .add_context("Office".to_string(), Some("Old description".to_string()))
+            .await
+            .unwrap();
+
+        let result = handler
+            .update_context("Office".to_string(), Some("".to_string()))
+            .await;
+        assert!(result.is_ok());
+
+        let data = handler.data.lock().unwrap();
+        let context = data.find_context_by_name("Office").unwrap();
+        assert_eq!(context.description, None);
+    }
+
+    #[tokio::test]
+    async fn test_update_context_not_found() {
+        let (handler, _temp_file) = get_test_handler();
+
+        let result = handler
+            .update_context("NonExistent".to_string(), Some("Description".to_string()))
+            .await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_delete_context() {
+        let (handler, _temp_file) = get_test_handler();
+
+        handler
+            .add_context("Office".to_string(), None)
+            .await
+            .unwrap();
+
+        let result = handler.delete_context("Office".to_string()).await;
+        assert!(result.is_ok());
+        assert!(result.unwrap().contains("deleted"));
+
+        let data = handler.data.lock().unwrap();
+        assert_eq!(data.contexts.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_delete_context_not_found() {
+        let (handler, _temp_file) = get_test_handler();
+
+        let result = handler.delete_context("NonExistent".to_string()).await;
         assert!(result.is_err());
     }
 }
