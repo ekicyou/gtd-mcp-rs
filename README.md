@@ -455,11 +455,13 @@ The GTD MCP Server includes automatic git synchronization using the git2 crate:
 ### Automatic Sync
 
 When the `--sync-git` flag is enabled and `gtd.toml` is located in a git-managed directory, the server automatically:
-1. **Pulls** the latest changes from the remote before saving
-2. **Commits** the updated file with message "Update GTD data"
-3. **Pushes** the changes to the remote repository
+1. **Pulls** the latest changes from the remote before loading data
+2. **Commits** the updated file with descriptive messages (e.g., "Add task to inbox: Task title", "Mark task #1 as done")
+3. **Pushes** the changes to the remote repository after saving
 
 This ensures your GTD data is always synchronized across devices without manual intervention.
+
+**Note:** Git operations now properly propagate errors to the MCP client. If a git operation fails (e.g., no internet connection, merge conflicts, missing remote), the error will be returned to the client rather than being silently ignored.
 
 ### Setup
 
@@ -484,9 +486,14 @@ git push -u origin main
 
 Then start the server with the `--sync-git` flag to enable automatic synchronization (see the Integration with MCP Clients section above for configuration examples).
 
-### Graceful Degradation
+### Error Handling
 
-If git operations fail (e.g., no internet connection, merge conflicts), the application continues to work and saves data locally. A warning message is displayed, but the operation completes successfully.
+Git operations now properly return errors to the MCP client:
+- If the git repository is not configured correctly (e.g., missing remote, invalid credentials)
+- If there are network issues preventing pull/push operations
+- If there are merge conflicts
+
+When git synchronization fails, the error message will be returned to the MCP client, allowing users to take appropriate action. The data is still written to the local file before git operations are attempted.
 
 ## License
 

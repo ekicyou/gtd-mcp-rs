@@ -232,24 +232,25 @@ The `gtd.toml` file features automatic git synchronization using the git2 crate:
 
 ### Automatic Version Control
 
-When `gtd.toml` is in a git-managed directory, the server automatically:
-1. **Pulls** latest changes from remote before saving
-2. **Commits** changes with message "Update GTD data"
-3. **Pushes** to remote repository
+When `gtd.toml` is in a git-managed directory and `--sync-git` flag is enabled, the server automatically:
+1. **Pulls** latest changes from remote before loading data
+2. **Commits** changes with descriptive messages based on the operation (e.g., "Add task to inbox: Task title", "Mark task #1 as done", "Add project: Project name")
+3. **Pushes** to remote repository after successful save
 
 This provides:
 - Automatic version control for all task and project changes
 - Cross-device synchronization without manual intervention
-- Complete history of all GTD data modifications
+- Complete history of all GTD data modifications with meaningful commit messages
 - Safe concurrent access from multiple devices
 
 ### Implementation Details
 
 The git integration is implemented in `src/git_ops.rs`:
 - Thread-safe using `Arc<Mutex<Repository>>` for async compatibility
-- Graceful degradation: git failures don't prevent data saving
-- Only activates when storage file is in a git repository
+- **Error propagation**: Git operation failures are now properly returned to the MCP client instead of being silently ignored
+- Only activates when storage file is in a git repository and `--sync-git` is enabled
 - Uses configured `user.name` and `user.email`, falls back to defaults
+- File is added to git index automatically via `commit()` method
 
 ### Setup
 
