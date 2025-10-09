@@ -197,10 +197,20 @@ Add a new task to the inbox.
 **Note:** IDs are automatically generated as `#1`, `#2`, `#3` for tasks (GitHub issue tracker style) and `project-1`, `project-2` for projects, making them highly readable and easy to reference in conversations.
 
 ### list_tasks
-List all tasks with optional status filter. Task listings now include creation and update dates for tracking task age and recent modifications.
+List all tasks with optional status filter. Task listings include comprehensive information for each task.
 
 **Parameters:**
 - `status` (string, optional): Filter by status (inbox, next_action, waiting_for, someday, done, trash)
+
+**Output Format:** Each task is displayed with:
+- Task ID
+- Task title
+- Status
+- Start date (if set)
+- Project reference (if set)
+- Context reference (if set)
+- Creation date
+- Last update date
 
 **Example:**
 ```json
@@ -334,19 +344,30 @@ Add a new project.
 **Parameters:**
 - `name` (string, required): Project name
 - `description` (string, optional): Project description
+- `context` (string, optional): Context name (must exist if specified)
+
+**Note:** If a context is specified, the server validates that it exists before creating the project. This ensures referential integrity in your GTD system.
 
 **Example:**
 ```json
 {
   "name": "Q1 Marketing Campaign",
-  "description": "Launch new product marketing campaign"
+  "description": "Launch new product marketing campaign",
+  "context": "Office"
 }
 ```
 
 ### list_projects
-List all projects.
+List all projects with their status, description, and context information.
 
 **Parameters:** None
+
+**Output Format:** Each project is displayed with:
+- Project ID
+- Project name
+- Status (active, on_hold, completed)
+- Description (if set)
+- Context (if set)
 
 ### update_project
 Update an existing project. All parameters are optional except the project_id. Only provided fields will be updated.
@@ -356,13 +377,17 @@ Update an existing project. All parameters are optional except the project_id. O
 - `name` (string, optional): New project name
 - `description` (string, optional): New description (use empty string to remove)
 - `status` (string, optional): New status (active, on_hold, completed)
+- `context` (string, optional): New context name (use empty string to remove)
+
+**Note:** Context references are validated to ensure referential integrity.
 
 **Example:**
 ```json
 {
   "project_id": "project-1",
   "status": "completed",
-  "description": "Successfully launched Q1 campaign"
+  "description": "Successfully launched Q1 campaign",
+  "context": "Office"
 }
 ```
 

@@ -2025,4 +2025,26 @@ name = "Home"
         assert!(data.validate_task_context(&task));
         assert_eq!(project.context, task.context);
     }
+
+    // 後方互換性テスト - コンテキストフィールドなしのプロジェクト
+    // 旧バージョンのTOMLファイル（コンテキストフィールドなし）を正しく読み込めることを確認
+    #[test]
+    fn test_backward_compatibility_project_without_context() {
+        // TOML from old version without context field
+        let toml_str = r#"
+[[projects]]
+id = "project-1"
+name = "Old Project"
+description = "Project without context field"
+status = "active"
+"#;
+
+        let data: GtdData = toml::from_str(toml_str).unwrap();
+        assert_eq!(data.projects.len(), 1);
+        
+        let project = &data.projects[0];
+        assert_eq!(project.id, "project-1");
+        assert_eq!(project.name, "Old Project");
+        assert_eq!(project.context, None);
+    }
 }
