@@ -138,6 +138,32 @@ To use a custom file location:
 }
 ```
 
+To enable automatic git synchronization:
+
+```json
+{
+  "mcpServers": {
+    "gtd": {
+      "command": "/path/to/gtd-mcp-rs/target/release/gtd-mcp-rs",
+      "args": ["--sync-git"]
+    }
+  }
+}
+```
+
+Or with both custom file and git sync:
+
+```json
+{
+  "mcpServers": {
+    "gtd": {
+      "command": "/path/to/gtd-mcp-rs/target/release/gtd-mcp-rs",
+      "args": ["--file", "/path/to/your/gtd-data.toml", "--sync-git"]
+    }
+  }
+}
+```
+
 ## MCP Tools
 
 The server provides the following tools:
@@ -424,11 +450,11 @@ project_counter = 1
 
 ## Git Integration
 
-The GTD MCP Server now includes automatic git synchronization using the git2 crate:
+The GTD MCP Server includes automatic git synchronization using the git2 crate:
 
 ### Automatic Sync
 
-When `gtd.toml` is located in a git-managed directory, the server automatically:
+When the `--sync-git` flag is enabled and `gtd.toml` is located in a git-managed directory, the server automatically:
 1. **Pulls** the latest changes from the remote before saving
 2. **Commits** the updated file with message "Update GTD data"
 3. **Pushes** the changes to the remote repository
@@ -437,7 +463,7 @@ This ensures your GTD data is always synchronized across devices without manual 
 
 ### Setup
 
-Simply place your `gtd.toml` in a git repository:
+To enable git synchronization, first set up your git repository:
 
 ```bash
 # Initialize git repo (if not already done)
@@ -456,7 +482,7 @@ git commit -m "Initial GTD data"
 git push -u origin main
 ```
 
-After this setup, all task and project updates will be automatically committed and pushed to your repository.
+Then start the server with the `--sync-git` flag to enable automatic synchronization (see the Integration with MCP Clients section above for configuration examples).
 
 ### Graceful Degradation
 
