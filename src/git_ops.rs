@@ -94,11 +94,18 @@ impl GitOps {
         };
 
         // Get the file path relative to the repository
+        // Canonicalize both paths to handle symlinks and platform differences
         let repo_workdir = repo
             .workdir()
             .context("Repository has no working directory")?;
-        let relative_path = file_path
-            .strip_prefix(repo_workdir)
+        let canonical_workdir = repo_workdir
+            .canonicalize()
+            .context("Failed to canonicalize repository path")?;
+        let canonical_file = file_path
+            .canonicalize()
+            .context("Failed to canonicalize file path")?;
+        let relative_path = canonical_file
+            .strip_prefix(&canonical_workdir)
             .context("File is not in repository")?;
 
         // Add the file to the index

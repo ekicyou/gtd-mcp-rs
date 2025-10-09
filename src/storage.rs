@@ -36,6 +36,7 @@ impl Storage {
         Ok(data)
     }
 
+    #[allow(dead_code)]
     pub fn save(&self, data: &GtdData) -> Result<()> {
         self.save_with_message(data, "Update GTD data")
     }
@@ -580,7 +581,7 @@ mod tests {
         // Now create gtd.toml
         let test_path = temp_dir.path().join("gtd.toml");
         fs::write(&test_path, "# test").unwrap();
-        
+
         let storage = Storage::new(&test_path, true);
 
         // loadを呼び出すと、pullがremoteを探してエラーが返されることを確認
@@ -669,7 +670,7 @@ mod tests {
         // テスト用のgitリポジトリを作成
         let temp_dir = TempDir::new().unwrap();
         let repo = Repository::init(temp_dir.path()).unwrap();
-        
+
         // Configure git user
         let mut config = repo.config().unwrap();
         config.set_str("user.name", "Test User").unwrap();

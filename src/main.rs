@@ -36,6 +36,7 @@ impl GtdServerHandler {
         Ok(Self { data, storage })
     }
 
+    #[allow(dead_code)]
     fn save_data(&self) -> Result<()> {
         let data = self.data.lock().unwrap();
         self.storage.save(&data)?;
@@ -195,7 +196,8 @@ impl McpServer for GtdServerHandler {
             }
             drop(data);
 
-            if let Err(e) = self.save_data_with_message(&format!("Move task {} to trash", task_id)) {
+            if let Err(e) = self.save_data_with_message(&format!("Move task {} to trash", task_id))
+            {
                 bail!("Failed to save: {}", e);
             }
 
@@ -222,7 +224,8 @@ impl McpServer for GtdServerHandler {
             }
             drop(data);
 
-            if let Err(e) = self.save_data_with_message(&format!("Move task {} to inbox", task_id)) {
+            if let Err(e) = self.save_data_with_message(&format!("Move task {} to inbox", task_id))
+            {
                 bail!("Failed to save: {}", e);
             }
 
@@ -252,7 +255,9 @@ impl McpServer for GtdServerHandler {
             }
             drop(data);
 
-            if let Err(e) = self.save_data_with_message(&format!("Move task {} to next_action", task_id)) {
+            if let Err(e) =
+                self.save_data_with_message(&format!("Move task {} to next_action", task_id))
+            {
                 bail!("Failed to save: {}", e);
             }
 
@@ -282,7 +287,9 @@ impl McpServer for GtdServerHandler {
             }
             drop(data);
 
-            if let Err(e) = self.save_data_with_message(&format!("Move task {} to waiting_for", task_id)) {
+            if let Err(e) =
+                self.save_data_with_message(&format!("Move task {} to waiting_for", task_id))
+            {
                 bail!("Failed to save: {}", e);
             }
 
@@ -309,7 +316,9 @@ impl McpServer for GtdServerHandler {
             }
             drop(data);
 
-            if let Err(e) = self.save_data_with_message(&format!("Move task {} to someday", task_id)) {
+            if let Err(e) =
+                self.save_data_with_message(&format!("Move task {} to someday", task_id))
+            {
                 bail!("Failed to save: {}", e);
             }
 
