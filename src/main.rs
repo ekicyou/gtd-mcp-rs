@@ -212,7 +212,10 @@ impl McpServer for GtdServerHandler {
         let mut data = self.data.lock().unwrap();
 
         // Use move_status to properly move the task to next_action container
-        if data.move_status(&task_id, TaskStatus::next_action).is_some() {
+        if data
+            .move_status(&task_id, TaskStatus::next_action)
+            .is_some()
+        {
             // Update the timestamp after the move
             if let Some(task) = data.find_task_by_id_mut(&task_id) {
                 task.updated_at = local_date_today();
@@ -239,7 +242,10 @@ impl McpServer for GtdServerHandler {
         let mut data = self.data.lock().unwrap();
 
         // Use move_status to properly move the task to waiting_for container
-        if data.move_status(&task_id, TaskStatus::waiting_for).is_some() {
+        if data
+            .move_status(&task_id, TaskStatus::waiting_for)
+            .is_some()
+        {
             // Update the timestamp after the move
             if let Some(task) = data.find_task_by_id_mut(&task_id) {
                 task.updated_at = local_date_today();
@@ -613,9 +619,7 @@ mod tests {
         }
 
         // Update status to next_action using new method
-        let result = handler
-            .next_action_task(task_id.clone())
-            .await;
+        let result = handler.next_action_task(task_id.clone()).await;
         assert!(result.is_ok());
 
         // Verify status changed and task moved
