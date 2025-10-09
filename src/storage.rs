@@ -4,7 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 pub struct Storage {
-    file_path: PathBuf,
+    pub file_path: PathBuf,
 }
 
 impl Storage {
