@@ -22,6 +22,11 @@ impl Storage {
     }
 
     pub fn load(&self) -> Result<GtdData> {
+        // Pull from git before loading if sync is enabled
+        if self.sync_git && self.git_ops.is_git_managed() && self.git_ops.pull().is_err() {
+            eprintln!("Warning: Git pull failed on load. Continuing with local data.");
+        }
+
         if !self.file_path.exists() {
             return Ok(GtdData::new());
         }
@@ -33,6 +38,12 @@ impl Storage {
 
     pub fn save(&self, data: &GtdData) -> Result<()> {
         let content = toml::to_string_pretty(data)?;
+
+        // Ensure parent directory exists
+        if let Some(parent) = self.file_path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+
         fs::write(&self.file_path, content)?;
 
         // Perform git operations only if sync_git flag is enabled and in a git repository
@@ -44,6 +55,14 @@ impl Storage {
             }
         }
 
+        Ok(())
+    }
+
+    /// Push changes to git on shutdown
+    pub fn shutdown(&self) -> Result<()> {
+        if self.sync_git && self.git_ops.is_git_managed() && self.git_ops.push().is_err() {
+            eprintln!("Warning: Git push failed on shutdown.");
+        }
         Ok(())
     }
 }
@@ -447,5 +466,215 @@ mod tests {
 
         // Clean up
         let _ = fs::remove_file(&test_path);
+    }
+
+    // 親ディレクトリが存在しない場合でもファイル作成が成功することを確認
+    #[test]
+    fn test_storage_create_file_with_missing_parent_directory() {
+        let test_dir = env::temp_dir().join("test_gtd_nested_dir");
+        let test_path = test_dir.join("subdir").join("test_gtd.toml");
+
+        // Clean up if exists
+        let _ = fs::remove_dir_all(&test_dir);
+
+        // 親ディレクトリが存在しないことを確認
+        assert!(!test_path.parent().unwrap().exists());
+
+        let storage = Storage::new(&test_path, false);
+        let data = GtdData::new();
+
+        // 保存が成功することを確認（親ディレクトリが自動作成される）
+        let save_result = storage.save(&data);
+        assert!(save_result.is_ok());
+
+        // ファイルが作成されていることを確認
+        assert!(test_path.exists());
+
+        // 読み込みも成功することを確認
+        let load_result = storage.load();
+        assert!(load_result.is_ok());
+
+        // Clean up
+        let _ = fs::remove_dir_all(&test_dir);
+    }
+
+    // 存在しないファイルに対してsaveを実行すると、ファイルが作成されることを確認
+    #[test]
+    fn test_storage_save_creates_file() {
+        let test_path = get_test_path("test_create_new_file_gtd.toml");
+
+        // Clean up if exists
+        let _ = fs::remove_file(&test_path);
+
+        // ファイルが存在しないことを確認
+        assert!(!test_path.exists());
+
+        let storage = Storage::new(&test_path, false);
+        let mut data = GtdData::new();
+
+        // タスクを追加
+        let task = Task {
+            id: "test-1".to_string(),
+            title: "Test Task".to_string(),
+            status: TaskStatus::inbox,
+            project: None,
+            context: None,
+            notes: None,
+            start_date: None,
+            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+        };
+        data.add_task(task);
+
+        // 保存が成功することを確認
+        let save_result = storage.save(&data);
+        assert!(save_result.is_ok());
+
+        // ファイルが作成されていることを確認
+        assert!(test_path.exists());
+
+        // 読み込んで内容が一致することを確認
+        let loaded_data = storage.load().unwrap();
+        assert_eq!(loaded_data.task_count(), 1);
+
+        // Clean up
+        let _ = fs::remove_file(&test_path);
+    }
+
+    // git管理下でのload時のpull動作テスト
+    #[test]
+    fn test_storage_git_pull_on_load() {
+        use git2::{Repository, Signature, Time};
+        use tempfile::TempDir;
+
+        // テスト用のgitリポジトリを作成
+        let temp_dir = TempDir::new().unwrap();
+        let repo = Repository::init(temp_dir.path()).unwrap();
+
+        // Configure git user
+        let mut config = repo.config().unwrap();
+        config.set_str("user.name", "Test User").unwrap();
+        config.set_str("user.email", "test@example.com").unwrap();
+
+        // 初期ファイルを作成してコミット
+        let test_path = temp_dir.path().join("gtd.toml");
+        let storage = Storage::new(&test_path, true);
+        let data = GtdData::new();
+
+        // 最初の保存（ファイル作成）
+        storage.save(&data).unwrap();
+
+        // 手動でコミット（git管理下に置く）
+        let mut index = repo.index().unwrap();
+        index.add_path(Path::new("gtd.toml")).unwrap();
+        index.write().unwrap();
+
+        let tree_id = index.write_tree().unwrap();
+        let tree = repo.find_tree(tree_id).unwrap();
+
+        let time = Time::new(1_700_000_000, 0);
+        let signature = Signature::new("Test User", "test@example.com", &time).unwrap();
+
+        repo.commit(
+            Some("HEAD"),
+            &signature,
+            &signature,
+            "Initial commit",
+            &tree,
+            &[],
+        )
+        .unwrap();
+
+        // loadが成功することを確認（pullはremoteがないので何もしない）
+        let loaded_data = storage.load();
+        assert!(loaded_data.is_ok());
+    }
+
+    // git管理下でのsave時のsync動作テスト
+    #[test]
+    fn test_storage_git_sync_on_save() {
+        use git2::{Repository, Signature, Time};
+        use tempfile::TempDir;
+
+        // テスト用のgitリポジトリを作成
+        let temp_dir = TempDir::new().unwrap();
+        let repo = Repository::init(temp_dir.path()).unwrap();
+
+        // Configure git user
+        let mut config = repo.config().unwrap();
+        config.set_str("user.name", "Test User").unwrap();
+        config.set_str("user.email", "test@example.com").unwrap();
+
+        // 初期コミットを作成
+        let dummy_file = temp_dir.path().join("dummy.txt");
+        fs::write(&dummy_file, "dummy").unwrap();
+
+        let mut index = repo.index().unwrap();
+        index.add_path(Path::new("dummy.txt")).unwrap();
+        index.write().unwrap();
+
+        let tree_id = index.write_tree().unwrap();
+        let tree = repo.find_tree(tree_id).unwrap();
+
+        let time = Time::new(1_700_000_000, 0);
+        let signature = Signature::new("Test User", "test@example.com", &time).unwrap();
+
+        repo.commit(
+            Some("HEAD"),
+            &signature,
+            &signature,
+            "Initial commit",
+            &tree,
+            &[],
+        )
+        .unwrap();
+
+        // gtd.tomlファイルを作成して保存
+        let test_path = temp_dir.path().join("gtd.toml");
+        let storage = Storage::new(&test_path, true);
+        let mut data = GtdData::new();
+
+        let task = Task {
+            id: "test-1".to_string(),
+            title: "Test Task".to_string(),
+            status: TaskStatus::inbox,
+            project: None,
+            context: None,
+            notes: None,
+            start_date: None,
+            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+        };
+        data.add_task(task);
+
+        // 保存が成功することを確認
+        // Note: git syncはremoteがないのでpushで失敗するが、データは保存される
+        let save_result = storage.save(&data);
+        assert!(save_result.is_ok());
+
+        // ファイルが作成されていることを確認
+        assert!(test_path.exists());
+
+        // データが正しく保存されていることを確認
+        let loaded_data = storage.load().unwrap();
+        assert_eq!(loaded_data.task_count(), 1);
+    }
+
+    // shutdown時のpush動作テスト
+    #[test]
+    fn test_storage_git_push_on_shutdown() {
+        use git2::Repository;
+        use tempfile::TempDir;
+
+        // テスト用のgitリポジトリを作成
+        let temp_dir = TempDir::new().unwrap();
+        let _repo = Repository::init(temp_dir.path()).unwrap();
+
+        let test_path = temp_dir.path().join("gtd.toml");
+        let storage = Storage::new(&test_path, true);
+
+        // shutdownを呼び出しても、remoteがないのでエラーにならないことを確認
+        let shutdown_result = storage.shutdown();
+        assert!(shutdown_result.is_ok());
     }
 }

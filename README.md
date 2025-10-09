@@ -89,6 +89,26 @@ The server uses stdio transport and can be integrated with MCP clients:
 cargo run
 ```
 
+### Command-Line Options
+
+The server supports the following command-line options:
+
+- `-f, --file <FILE>`: Path to the GTD data file (default: `gtd.toml`)
+- `--sync-git`: Enable automatic git synchronization on save
+
+**Examples:**
+
+```bash
+# Use default gtd.toml in current directory
+cargo run
+
+# Use custom file path
+cargo run -- --file /path/to/my-gtd-data.toml
+
+# Enable git sync with custom file
+cargo run -- --file /path/to/my-gtd-data.toml --sync-git
+```
+
 ### Integration with MCP Clients
 
 To use this server with an MCP client (like Claude Desktop or other MCP-compatible clients), add the following configuration:
@@ -100,6 +120,19 @@ For Claude Desktop, add to your `claude_desktop_config.json`:
   "mcpServers": {
     "gtd": {
       "command": "/path/to/gtd-mcp-rs/target/release/gtd-mcp-rs"
+    }
+  }
+}
+```
+
+To use a custom file location:
+
+```json
+{
+  "mcpServers": {
+    "gtd": {
+      "command": "/path/to/gtd-mcp-rs/target/release/gtd-mcp-rs",
+      "args": ["--file", "/path/to/your/gtd-data.toml"]
     }
   }
 }
