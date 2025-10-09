@@ -154,7 +154,6 @@ Update an existing task. All parameters are optional except the task_id. Only pr
 **Parameters:**
 - `task_id` (string, required): Task ID to update
 - `title` (string, optional): New task title
-- `status` (string, optional): New status (inbox, next_action, waiting_for, someday, done, trash)
 - `project` (string, optional): New project ID (use empty string to remove)
 - `context` (string, optional): New context name (use empty string to remove)
 - `notes` (string, optional): New notes (use empty string to remove)
@@ -162,16 +161,86 @@ Update an existing task. All parameters are optional except the task_id. Only pr
 
 **Automatic Updates:**
 - `updated_at` (date): Automatically updated to current local date when task is modified
-- When status changes, the task is automatically moved to the appropriate list
 
-**Note:** Project and context references are validated to ensure referential integrity.
+**Note:** 
+- Project and context references are validated to ensure referential integrity.
+- To change task status, use the specialized status movement methods below instead of this method.
 
 **Example:**
 ```json
 {
   "task_id": "#1",
-  "status": "next_action",
+  "title": "Updated title",
   "notes": "Updated notes"
+}
+```
+
+### Status Movement Methods
+
+These methods provide explicit, intuitive ways to move tasks between different status states. All methods automatically update the `updated_at` timestamp.
+
+#### inbox_task
+Move a task to inbox.
+
+**Parameters:**
+- `task_id` (string, required): Task ID to move to inbox
+
+**Example:**
+```json
+{
+  "task_id": "#1"
+}
+```
+
+#### next_action_task
+Move a task to next action.
+
+**Parameters:**
+- `task_id` (string, required): Task ID to move to next action
+
+**Example:**
+```json
+{
+  "task_id": "#1"
+}
+```
+
+#### waiting_for_task
+Move a task to waiting for.
+
+**Parameters:**
+- `task_id` (string, required): Task ID to move to waiting for
+
+**Example:**
+```json
+{
+  "task_id": "#1"
+}
+```
+
+#### someday_task
+Move a task to someday.
+
+**Parameters:**
+- `task_id` (string, required): Task ID to move to someday
+
+**Example:**
+```json
+{
+  "task_id": "#1"
+}
+```
+
+#### done_task
+Move a task to done.
+
+**Parameters:**
+- `task_id` (string, required): Task ID to move to done
+
+**Example:**
+```json
+{
+  "task_id": "#1"
 }
 ```
 

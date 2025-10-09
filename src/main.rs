@@ -175,6 +175,141 @@ impl McpServer for GtdServerHandler {
         }
     }
 
+    /// Move a task to inbox
+    #[tool]
+    async fn inbox_task(
+        &self,
+        /// Task ID to move to inbox
+        task_id: String,
+    ) -> McpResult<String> {
+        let mut data = self.data.lock().unwrap();
+
+        // Use move_status to properly move the task to inbox container
+        if data.move_status(&task_id, TaskStatus::inbox).is_some() {
+            // Update the timestamp after the move
+            if let Some(task) = data.find_task_by_id_mut(&task_id) {
+                task.updated_at = local_date_today();
+            }
+            drop(data);
+
+            if let Err(e) = self.save_data() {
+                bail!("Failed to save: {}", e);
+            }
+
+            Ok(format!("Task {} moved to inbox", task_id))
+        } else {
+            bail!("Task not found: {}", task_id);
+        }
+    }
+
+    /// Move a task to next action
+    #[tool]
+    async fn next_action_task(
+        &self,
+        /// Task ID to move to next action
+        task_id: String,
+    ) -> McpResult<String> {
+        let mut data = self.data.lock().unwrap();
+
+        // Use move_status to properly move the task to next_action container
+        if data.move_status(&task_id, TaskStatus::next_action).is_some() {
+            // Update the timestamp after the move
+            if let Some(task) = data.find_task_by_id_mut(&task_id) {
+                task.updated_at = local_date_today();
+            }
+            drop(data);
+
+            if let Err(e) = self.save_data() {
+                bail!("Failed to save: {}", e);
+            }
+
+            Ok(format!("Task {} moved to next action", task_id))
+        } else {
+            bail!("Task not found: {}", task_id);
+        }
+    }
+
+    /// Move a task to waiting for
+    #[tool]
+    async fn waiting_for_task(
+        &self,
+        /// Task ID to move to waiting for
+        task_id: String,
+    ) -> McpResult<String> {
+        let mut data = self.data.lock().unwrap();
+
+        // Use move_status to properly move the task to waiting_for container
+        if data.move_status(&task_id, TaskStatus::waiting_for).is_some() {
+            // Update the timestamp after the move
+            if let Some(task) = data.find_task_by_id_mut(&task_id) {
+                task.updated_at = local_date_today();
+            }
+            drop(data);
+
+            if let Err(e) = self.save_data() {
+                bail!("Failed to save: {}", e);
+            }
+
+            Ok(format!("Task {} moved to waiting for", task_id))
+        } else {
+            bail!("Task not found: {}", task_id);
+        }
+    }
+
+    /// Move a task to someday
+    #[tool]
+    async fn someday_task(
+        &self,
+        /// Task ID to move to someday
+        task_id: String,
+    ) -> McpResult<String> {
+        let mut data = self.data.lock().unwrap();
+
+        // Use move_status to properly move the task to someday container
+        if data.move_status(&task_id, TaskStatus::someday).is_some() {
+            // Update the timestamp after the move
+            if let Some(task) = data.find_task_by_id_mut(&task_id) {
+                task.updated_at = local_date_today();
+            }
+            drop(data);
+
+            if let Err(e) = self.save_data() {
+                bail!("Failed to save: {}", e);
+            }
+
+            Ok(format!("Task {} moved to someday", task_id))
+        } else {
+            bail!("Task not found: {}", task_id);
+        }
+    }
+
+    /// Move a task to done
+    #[tool]
+    async fn done_task(
+        &self,
+        /// Task ID to move to done
+        task_id: String,
+    ) -> McpResult<String> {
+        let mut data = self.data.lock().unwrap();
+
+        // Use move_status to properly move the task to done container
+        if data.move_status(&task_id, TaskStatus::done).is_some() {
+            // Update the timestamp after the move
+            if let Some(task) = data.find_task_by_id_mut(&task_id) {
+                task.updated_at = local_date_today();
+            }
+            drop(data);
+
+            if let Err(e) = self.save_data() {
+                bail!("Failed to save: {}", e);
+            }
+
+            Ok(format!("Task {} moved to done", task_id))
+        } else {
+            bail!("Task not found: {}", task_id);
+        }
+    }
+
     /// Empty trash - permanently delete all trashed tasks
     #[tool]
     async fn empty_trash(&self) -> McpResult<String> {
@@ -240,15 +375,12 @@ impl McpServer for GtdServerHandler {
 
     /// Update an existing task
     #[tool]
-    #[allow(clippy::too_many_arguments)]
     async fn update_task(
         &self,
         /// Task ID to update
         task_id: String,
         /// Optional new title
         title: Option<String>,
-        /// Optional new status (inbox, next_action, waiting_for, someday, done, trash)
-        status: Option<String>,
         /// Optional new project ID (use empty string to remove)
         project: Option<String>,
         /// Optional new context ID (use empty string to remove)
@@ -258,26 +390,6 @@ impl McpServer for GtdServerHandler {
         /// Optional new start date (format: YYYY-MM-DD, use empty string to remove)
         start_date: Option<String>,
     ) -> McpResult<String> {
-        // Parse status first if provided
-        let new_status = if let Some(status_str) = status {
-            let parsed_status = match status_str.as_str() {
-                "inbox" => TaskStatus::inbox,
-                "next_action" => TaskStatus::next_action,
-                "waiting_for" => TaskStatus::waiting_for,
-                "someday" => TaskStatus::someday,
-                "done" => TaskStatus::done,
-                "trash" => TaskStatus::trash,
-                _ => {
-                    bail!(
-                        "Invalid status. Use: inbox, next_action, waiting_for, someday, done, trash"
-                    );
-                }
-            };
-            Some(parsed_status)
-        } else {
-            None
-        };
-
         // Parse date first if provided
         let new_start_date = if let Some(new_date_str) = start_date {
             if new_date_str.is_empty() {
@@ -294,131 +406,59 @@ impl McpServer for GtdServerHandler {
 
         let mut data = self.data.lock().unwrap();
 
-        // Find the task and remember its current status
-        let old_status = {
-            let task = match data.find_task_by_id(&task_id) {
-                Some(t) => t,
-                None => {
-                    drop(data);
-                    bail!("Task not found: {}", task_id);
-                }
-            };
-            task.status.clone()
+        // Find the task
+        let task = match data.find_task_by_id_mut(&task_id) {
+            Some(t) => t,
+            None => {
+                drop(data);
+                bail!("Task not found: {}", task_id);
+            }
         };
 
-        // Determine if we need to move the task between lists
-        let status_changed = new_status.is_some()
-            && !matches!(
-                (&old_status, new_status.as_ref().unwrap()),
-                (TaskStatus::inbox, TaskStatus::inbox)
-                    | (TaskStatus::next_action, TaskStatus::next_action)
-                    | (TaskStatus::waiting_for, TaskStatus::waiting_for)
-                    | (TaskStatus::someday, TaskStatus::someday)
-                    | (TaskStatus::done, TaskStatus::done)
-                    | (TaskStatus::trash, TaskStatus::trash)
-            );
+        // Update in place
+        if let Some(new_title) = title {
+            task.title = new_title;
+        }
+        if let Some(new_project) = project {
+            task.project = if new_project.is_empty() {
+                None
+            } else {
+                Some(new_project)
+            };
+        }
+        if let Some(new_context) = context {
+            task.context = if new_context.is_empty() {
+                None
+            } else {
+                Some(new_context)
+            };
+        }
+        if let Some(new_notes) = notes {
+            task.notes = if new_notes.is_empty() {
+                None
+            } else {
+                Some(new_notes)
+            };
+        }
+        if let Some(date_opt) = new_start_date {
+            task.start_date = date_opt;
+        }
+        task.updated_at = local_date_today();
 
-        if status_changed {
-            // Need to move task between lists
-            let mut removed_task = data.remove_task(&task_id).unwrap();
+        // Clone task for validation
+        let task_clone = task.clone();
 
-            // Apply all updates to the task
-            if let Some(new_title) = title {
-                removed_task.title = new_title;
+        // Validate references
+        if !data.validate_task_references(&task_clone) {
+            let mut errors = Vec::new();
+            if !data.validate_task_project(&task_clone) {
+                errors.push("Invalid project reference");
             }
-            if let Some(new_project) = project {
-                removed_task.project = if new_project.is_empty() {
-                    None
-                } else {
-                    Some(new_project)
-                };
+            if !data.validate_task_context(&task_clone) {
+                errors.push("Invalid context reference");
             }
-            if let Some(new_context) = context {
-                removed_task.context = if new_context.is_empty() {
-                    None
-                } else {
-                    Some(new_context)
-                };
-            }
-            if let Some(new_notes) = notes {
-                removed_task.notes = if new_notes.is_empty() {
-                    None
-                } else {
-                    Some(new_notes)
-                };
-            }
-            if let Some(date_opt) = new_start_date {
-                removed_task.start_date = date_opt;
-            }
-            removed_task.status = new_status.unwrap();
-            removed_task.updated_at = local_date_today();
-
-            // Validate references
-            if !data.validate_task_references(&removed_task) {
-                let mut errors = Vec::new();
-                if !data.validate_task_project(&removed_task) {
-                    errors.push("Invalid project reference");
-                }
-                if !data.validate_task_context(&removed_task) {
-                    errors.push("Invalid context reference");
-                }
-                drop(data);
-                bail!("Failed to update task: {}", errors.join(", "));
-            }
-
-            // Add back to appropriate list
-            data.add_task(removed_task);
-        } else {
-            // Update in place
-            let task = data.find_task_by_id_mut(&task_id).unwrap();
-
-            if let Some(new_title) = title {
-                task.title = new_title;
-            }
-            if let Some(new_project) = project {
-                task.project = if new_project.is_empty() {
-                    None
-                } else {
-                    Some(new_project)
-                };
-            }
-            if let Some(new_context) = context {
-                task.context = if new_context.is_empty() {
-                    None
-                } else {
-                    Some(new_context)
-                };
-            }
-            if let Some(new_notes) = notes {
-                task.notes = if new_notes.is_empty() {
-                    None
-                } else {
-                    Some(new_notes)
-                };
-            }
-            if let Some(date_opt) = new_start_date {
-                task.start_date = date_opt;
-            }
-            if let Some(new_stat) = new_status {
-                task.status = new_stat;
-            }
-            task.updated_at = local_date_today();
-
-            // Clone task for validation
-            let task_clone = task.clone();
-
-            // Validate references
-            if !data.validate_task_references(&task_clone) {
-                let mut errors = Vec::new();
-                if !data.validate_task_project(&task_clone) {
-                    errors.push("Invalid project reference");
-                }
-                if !data.validate_task_context(&task_clone) {
-                    errors.push("Invalid context reference");
-                }
-                drop(data);
-                bail!("Failed to update task: {}", errors.join(", "));
-            }
+            drop(data);
+            bail!("Failed to update task: {}", errors.join(", "));
         }
 
         drop(data);
@@ -537,7 +577,6 @@ mod tests {
                 None,
                 None,
                 None,
-                None,
             )
             .await;
         assert!(result.is_ok());
@@ -549,7 +588,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_update_task_status() {
+    async fn test_update_task_status_using_next_action_task() {
         let (handler, _temp_file) = get_test_handler();
 
         // Add a task
@@ -573,17 +612,9 @@ mod tests {
             assert_eq!(data.next_action.len(), 0);
         }
 
-        // Update status to next_action
+        // Update status to next_action using new method
         let result = handler
-            .update_task(
-                task_id.clone(),
-                None,
-                Some("next_action".to_string()),
-                None,
-                None,
-                None,
-                None,
-            )
+            .next_action_task(task_id.clone())
             .await;
         assert!(result.is_ok());
 
@@ -638,7 +669,6 @@ mod tests {
             .update_task(
                 task_id.clone(),
                 None,
-                None,
                 Some(project_id.clone()),
                 Some("Office".to_string()),
                 None,
@@ -691,7 +721,6 @@ mod tests {
                 None,
                 None,
                 None,
-                None,
                 Some("".to_string()),
                 Some("".to_string()),
             )
@@ -703,37 +732,6 @@ mod tests {
         let task = data.find_task_by_id(&task_id).unwrap();
         assert_eq!(task.notes, None);
         assert_eq!(task.start_date, None);
-    }
-
-    #[tokio::test]
-    async fn test_update_task_invalid_status() {
-        let (handler, _temp_file) = get_test_handler();
-
-        // Add a task
-        let result = handler
-            .add_task("Test Task".to_string(), None, None, None, None)
-            .await;
-        assert!(result.is_ok());
-        let task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
-
-        // Try to update with invalid status
-        let result = handler
-            .update_task(
-                task_id,
-                None,
-                Some("invalid_status".to_string()),
-                None,
-                None,
-                None,
-                None,
-            )
-            .await;
-        assert!(result.is_err());
     }
 
     #[tokio::test]
@@ -756,7 +754,6 @@ mod tests {
         let result = handler
             .update_task(
                 task_id,
-                None,
                 None,
                 None,
                 None,
@@ -787,7 +784,6 @@ mod tests {
         let result = handler
             .update_task(
                 task_id,
-                None,
                 None,
                 Some("non-existent-project".to_string()),
                 None,
@@ -820,7 +816,6 @@ mod tests {
                 task_id,
                 None,
                 None,
-                None,
                 Some("NonExistent".to_string()),
                 None,
                 None,
@@ -838,7 +833,6 @@ mod tests {
             .update_task(
                 "non-existent-id".to_string(),
                 Some("New Title".to_string()),
-                None,
                 None,
                 None,
                 None,
@@ -876,7 +870,6 @@ mod tests {
             .update_task(
                 task_id.clone(),
                 Some("Updated Title".to_string()),
-                None,
                 None,
                 None,
                 None,
@@ -1098,13 +1091,16 @@ mod tests {
             .update_task(
                 task_id.clone(),
                 Some("Updated Task".to_string()),
-                Some("done".to_string()),
                 Some(project_id.clone()),
                 Some("Office".to_string()),
                 Some("Updated notes".to_string()),
                 Some("2025-01-15".to_string()),
             )
             .await;
+        assert!(result.is_ok());
+
+        // Change status separately using new method
+        let result = handler.done_task(task_id.clone()).await;
         assert!(result.is_ok());
 
         // Verify all updates
@@ -1119,5 +1115,195 @@ mod tests {
             task.start_date,
             Some(NaiveDate::from_ymd_opt(2025, 1, 15).unwrap())
         );
+    }
+
+    // Tests for new status movement methods
+
+    #[tokio::test]
+    async fn test_inbox_task() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Add a task
+        let result = handler
+            .add_task("Test Task".to_string(), None, None, None, None)
+            .await;
+        assert!(result.is_ok());
+        let task_id = result
+            .unwrap()
+            .split_whitespace()
+            .last()
+            .unwrap()
+            .to_string();
+
+        // Move to next_action first
+        let result = handler.next_action_task(task_id.clone()).await;
+        assert!(result.is_ok());
+
+        // Verify it's in next_action
+        {
+            let data = handler.data.lock().unwrap();
+            let task = data.find_task_by_id(&task_id).unwrap();
+            assert!(matches!(task.status, TaskStatus::next_action));
+            assert_eq!(data.next_action.len(), 1);
+            assert_eq!(data.inbox.len(), 0);
+        }
+
+        // Move back to inbox
+        let result = handler.inbox_task(task_id.clone()).await;
+        assert!(result.is_ok());
+
+        // Verify it's back in inbox
+        {
+            let data = handler.data.lock().unwrap();
+            let task = data.find_task_by_id(&task_id).unwrap();
+            assert!(matches!(task.status, TaskStatus::inbox));
+            assert_eq!(data.inbox.len(), 1);
+            assert_eq!(data.next_action.len(), 0);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_next_action_task() {
+        let (handler, _temp_file) = get_test_handler();
+
+        let result = handler
+            .add_task("Test Task".to_string(), None, None, None, None)
+            .await;
+        assert!(result.is_ok());
+        let task_id = result
+            .unwrap()
+            .split_whitespace()
+            .last()
+            .unwrap()
+            .to_string();
+
+        let result = handler.next_action_task(task_id.clone()).await;
+        assert!(result.is_ok());
+
+        let data = handler.data.lock().unwrap();
+        let task = data.find_task_by_id(&task_id).unwrap();
+        assert!(matches!(task.status, TaskStatus::next_action));
+        assert_eq!(data.next_action.len(), 1);
+        assert_eq!(data.inbox.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_waiting_for_task() {
+        let (handler, _temp_file) = get_test_handler();
+
+        let result = handler
+            .add_task("Test Task".to_string(), None, None, None, None)
+            .await;
+        assert!(result.is_ok());
+        let task_id = result
+            .unwrap()
+            .split_whitespace()
+            .last()
+            .unwrap()
+            .to_string();
+
+        let result = handler.waiting_for_task(task_id.clone()).await;
+        assert!(result.is_ok());
+
+        let data = handler.data.lock().unwrap();
+        let task = data.find_task_by_id(&task_id).unwrap();
+        assert!(matches!(task.status, TaskStatus::waiting_for));
+        assert_eq!(data.waiting_for.len(), 1);
+        assert_eq!(data.inbox.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_someday_task() {
+        let (handler, _temp_file) = get_test_handler();
+
+        let result = handler
+            .add_task("Test Task".to_string(), None, None, None, None)
+            .await;
+        assert!(result.is_ok());
+        let task_id = result
+            .unwrap()
+            .split_whitespace()
+            .last()
+            .unwrap()
+            .to_string();
+
+        let result = handler.someday_task(task_id.clone()).await;
+        assert!(result.is_ok());
+
+        let data = handler.data.lock().unwrap();
+        let task = data.find_task_by_id(&task_id).unwrap();
+        assert!(matches!(task.status, TaskStatus::someday));
+        assert_eq!(data.someday.len(), 1);
+        assert_eq!(data.inbox.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_done_task() {
+        let (handler, _temp_file) = get_test_handler();
+
+        let result = handler
+            .add_task("Test Task".to_string(), None, None, None, None)
+            .await;
+        assert!(result.is_ok());
+        let task_id = result
+            .unwrap()
+            .split_whitespace()
+            .last()
+            .unwrap()
+            .to_string();
+
+        let result = handler.done_task(task_id.clone()).await;
+        assert!(result.is_ok());
+
+        let data = handler.data.lock().unwrap();
+        let task = data.find_task_by_id(&task_id).unwrap();
+        assert!(matches!(task.status, TaskStatus::done));
+        assert_eq!(data.done.len(), 1);
+        assert_eq!(data.inbox.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_status_movement_updates_timestamp() {
+        let (handler, _temp_file) = get_test_handler();
+
+        let result = handler
+            .add_task("Test Task".to_string(), None, None, None, None)
+            .await;
+        assert!(result.is_ok());
+        let task_id = result
+            .unwrap()
+            .split_whitespace()
+            .last()
+            .unwrap()
+            .to_string();
+
+        let created_at = {
+            let data = handler.data.lock().unwrap();
+            let task = data.find_task_by_id(&task_id).unwrap();
+            task.created_at
+        };
+
+        // Move to next_action
+        let result = handler.next_action_task(task_id.clone()).await;
+        assert!(result.is_ok());
+
+        // Verify created_at unchanged
+        let data = handler.data.lock().unwrap();
+        let task = data.find_task_by_id(&task_id).unwrap();
+        assert_eq!(task.created_at, created_at);
+    }
+
+    #[tokio::test]
+    async fn test_status_movement_nonexistent_task() {
+        let (handler, _temp_file) = get_test_handler();
+
+        let result = handler.next_action_task("nonexistent-id".to_string()).await;
+        assert!(result.is_err());
+
+        let result = handler.done_task("nonexistent-id".to_string()).await;
+        assert!(result.is_err());
+
+        let result = handler.trash_task("nonexistent-id".to_string()).await;
+        assert!(result.is_err());
     }
 }
