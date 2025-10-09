@@ -286,13 +286,13 @@ impl GtdData {
     pub fn move_status(&mut self, id: &str, new_status: TaskStatus) -> Option<()> {
         // Remove task from its current container
         let mut task = self.remove_task(id)?;
-        
+
         // Update the task's status
         task.status = new_status;
-        
+
         // Add task to the new status container
         self.add_task(task);
-        
+
         Some(())
     }
 
@@ -640,10 +640,7 @@ mod tests {
         assert_eq!(moved_task.project, Some("project-1".to_string()));
         assert_eq!(moved_task.context, Some("Office".to_string()));
         assert_eq!(moved_task.notes, Some("Important notes".to_string()));
-        assert_eq!(
-            moved_task.start_date,
-            NaiveDate::from_ymd_opt(2024, 12, 25)
-        );
+        assert_eq!(moved_task.start_date, NaiveDate::from_ymd_opt(2024, 12, 25));
         assert_eq!(
             moved_task.created_at,
             NaiveDate::from_ymd_opt(2024, 1, 1).unwrap()
