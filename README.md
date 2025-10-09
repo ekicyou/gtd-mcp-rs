@@ -21,10 +21,12 @@ This server now uses `mcp-attr` for better Windows compatibility. Previous versi
 - **Task timestamps**: All tasks include creation date (`created_at`) and update date (`updated_at`) for tracking task age and modifications
 - **Referential integrity**: Validates that project and context references exist when creating or updating tasks
 - Project management with status tracking (active, on_hold, completed)
-- Context management
+- **Context management**: Full CRUD operations for GTD contexts (add, list, update, delete)
 - TOML-based storage (gtd.toml)
 - Git-friendly data format
 - Declarative MCP server implementation with `mcp-attr`
+
+**For a comprehensive feature assessment and enhancement roadmap, see [GTD_ASSESSMENT.md](GTD_ASSESSMENT.md)**
 
 ## Building
 
@@ -302,6 +304,59 @@ Update an existing project. All parameters are optional except the project_id. O
   "project_id": "project-1",
   "status": "completed",
   "description": "Successfully launched Q1 campaign"
+}
+```
+
+### add_context
+Add a new context.
+
+**Parameters:**
+- `name` (string, required): Context name
+- `description` (string, optional): Context description
+
+**Example:**
+```json
+{
+  "name": "Office",
+  "description": "Work environment with desk and computer"
+}
+```
+
+### list_contexts
+List all contexts alphabetically sorted.
+
+**Parameters:** None
+
+**Example:**
+```json
+{}
+```
+
+### update_context
+Update an existing context's description.
+
+**Parameters:**
+- `name` (string, required): Context name
+- `description` (string, optional): New description (use empty string to remove)
+
+**Example:**
+```json
+{
+  "name": "Office",
+  "description": "Updated description"
+}
+```
+
+### delete_context
+Delete a context from the system.
+
+**Parameters:**
+- `name` (string, required): Context name to delete
+
+**Example:**
+```json
+{
+  "name": "Office"
 }
 ```
 

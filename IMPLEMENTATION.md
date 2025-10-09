@@ -78,6 +78,40 @@ Lists all projects.
 
 **Parameters:** None
 
+### update_project
+Updates an existing project.
+
+**Parameters:**
+- `project_id` (required): Project ID to update
+- `name` (optional): New project name
+- `description` (optional): New description (empty string to remove)
+- `status` (optional): New status (active, on_hold, completed)
+
+### add_context
+Creates a new context.
+
+**Parameters:**
+- `name` (required): Context name
+- `description` (optional): Context description
+
+### list_contexts
+Lists all contexts alphabetically.
+
+**Parameters:** None
+
+### update_context
+Updates an existing context's description.
+
+**Parameters:**
+- `name` (required): Context name
+- `description` (optional): New description (empty string to remove)
+
+### delete_context
+Deletes a context from the system.
+
+**Parameters:**
+- `name` (required): Context name to delete
+
 ## Data Storage Format
 
 Data is stored in TOML format in `gtd.toml`:
@@ -172,15 +206,17 @@ New: - [#1] Complete documentation
 
 This is a basic implementation. Potential enhancements include:
 
-1. Context management tools (add_context, list_contexts)
+1. ~~Context management tools (add_context, list_contexts)~~ ✅ **COMPLETED** - Full context CRUD operations implemented
 2. ~~Task update and deletion~~ ✅ Trash management implemented (move to trash, empty trash)
 3. Project completion tracking
 4. Task dependencies
-5. ~~Due dates and reminders~~ ✅ Start dates implemented for GTD tickler file workflow
+5. ~~Due dates and reminders~~ ✅ Start dates implemented for GTD tickler file workflow (Due dates - see GTD_ASSESSMENT.md)
 6. Tags and labels
-7. Search and filtering capabilities
+7. Search and filtering capabilities (basic status filtering exists)
 8. Backup and restore functionality
 9. Multiple GTD workflow support
+
+**For a comprehensive feature assessment and roadmap, see [GTD_ASSESSMENT.md](GTD_ASSESSMENT.md)**
 
 ## Git Integration
 
