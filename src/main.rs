@@ -3,7 +3,7 @@ mod storage;
 
 use anyhow::Result;
 use chrono::NaiveDate;
-use gtd::{GtdData, Project, ProjectStatus, Task, TaskStatus, local_date_today};
+use gtd::{GtdData, Project, ProjectStatus, Task, TaskPriority, TaskStatus, local_date_today};
 use mcp_attr::server::{McpServer, mcp_server, serve_stdio};
 use mcp_attr::{Result as McpResult, bail};
 use std::sync::Mutex;
