@@ -2041,7 +2041,7 @@ status = "active"
 
         let data: GtdData = toml::from_str(toml_str).unwrap();
         assert_eq!(data.projects.len(), 1);
-        
+
         let project = &data.projects[0];
         assert_eq!(project.id, "project-1");
         assert_eq!(project.name, "Old Project");

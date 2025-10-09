@@ -182,7 +182,14 @@ impl McpServer for GtdServerHandler {
                 .unwrap_or_default();
             result.push_str(&format!(
                 "- [{}] {} (status: {:?}){}{}{} [created: {}, updated: {}]\n",
-                task.id, task.title, task.status, date_info, project_info, context_info, task.created_at, task.updated_at
+                task.id,
+                task.title,
+                task.status,
+                date_info,
+                project_info,
+                context_info,
+                task.created_at,
+                task.updated_at
             ));
         }
 
@@ -886,7 +893,9 @@ mod tests {
         let (handler, _temp_file) = get_test_handler();
 
         // Add a project and context first
-        let project_result = handler.add_project("Test Project".to_string(), None, None).await;
+        let project_result = handler
+            .add_project("Test Project".to_string(), None, None)
+            .await;
         assert!(project_result.is_ok());
         let project_id = project_result
             .unwrap()
@@ -1144,7 +1153,9 @@ mod tests {
         let (handler, _temp_file) = get_test_handler();
 
         // Add a project
-        let result = handler.add_project("Original Name".to_string(), None, None).await;
+        let result = handler
+            .add_project("Original Name".to_string(), None, None)
+            .await;
         assert!(result.is_ok());
         let project_id = result
             .unwrap()
@@ -1176,7 +1187,9 @@ mod tests {
         let (handler, _temp_file) = get_test_handler();
 
         // Add a project
-        let result = handler.add_project("Test Project".to_string(), None, None).await;
+        let result = handler
+            .add_project("Test Project".to_string(), None, None)
+            .await;
         assert!(result.is_ok());
         let project_id = result
             .unwrap()
@@ -1221,7 +1234,9 @@ mod tests {
         let (handler, _temp_file) = get_test_handler();
 
         // Add a project
-        let result = handler.add_project("Test Project".to_string(), None, None).await;
+        let result = handler
+            .add_project("Test Project".to_string(), None, None)
+            .await;
         assert!(result.is_ok());
         let project_id = result
             .unwrap()
@@ -1239,7 +1254,13 @@ mod tests {
 
         // Update status to on_hold
         let result = handler
-            .update_project(project_id.clone(), None, None, Some("on_hold".to_string()), None)
+            .update_project(
+                project_id.clone(),
+                None,
+                None,
+                Some("on_hold".to_string()),
+                None,
+            )
             .await;
         assert!(result.is_ok());
 
@@ -1273,7 +1294,9 @@ mod tests {
         let (handler, _temp_file) = get_test_handler();
 
         // Add a project
-        let result = handler.add_project("Test Project".to_string(), None, None).await;
+        let result = handler
+            .add_project("Test Project".to_string(), None, None)
+            .await;
         assert!(result.is_ok());
         let project_id = result
             .unwrap()
@@ -1284,7 +1307,13 @@ mod tests {
 
         // Try to update with invalid status
         let result = handler
-            .update_project(project_id, None, None, Some("invalid_status".to_string()), None)
+            .update_project(
+                project_id,
+                None,
+                None,
+                Some("invalid_status".to_string()),
+                None,
+            )
             .await;
         assert!(result.is_err());
     }
@@ -1311,7 +1340,9 @@ mod tests {
         let (handler, _temp_file) = get_test_handler();
 
         // Add a project
-        let project_result = handler.add_project("Test Project".to_string(), None, None).await;
+        let project_result = handler
+            .add_project("Test Project".to_string(), None, None)
+            .await;
         assert!(project_result.is_ok());
         let project_id = project_result
             .unwrap()
@@ -1747,7 +1778,9 @@ mod tests {
             .await;
 
         // Add a project without context
-        let result = handler.add_project("Test Project".to_string(), None, None).await;
+        let result = handler
+            .add_project("Test Project".to_string(), None, None)
+            .await;
         assert!(result.is_ok());
         let project_id = result
             .unwrap()
@@ -1812,7 +1845,9 @@ mod tests {
         let (handler, _temp_file) = get_test_handler();
 
         // Add a project
-        let result = handler.add_project("Test Project".to_string(), None, None).await;
+        let result = handler
+            .add_project("Test Project".to_string(), None, None)
+            .await;
         assert!(result.is_ok());
         let project_id = result
             .unwrap()
