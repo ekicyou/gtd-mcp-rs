@@ -15,11 +15,12 @@ This server now uses `mcp-attr` for better Windows compatibility. Previous versi
 - ✅ **Cross-Platform**: Works on Windows, Linux, and macOS
 - ✅ **LLM-Friendly IDs**: Uses GitHub-style IDs (`#1`, `#2` for tasks, `project-1`, `project-2` for projects) for optimal readability and LLM interaction
 - Task management (inbox, next actions, waiting for, someday/maybe, done, trash)
+- **Task and Project Updates**: Modify existing tasks and projects with full field update support
 - **Trash management**: Move tasks to trash and bulk delete
 - **Calendar management**: Tasks can have start dates for GTD tickler file workflow
 - **Task timestamps**: All tasks include creation date (`created_at`) and update date (`updated_at`) for tracking task age and modifications
-- **Referential integrity**: Validates that project and context references exist when creating tasks
-- Project management
+- **Referential integrity**: Validates that project and context references exist when creating or updating tasks
+- Project management with status tracking (active, on_hold, completed)
 - Context management
 - TOML-based storage (gtd.toml)
 - Git-friendly data format
@@ -147,6 +148,33 @@ List all tasks with optional status filter. Task listings now include creation a
 }
 ```
 
+### update_task
+Update an existing task. All parameters are optional except the task_id. Only provided fields will be updated.
+
+**Parameters:**
+- `task_id` (string, required): Task ID to update
+- `title` (string, optional): New task title
+- `status` (string, optional): New status (inbox, next_action, waiting_for, someday, done, trash)
+- `project` (string, optional): New project ID (use empty string to remove)
+- `context` (string, optional): New context name (use empty string to remove)
+- `notes` (string, optional): New notes (use empty string to remove)
+- `start_date` (string, optional): New start date in YYYY-MM-DD format (use empty string to remove)
+
+**Automatic Updates:**
+- `updated_at` (date): Automatically updated to current local date when task is modified
+- When status changes, the task is automatically moved to the appropriate list
+
+**Note:** Project and context references are validated to ensure referential integrity.
+
+**Example:**
+```json
+{
+  "task_id": "#1",
+  "status": "next_action",
+  "notes": "Updated notes"
+}
+```
+
 ### trash_task
 Move a task to trash.
 
@@ -189,6 +217,24 @@ Add a new project.
 List all projects.
 
 **Parameters:** None
+
+### update_project
+Update an existing project. All parameters are optional except the project_id. Only provided fields will be updated.
+
+**Parameters:**
+- `project_id` (string, required): Project ID to update
+- `name` (string, optional): New project name
+- `description` (string, optional): New description (use empty string to remove)
+- `status` (string, optional): New status (active, on_hold, completed)
+
+**Example:**
+```json
+{
+  "project_id": "project-1",
+  "status": "completed",
+  "description": "Successfully launched Q1 campaign"
+}
+```
 
 ## Data Storage
 
