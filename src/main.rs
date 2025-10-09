@@ -157,9 +157,12 @@ impl McpServer for GtdServerHandler {
     ) -> McpResult<String> {
         let mut data = self.data.lock().unwrap();
 
-        if let Some(task) = data.find_task_by_id_mut(&task_id) {
-            task.status = TaskStatus::trash;
-            task.updated_at = local_date_today();
+        // Use move_status to properly move the task to trash container
+        if data.move_status(&task_id, TaskStatus::trash).is_some() {
+            // Update the timestamp after the move
+            if let Some(task) = data.find_task_by_id_mut(&task_id) {
+                task.updated_at = local_date_today();
+            }
             drop(data);
 
             if let Err(e) = self.save_data() {
@@ -499,23 +502,17 @@ async fn main() -> Result<()> {
 mod tests {
     use super::*;
     use chrono::NaiveDate;
-    use std::env;
-    use std::fs;
+    use tempfile::NamedTempFile;
 
-    fn get_test_handler() -> GtdServerHandler {
-        let test_file = format!("test_update_operations_{}.toml", std::process::id());
-        let test_path = env::temp_dir().join(&test_file);
-        let _ = fs::remove_file(&test_path);
-        GtdServerHandler::new(test_path.to_str().unwrap()).unwrap()
-    }
-
-    fn cleanup_test_file(handler: &GtdServerHandler) {
-        let _ = fs::remove_file(&handler.storage.file_path);
+    fn get_test_handler() -> (GtdServerHandler, NamedTempFile) {
+        let temp_file = NamedTempFile::new().unwrap();
+        let handler = GtdServerHandler::new(temp_file.path().to_str().unwrap()).unwrap();
+        (handler, temp_file)
     }
 
     #[tokio::test]
     async fn test_update_task_title() {
-        let handler = get_test_handler();
+        let (handler, _temp_file) = get_test_handler();
 
         // Add a task
         let result = handler
@@ -549,13 +546,11 @@ mod tests {
         let data = handler.data.lock().unwrap();
         let task = data.find_task_by_id(&task_id).unwrap();
         assert_eq!(task.title, "Updated Title");
-
-        cleanup_test_file(&handler);
     }
 
     #[tokio::test]
     async fn test_update_task_status() {
-        let handler = get_test_handler();
+        let (handler, _temp_file) = get_test_handler();
 
         // Add a task
         let result = handler
@@ -600,13 +595,11 @@ mod tests {
             assert_eq!(data.inbox.len(), 0);
             assert_eq!(data.next_action.len(), 1);
         }
-
-        cleanup_test_file(&handler);
     }
 
     #[tokio::test]
     async fn test_update_task_project_and_context() {
-        let handler = get_test_handler();
+        let (handler, _temp_file) = get_test_handler();
 
         // Add a project and context first
         let project_result = handler.add_project("Test Project".to_string(), None).await;
@@ -659,13 +652,11 @@ mod tests {
         let task = data.find_task_by_id(&task_id).unwrap();
         assert_eq!(task.project, Some(project_id));
         assert_eq!(task.context, Some("Office".to_string()));
-
-        cleanup_test_file(&handler);
     }
 
     #[tokio::test]
     async fn test_update_task_remove_optional_fields() {
-        let handler = get_test_handler();
+        let (handler, _temp_file) = get_test_handler();
 
         // Add a task with optional fields
         let result = handler
@@ -712,13 +703,11 @@ mod tests {
         let task = data.find_task_by_id(&task_id).unwrap();
         assert_eq!(task.notes, None);
         assert_eq!(task.start_date, None);
-
-        cleanup_test_file(&handler);
     }
 
     #[tokio::test]
     async fn test_update_task_invalid_status() {
-        let handler = get_test_handler();
+        let (handler, _temp_file) = get_test_handler();
 
         // Add a task
         let result = handler
@@ -745,13 +734,11 @@ mod tests {
             )
             .await;
         assert!(result.is_err());
-
-        cleanup_test_file(&handler);
     }
 
     #[tokio::test]
     async fn test_update_task_invalid_date() {
-        let handler = get_test_handler();
+        let (handler, _temp_file) = get_test_handler();
 
         // Add a task
         let result = handler
@@ -778,13 +765,11 @@ mod tests {
             )
             .await;
         assert!(result.is_err());
-
-        cleanup_test_file(&handler);
     }
 
     #[tokio::test]
     async fn test_update_task_invalid_project_reference() {
-        let handler = get_test_handler();
+        let (handler, _temp_file) = get_test_handler();
 
         // Add a task
         let result = handler
@@ -811,13 +796,11 @@ mod tests {
             )
             .await;
         assert!(result.is_err());
-
-        cleanup_test_file(&handler);
     }
 
     #[tokio::test]
     async fn test_update_task_invalid_context_reference() {
-        let handler = get_test_handler();
+        let (handler, _temp_file) = get_test_handler();
 
         // Add a task
         let result = handler
@@ -844,13 +827,11 @@ mod tests {
             )
             .await;
         assert!(result.is_err());
-
-        cleanup_test_file(&handler);
     }
 
     #[tokio::test]
     async fn test_update_task_not_found() {
-        let handler = get_test_handler();
+        let (handler, _temp_file) = get_test_handler();
 
         // Try to update non-existent task
         let result = handler
@@ -865,13 +846,11 @@ mod tests {
             )
             .await;
         assert!(result.is_err());
-
-        cleanup_test_file(&handler);
     }
 
     #[tokio::test]
     async fn test_update_task_updates_timestamp() {
-        let handler = get_test_handler();
+        let (handler, _temp_file) = get_test_handler();
 
         // Add a task
         let result = handler
@@ -912,13 +891,11 @@ mod tests {
         assert_eq!(task.created_at, created_at);
         // Note: In test environment, if executed fast enough, updated_at might be the same
         // This is acceptable as the implementation is correct
-
-        cleanup_test_file(&handler);
     }
 
     #[tokio::test]
     async fn test_update_project_name() {
-        let handler = get_test_handler();
+        let (handler, _temp_file) = get_test_handler();
 
         // Add a project
         let result = handler.add_project("Original Name".to_string(), None).await;
@@ -945,13 +922,11 @@ mod tests {
         let data = handler.data.lock().unwrap();
         let project = data.find_project_by_id(&project_id).unwrap();
         assert_eq!(project.name, "Updated Name");
-
-        cleanup_test_file(&handler);
     }
 
     #[tokio::test]
     async fn test_update_project_description() {
-        let handler = get_test_handler();
+        let (handler, _temp_file) = get_test_handler();
 
         // Add a project
         let result = handler.add_project("Test Project".to_string(), None).await;
@@ -991,13 +966,11 @@ mod tests {
         let data = handler.data.lock().unwrap();
         let project = data.find_project_by_id(&project_id).unwrap();
         assert_eq!(project.description, None);
-
-        cleanup_test_file(&handler);
     }
 
     #[tokio::test]
     async fn test_update_project_status() {
-        let handler = get_test_handler();
+        let (handler, _temp_file) = get_test_handler();
 
         // Add a project
         let result = handler.add_project("Test Project".to_string(), None).await;
@@ -1044,13 +1017,11 @@ mod tests {
         let data = handler.data.lock().unwrap();
         let project = data.find_project_by_id(&project_id).unwrap();
         assert!(matches!(project.status, ProjectStatus::completed));
-
-        cleanup_test_file(&handler);
     }
 
     #[tokio::test]
     async fn test_update_project_invalid_status() {
-        let handler = get_test_handler();
+        let (handler, _temp_file) = get_test_handler();
 
         // Add a project
         let result = handler.add_project("Test Project".to_string(), None).await;
@@ -1067,13 +1038,11 @@ mod tests {
             .update_project(project_id, None, None, Some("invalid_status".to_string()))
             .await;
         assert!(result.is_err());
-
-        cleanup_test_file(&handler);
     }
 
     #[tokio::test]
     async fn test_update_project_not_found() {
-        let handler = get_test_handler();
+        let (handler, _temp_file) = get_test_handler();
 
         // Try to update non-existent project
         let result = handler
@@ -1085,13 +1054,11 @@ mod tests {
             )
             .await;
         assert!(result.is_err());
-
-        cleanup_test_file(&handler);
     }
 
     #[tokio::test]
     async fn test_update_multiple_fields_simultaneously() {
-        let handler = get_test_handler();
+        let (handler, _temp_file) = get_test_handler();
 
         // Add a project
         let project_result = handler.add_project("Test Project".to_string(), None).await;
@@ -1152,7 +1119,5 @@ mod tests {
             task.start_date,
             Some(NaiveDate::from_ymd_opt(2025, 1, 15).unwrap())
         );
-
-        cleanup_test_file(&handler);
     }
 }
