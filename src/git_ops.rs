@@ -11,10 +11,12 @@ pub struct GitOps {
 impl GitOps {
     /// Create a new GitOps instance by detecting if the path is in a git repository
     pub fn new(file_path: &Path) -> Self {
+        // Always use the parent directory for discovery, whether the file exists or not
         let file_dir = if file_path.is_file() {
             file_path.parent().unwrap_or(file_path).to_path_buf()
         } else {
-            file_path.to_path_buf()
+            // If not a file, assume it's meant to be a file and use its parent
+            file_path.parent().unwrap_or(file_path).to_path_buf()
         };
 
         let repo_path = Self::find_repository(&file_dir).map(|r| Arc::new(Mutex::new(r)));
