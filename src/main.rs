@@ -43,6 +43,15 @@ impl GtdServerHandler {
     }
 }
 
+impl Drop for GtdServerHandler {
+    fn drop(&mut self) {
+        // Push to git on shutdown if sync is enabled
+        if let Err(e) = self.storage.shutdown() {
+            eprintln!("Warning: Shutdown git sync failed: {}", e);
+        }
+    }
+}
+
 /// GTD MCP Server providing task and project management
 #[mcp_server]
 impl McpServer for GtdServerHandler {
