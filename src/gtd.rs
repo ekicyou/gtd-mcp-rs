@@ -12,10 +12,6 @@ pub struct Task {
     pub context: Option<String>,
     pub notes: Option<String>,
     pub start_date: Option<NaiveDate>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub due_date: Option<NaiveDate>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub priority: Option<TaskPriority>,
     pub created_at: NaiveDate,
     pub updated_at: NaiveDate,
 }
@@ -38,14 +34,6 @@ pub enum TaskStatus {
     someday,
     done,
     trash,
-}
-
-#[allow(non_camel_case_types)]
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum TaskPriority {
-    low,
-    medium,
-    high,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
