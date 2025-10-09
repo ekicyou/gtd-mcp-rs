@@ -15,6 +15,10 @@ use storage::Storage;
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
+    /// Path to the GTD data file
+    #[arg(short, long, default_value = "gtd.toml")]
+    file: String,
+
     /// Enable git synchronization on save
     #[arg(long)]
     sync_git: bool,
@@ -669,7 +673,7 @@ impl McpServer for GtdServerHandler {
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
-    let handler = GtdServerHandler::new("gtd.toml", args.sync_git)?;
+    let handler = GtdServerHandler::new(&args.file, args.sync_git)?;
     serve_stdio(handler).await?;
     Ok(())
 }
@@ -684,6 +688,48 @@ mod tests {
         let temp_file = NamedTempFile::new().unwrap();
         let handler = GtdServerHandler::new(temp_file.path().to_str().unwrap(), false).unwrap();
         (handler, temp_file)
+    }
+
+    #[test]
+    fn test_custom_file_path() {
+        // カスタムファイルパスでハンドラーを作成
+        let temp_file = NamedTempFile::new().unwrap();
+        let custom_path = temp_file.path().to_str().unwrap();
+
+        let handler = GtdServerHandler::new(custom_path, false).unwrap();
+
+        // ストレージのファイルパスが正しく設定されていることを確認
+        assert_eq!(handler.storage.file_path.to_str().unwrap(), custom_path);
+
+        // データの保存と読み込みが正しく動作することを確認
+        let mut data = handler.data.lock().unwrap();
+        let task = Task {
+            id: "test-task".to_string(),
+            title: "Test Task".to_string(),
+            status: TaskStatus::inbox,
+            project: None,
+            context: None,
+            notes: None,
+            start_date: None,
+            created_at: local_date_today(),
+            updated_at: local_date_today(),
+        };
+        data.add_task(task);
+        drop(data);
+
+        // 保存
+        let save_result = handler.save_data();
+        assert!(save_result.is_ok());
+
+        // ファイルが作成されていることを確認
+        assert!(std::path::Path::new(custom_path).exists());
+
+        // 新しいハンドラーで読み込み
+        let handler2 = GtdServerHandler::new(custom_path, false).unwrap();
+        let loaded_data = handler2.data.lock().unwrap();
+        assert_eq!(loaded_data.task_count(), 1);
+        let loaded_task = loaded_data.find_task_by_id("test-task").unwrap();
+        assert_eq!(loaded_task.title, "Test Task");
     }
 
     #[tokio::test]
