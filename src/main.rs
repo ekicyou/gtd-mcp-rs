@@ -1,3 +1,4 @@
+mod git_ops;
 mod gtd;
 mod storage;
 
