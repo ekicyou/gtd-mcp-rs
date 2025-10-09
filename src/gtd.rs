@@ -42,6 +42,7 @@ pub struct Project {
     pub name: String,
     pub description: Option<String>,
     pub status: ProjectStatus,
+    pub context: Option<String>,
 }
 
 #[allow(non_camel_case_types)]
@@ -344,6 +345,15 @@ impl GtdData {
     /// Returns true if all references are valid or not specified
     pub fn validate_task_references(&self, task: &Task) -> bool {
         self.validate_task_project(task) && self.validate_task_context(task)
+    }
+
+    /// Validate that a project's context reference exists (if specified)
+    /// Returns true if the project has no context reference or if the reference is valid
+    pub fn validate_project_context(&self, project: &Project) -> bool {
+        match &project.context {
+            None => true,
+            Some(context_name) => self.find_context_by_name(context_name).is_some(),
+        }
     }
 }
 
@@ -739,6 +749,7 @@ mod tests {
             name: "Test Project".to_string(),
             description: Some("Test description".to_string()),
             status: ProjectStatus::active,
+            context: None,
         };
 
         assert_eq!(project.id, "project-1");
@@ -756,6 +767,7 @@ mod tests {
             name: "Test Project".to_string(),
             description: None,
             status: ProjectStatus::active,
+            context: None,
         };
 
         assert!(project.description.is_none());
@@ -777,6 +789,7 @@ mod tests {
                 name: "Test Project".to_string(),
                 description: None,
                 status: status.clone(),
+                context: None,
             };
 
             match status {
@@ -799,6 +812,7 @@ mod tests {
             name: "Test Project".to_string(),
             description: None,
             status: ProjectStatus::active,
+            context: None,
         };
 
         data.add_project(project.clone());
@@ -820,6 +834,7 @@ mod tests {
             name: "Test Project".to_string(),
             description: None,
             status: ProjectStatus::active,
+            context: None,
         };
 
         data.add_project(project);
@@ -933,6 +948,7 @@ mod tests {
             name: "Test Project".to_string(),
             description: Some("Test description".to_string()),
             status: ProjectStatus::active,
+            context: None,
         };
 
         let serialized = toml::to_string(&project).unwrap();
@@ -990,6 +1006,7 @@ mod tests {
             name: "Test Project".to_string(),
             description: None,
             status: ProjectStatus::active,
+            context: None,
         };
         data.add_project(project);
 
@@ -1188,6 +1205,7 @@ mod tests {
             name: "Test Project".to_string(),
             description: None,
             status: ProjectStatus::on_hold,
+            context: None,
         };
 
         let serialized = toml::to_string(&project).unwrap();
@@ -1254,6 +1272,7 @@ mod tests {
                 name: format!("Project {}", i),
                 description: None,
                 status: ProjectStatus::active,
+                context: None,
             });
         }
 
@@ -1311,6 +1330,7 @@ mod tests {
             name: "Documentation Project".to_string(),
             description: Some("Comprehensive project documentation update".to_string()),
             status: ProjectStatus::active,
+            context: None,
         });
 
         // 説明付きコンテキストを追加
@@ -1466,6 +1486,7 @@ name = "Home"
             name: "Test Project".to_string(),
             description: None,
             status: ProjectStatus::active,
+            context: None,
         });
 
         let task = Task {
@@ -1604,6 +1625,7 @@ name = "Home"
             name: "Test Project".to_string(),
             description: None,
             status: ProjectStatus::active,
+            context: None,
         });
 
         data.add_context(Context {
@@ -1663,6 +1685,7 @@ name = "Home"
             name: "Test Project".to_string(),
             description: None,
             status: ProjectStatus::active,
+            context: None,
         });
 
         let task = Task {
