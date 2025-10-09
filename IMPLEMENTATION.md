@@ -135,13 +135,12 @@ Or with the release build:
 
 ## Dependencies
 
-- `mcp-attr` (0.0.7): MCP protocol implementation with declarative server building
+- `mcp-attr` (0.0.7): MCP protocol implementation with declarative server building (provides `schemars` 0.8 for JSON Schema generation)
 - `tokio` (1.x): Async runtime
 - `serde` (1.x): Serialization framework
 - `toml` (0.9): TOML parsing and generation
 - `anyhow` (1.x): Error handling
 - `uuid` (1.x): Unique ID generation (kept for backward compatibility, but no longer used)
-- `schemars` (0.8): JSON Schema generation
 - `chrono` (0.4): Date and time handling for task start dates
 
 ## LLM-Friendly ID Generation
