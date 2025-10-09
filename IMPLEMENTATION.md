@@ -28,8 +28,15 @@ This version uses `mcp-attr` v0.0.7, which provides better cross-platform compat
    - TOML-based serialization and deserialization
    - Saves data to `gtd.toml` file
    - Git-friendly format for version control
+   - Integrates with git operations for automatic synchronization
 
-3. **MCP Server** (`src/main.rs`)
+3. **Git Operations** (`src/git_ops.rs`)
+   - Automatic git repository detection
+   - Pull, commit, and push operations using git2 crate
+   - Thread-safe implementation with `Arc<Mutex<Repository>>`
+   - Graceful degradation when git operations fail
+
+4. **MCP Server** (`src/main.rs`)
    - Uses `mcp-attr` v0.0.7 with declarative server building
    - Implements `McpServer` trait using `#[mcp_server]` macro
    - Provides stdio transport for MCP communication
@@ -179,6 +186,7 @@ Or with the release build:
 - `anyhow` (1.x): Error handling
 - `uuid` (1.x): Unique ID generation (kept for backward compatibility, but no longer used)
 - `chrono` (0.4): Date and time handling for task start dates
+- `git2` (0.19): Git operations for automatic version control
 
 ## LLM-Friendly ID Generation
 
@@ -220,16 +228,41 @@ This is a basic implementation. Potential enhancements include:
 
 ## Git Integration
 
-The `gtd.toml` file is git-friendly and can be:
-- Version controlled in a git repository
-- Synchronized across devices using git push/pull
-- Branched for different workflows
-- Merged when needed
+The `gtd.toml` file features automatic git synchronization using the git2 crate:
 
-Add `gtd.toml` to your git repository to enable synchronization:
+### Automatic Version Control
+
+When `gtd.toml` is in a git-managed directory, the server automatically:
+1. **Pulls** latest changes from remote before saving
+2. **Commits** changes with message "Update GTD data"
+3. **Pushes** to remote repository
+
+This provides:
+- Automatic version control for all task and project changes
+- Cross-device synchronization without manual intervention
+- Complete history of all GTD data modifications
+- Safe concurrent access from multiple devices
+
+### Implementation Details
+
+The git integration is implemented in `src/git_ops.rs`:
+- Thread-safe using `Arc<Mutex<Repository>>` for async compatibility
+- Graceful degradation: git failures don't prevent data saving
+- Only activates when storage file is in a git repository
+- Uses configured `user.name` and `user.email`, falls back to defaults
+
+### Setup
+
+Simply place `gtd.toml` in a git repository with a configured remote:
 
 ```bash
+git init
+git config user.name "Your Name"
+git config user.email "your.email@example.com"
+git remote add origin https://github.com/yourusername/gtd-data.git
 git add gtd.toml
-git commit -m "Update tasks and projects"
-git push
+git commit -m "Initial GTD data"
+git push -u origin main
 ```
+
+After setup, all updates are automatically synchronized.
