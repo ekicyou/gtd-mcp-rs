@@ -1,3 +1,4 @@
+use crate::git_ops::GitOps;
 use crate::gtd::GtdData;
 use anyhow::Result;
 use std::fs;
@@ -5,13 +6,14 @@ use std::path::{Path, PathBuf};
 
 pub struct Storage {
     pub file_path: PathBuf,
+    git_ops: GitOps,
 }
 
 impl Storage {
     pub fn new(file_path: impl AsRef<Path>) -> Self {
-        Self {
-            file_path: file_path.as_ref().to_path_buf(),
-        }
+        let file_path = file_path.as_ref().to_path_buf();
+        let git_ops = GitOps::new(&file_path);
+        Self { file_path, git_ops }
     }
 
     pub fn load(&self) -> Result<GtdData> {
@@ -27,6 +29,16 @@ impl Storage {
     pub fn save(&self, data: &GtdData) -> Result<()> {
         let content = toml::to_string_pretty(data)?;
         fs::write(&self.file_path, content)?;
+
+        // Perform git operations if in a git repository
+        if self.git_ops.is_git_managed() {
+            // Try to sync with git, but don't fail if git operations fail
+            // This allows the application to continue working even if git is not configured
+            if let Err(e) = self.git_ops.sync(&self.file_path, "Update GTD data") {
+                eprintln!("Warning: Git sync failed: {}. Data saved locally.", e);
+            }
+        }
+
         Ok(())
     }
 }

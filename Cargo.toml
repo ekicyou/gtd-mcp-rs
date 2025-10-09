@@ -12,6 +12,7 @@ toml = "0.9"
 anyhow = "1"
 uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }
+git2 = "0.19"
 
 [dev-dependencies]
 tempfile = "3"

@@ -391,20 +391,43 @@ project_counter = 1
 
 ## Git Integration
 
-The TOML storage format is designed to work well with git:
+The GTD MCP Server now includes automatic git synchronization using the git2 crate:
+
+### Automatic Sync
+
+When `gtd.toml` is located in a git-managed directory, the server automatically:
+1. **Pulls** the latest changes from the remote before saving
+2. **Commits** the updated file with message "Update GTD data"
+3. **Pushes** the changes to the remote repository
+
+This ensures your GTD data is always synchronized across devices without manual intervention.
+
+### Setup
+
+Simply place your `gtd.toml` in a git repository:
 
 ```bash
 # Initialize git repo (if not already done)
 git init
 
-# Add and commit your GTD data
-git add gtd.toml
-git commit -m "Update tasks"
+# Configure git user
+git config user.name "Your Name"
+git config user.email "your.email@example.com"
 
-# Sync across devices
-git push
-git pull
+# Add remote repository
+git remote add origin https://github.com/yourusername/gtd-data.git
+
+# Create initial commit
+git add gtd.toml
+git commit -m "Initial GTD data"
+git push -u origin main
 ```
+
+After this setup, all task and project updates will be automatically committed and pushed to your repository.
+
+### Graceful Degradation
+
+If git operations fail (e.g., no internet connection, merge conflicts), the application continues to work and saves data locally. A warning message is displayed, but the operation completes successfully.
 
 ## License
 
