@@ -504,9 +504,17 @@ mod tests {
     use chrono::NaiveDate;
     use std::env;
     use std::fs;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static TEST_COUNTER: AtomicU64 = AtomicU64::new(0);
 
     fn get_test_handler() -> GtdServerHandler {
-        let test_file = format!("test_update_operations_{}.toml", std::process::id());
+        let counter = TEST_COUNTER.fetch_add(1, Ordering::SeqCst);
+        let test_file = format!(
+            "test_update_operations_{}_{}.toml",
+            std::process::id(),
+            counter
+        );
         let test_path = env::temp_dir().join(&test_file);
         let _ = fs::remove_file(&test_path);
         GtdServerHandler::new(test_path.to_str().unwrap()).unwrap()
