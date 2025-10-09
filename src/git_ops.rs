@@ -92,7 +92,9 @@ impl GitOps {
         };
 
         // Get the file path relative to the repository
-        let repo_workdir = repo.workdir().context("Repository has no working directory")?;
+        let repo_workdir = repo
+            .workdir()
+            .context("Repository has no working directory")?;
         let relative_path = file_path
             .strip_prefix(repo_workdir)
             .context("File is not in repository")?;
@@ -227,8 +229,15 @@ mod tests {
         let tree = repo.find_tree(tree_id).unwrap();
         let signature = Signature::now("Test User", "test@example.com").unwrap();
 
-        repo.commit(Some("HEAD"), &signature, &signature, "Initial commit", &tree, &[])
-            .unwrap();
+        repo.commit(
+            Some("HEAD"),
+            &signature,
+            &signature,
+            "Initial commit",
+            &tree,
+            &[],
+        )
+        .unwrap();
     }
 
     // git管理されていないディレクトリの検出テスト
@@ -245,7 +254,7 @@ mod tests {
     #[test]
     fn test_git_managed_directory() {
         let (temp_dir, _repo) = setup_test_repo();
-        
+
         // Create an actual file in the repo so discover can work
         let file_path = temp_dir.path().join("test.toml");
         fs::write(&file_path, "test").unwrap();
