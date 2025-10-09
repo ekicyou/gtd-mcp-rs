@@ -1932,4 +1932,97 @@ name = "Home"
             "project_counter should not be serialized when 0"
         );
     }
+
+    // プロジェクトのコンテキスト参照検証テスト - 有効な参照
+    // プロジェクトのコンテキスト参照が存在するコンテキストを指している場合、検証が成功することを確認
+    #[test]
+    fn test_validate_project_context_valid() {
+        let mut data = GtdData::new();
+
+        data.add_context(Context {
+            name: "Office".to_string(),
+            description: None,
+        });
+
+        let project = Project {
+            id: "project-1".to_string(),
+            name: "Test Project".to_string(),
+            description: None,
+            status: ProjectStatus::active,
+            context: Some("Office".to_string()),
+        };
+
+        assert!(data.validate_project_context(&project));
+    }
+
+    // プロジェクトのコンテキスト参照検証テスト - 無効な参照
+    // プロジェクトのコンテキスト参照が存在しないコンテキストを指している場合、検証が失敗することを確認
+    #[test]
+    fn test_validate_project_context_invalid() {
+        let data = GtdData::new();
+
+        let project = Project {
+            id: "project-1".to_string(),
+            name: "Test Project".to_string(),
+            description: None,
+            status: ProjectStatus::active,
+            context: Some("NonExistent".to_string()),
+        };
+
+        assert!(!data.validate_project_context(&project));
+    }
+
+    // プロジェクトのコンテキスト参照検証テスト - コンテキスト参照がNone
+    // プロジェクトのコンテキスト参照がNoneの場合、検証が成功することを確認
+    #[test]
+    fn test_validate_project_context_none() {
+        let data = GtdData::new();
+
+        let project = Project {
+            id: "project-1".to_string(),
+            name: "Test Project".to_string(),
+            description: None,
+            status: ProjectStatus::active,
+            context: None,
+        };
+
+        assert!(data.validate_project_context(&project));
+    }
+
+    // プロジェクトとタスクの両方にコンテキストを設定するテスト
+    // プロジェクトとタスクの両方が同じコンテキストを参照できることを確認
+    #[test]
+    fn test_project_and_task_with_same_context() {
+        let mut data = GtdData::new();
+
+        data.add_context(Context {
+            name: "Office".to_string(),
+            description: Some("Work environment".to_string()),
+        });
+
+        let project = Project {
+            id: "project-1".to_string(),
+            name: "Office Project".to_string(),
+            description: None,
+            status: ProjectStatus::active,
+            context: Some("Office".to_string()),
+        };
+        data.add_project(project.clone());
+
+        let task = Task {
+            id: "task-1".to_string(),
+            title: "Office Task".to_string(),
+            status: TaskStatus::next_action,
+            project: Some("project-1".to_string()),
+            context: Some("Office".to_string()),
+            notes: None,
+            start_date: None,
+            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+        };
+
+        assert!(data.validate_project_context(&project));
+        assert!(data.validate_task_context(&task));
+        assert_eq!(project.context, task.context);
+    }
 }

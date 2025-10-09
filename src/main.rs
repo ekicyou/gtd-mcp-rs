@@ -1694,4 +1694,143 @@ mod tests {
         let result = handler.delete_context("NonExistent".to_string()).await;
         assert!(result.is_err());
     }
+
+    #[tokio::test]
+    async fn test_add_project_with_context() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Add a context first
+        let result = handler
+            .add_context("Office".to_string(), Some("Work environment".to_string()))
+            .await;
+        assert!(result.is_ok());
+
+        // Add a project with context
+        let result = handler
+            .add_project(
+                "Office Project".to_string(),
+                Some("Project description".to_string()),
+                Some("Office".to_string()),
+            )
+            .await;
+        assert!(result.is_ok());
+
+        // Verify project has context
+        let data = handler.data.lock().unwrap();
+        let project = data.projects.first().unwrap();
+        assert_eq!(project.context, Some("Office".to_string()));
+        assert_eq!(project.name, "Office Project");
+    }
+
+    #[tokio::test]
+    async fn test_add_project_with_invalid_context() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Try to add project with non-existent context
+        let result = handler
+            .add_project(
+                "Test Project".to_string(),
+                None,
+                Some("NonExistent".to_string()),
+            )
+            .await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_update_project_context() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Add a context
+        let _ = handler
+            .add_context("Office".to_string(), Some("Work environment".to_string()))
+            .await;
+
+        // Add a project without context
+        let result = handler.add_project("Test Project".to_string(), None, None).await;
+        assert!(result.is_ok());
+        let project_id = result
+            .unwrap()
+            .split_whitespace()
+            .last()
+            .unwrap()
+            .to_string();
+
+        // Update project with context
+        let result = handler
+            .update_project(
+                project_id.clone(),
+                None,
+                None,
+                None,
+                Some("Office".to_string()),
+            )
+            .await;
+        assert!(result.is_ok());
+
+        // Verify context added
+        let data = handler.data.lock().unwrap();
+        let project = data.find_project_by_id(&project_id).unwrap();
+        assert_eq!(project.context, Some("Office".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_update_project_remove_context() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Add a context
+        let _ = handler
+            .add_context("Office".to_string(), Some("Work environment".to_string()))
+            .await;
+
+        // Add a project with context
+        let result = handler
+            .add_project("Test Project".to_string(), None, Some("Office".to_string()))
+            .await;
+        assert!(result.is_ok());
+        let project_id = result
+            .unwrap()
+            .split_whitespace()
+            .last()
+            .unwrap()
+            .to_string();
+
+        // Remove context using empty string
+        let result = handler
+            .update_project(project_id.clone(), None, None, None, Some("".to_string()))
+            .await;
+        assert!(result.is_ok());
+
+        // Verify context removed
+        let data = handler.data.lock().unwrap();
+        let project = data.find_project_by_id(&project_id).unwrap();
+        assert_eq!(project.context, None);
+    }
+
+    #[tokio::test]
+    async fn test_update_project_with_invalid_context() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Add a project
+        let result = handler.add_project("Test Project".to_string(), None, None).await;
+        assert!(result.is_ok());
+        let project_id = result
+            .unwrap()
+            .split_whitespace()
+            .last()
+            .unwrap()
+            .to_string();
+
+        // Try to update with non-existent context
+        let result = handler
+            .update_project(
+                project_id,
+                None,
+                None,
+                None,
+                Some("NonExistent".to_string()),
+            )
+            .await;
+        assert!(result.is_err());
+    }
 }
