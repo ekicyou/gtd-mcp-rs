@@ -36,6 +36,7 @@ impl GtdServerHandler {
         Ok(Self { data, storage })
     }
 
+    #[allow(dead_code)]
     fn save_data(&self) -> Result<()> {
         let data = self.data.lock().unwrap();
         self.storage.save(&data)?;

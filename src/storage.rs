@@ -36,6 +36,7 @@ impl Storage {
         Ok(data)
     }
 
+    #[allow(dead_code)]
     pub fn save(&self, data: &GtdData) -> Result<()> {
         self.save_with_message(data, "Update GTD data")
     }
