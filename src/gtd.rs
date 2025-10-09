@@ -281,6 +281,21 @@ impl GtdData {
         None
     }
 
+    /// Move a task to a different status container
+    /// This method removes the task from its current container, updates its status, and adds it to the new container
+    pub fn move_status(&mut self, id: &str, new_status: TaskStatus) -> Option<()> {
+        // Remove task from its current container
+        let mut task = self.remove_task(id)?;
+        
+        // Update the task's status
+        task.status = new_status;
+        
+        // Add task to the new status container
+        self.add_task(task);
+        
+        Some(())
+    }
+
     // Helper methods for project operations
     #[allow(dead_code)]
     pub fn find_project_by_id(&self, id: &str) -> Option<&Project> {
@@ -456,6 +471,188 @@ mod tests {
         data.remove_task(&task_id);
         assert_eq!(data.task_count(), 0);
         assert_eq!(data.inbox.len(), 0);
+    }
+
+    // ステータス移動テスト - inbox から trash への移動
+    // タスクが inbox から trash に正しく移動されることを確認
+    #[test]
+    fn test_gtd_data_move_status_inbox_to_trash() {
+        let mut data = GtdData::new();
+        let task_id = "task-1".to_string();
+        let task = Task {
+            id: task_id.clone(),
+            title: "Test Task".to_string(),
+            status: TaskStatus::inbox,
+            project: None,
+            context: None,
+            notes: None,
+            start_date: None,
+            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+        };
+
+        data.add_task(task);
+        assert_eq!(data.inbox.len(), 1);
+        assert_eq!(data.trash.len(), 0);
+
+        // Move task to trash
+        let result = data.move_status(&task_id, TaskStatus::trash);
+        assert!(result.is_some());
+
+        // Verify task was moved
+        assert_eq!(data.inbox.len(), 0);
+        assert_eq!(data.trash.len(), 1);
+        assert_eq!(data.task_count(), 1);
+
+        // Verify task status was updated
+        let moved_task = data.find_task_by_id(&task_id).unwrap();
+        assert!(matches!(moved_task.status, TaskStatus::trash));
+    }
+
+    // ステータス移動テスト - next_action から done への移動
+    // タスクが next_action から done に正しく移動されることを確認
+    #[test]
+    fn test_gtd_data_move_status_next_action_to_done() {
+        let mut data = GtdData::new();
+        let task_id = "task-1".to_string();
+        let task = Task {
+            id: task_id.clone(),
+            title: "Test Task".to_string(),
+            status: TaskStatus::next_action,
+            project: None,
+            context: None,
+            notes: None,
+            start_date: None,
+            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+        };
+
+        data.add_task(task);
+        assert_eq!(data.next_action.len(), 1);
+        assert_eq!(data.done.len(), 0);
+
+        // Move task to done
+        let result = data.move_status(&task_id, TaskStatus::done);
+        assert!(result.is_some());
+
+        // Verify task was moved
+        assert_eq!(data.next_action.len(), 0);
+        assert_eq!(data.done.len(), 1);
+        assert_eq!(data.task_count(), 1);
+
+        // Verify task status was updated
+        let moved_task = data.find_task_by_id(&task_id).unwrap();
+        assert!(matches!(moved_task.status, TaskStatus::done));
+    }
+
+    // ステータス移動テスト - 複数のステータス間の移動
+    // タスクが複数のステータス間を正しく移動できることを確認
+    #[test]
+    fn test_gtd_data_move_status_multiple_transitions() {
+        let mut data = GtdData::new();
+        let task_id = "task-1".to_string();
+        let task = Task {
+            id: task_id.clone(),
+            title: "Test Task".to_string(),
+            status: TaskStatus::inbox,
+            project: None,
+            context: None,
+            notes: None,
+            start_date: None,
+            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+        };
+
+        data.add_task(task);
+
+        // inbox -> next_action
+        data.move_status(&task_id, TaskStatus::next_action);
+        assert_eq!(data.inbox.len(), 0);
+        assert_eq!(data.next_action.len(), 1);
+        assert!(matches!(
+            data.find_task_by_id(&task_id).unwrap().status,
+            TaskStatus::next_action
+        ));
+
+        // next_action -> waiting_for
+        data.move_status(&task_id, TaskStatus::waiting_for);
+        assert_eq!(data.next_action.len(), 0);
+        assert_eq!(data.waiting_for.len(), 1);
+        assert!(matches!(
+            data.find_task_by_id(&task_id).unwrap().status,
+            TaskStatus::waiting_for
+        ));
+
+        // waiting_for -> done
+        data.move_status(&task_id, TaskStatus::done);
+        assert_eq!(data.waiting_for.len(), 0);
+        assert_eq!(data.done.len(), 1);
+        assert!(matches!(
+            data.find_task_by_id(&task_id).unwrap().status,
+            TaskStatus::done
+        ));
+
+        // done -> trash
+        data.move_status(&task_id, TaskStatus::trash);
+        assert_eq!(data.done.len(), 0);
+        assert_eq!(data.trash.len(), 1);
+        assert!(matches!(
+            data.find_task_by_id(&task_id).unwrap().status,
+            TaskStatus::trash
+        ));
+    }
+
+    // ステータス移動テスト - 存在しないタスク
+    // 存在しないタスクの移動がNoneを返すことを確認
+    #[test]
+    fn test_gtd_data_move_status_nonexistent_task() {
+        let mut data = GtdData::new();
+        let result = data.move_status("nonexistent-id", TaskStatus::trash);
+        assert!(result.is_none());
+    }
+
+    // ステータス移動テスト - タスクのプロパティが保持される
+    // ステータス移動時にタスクの他のプロパティが保持されることを確認
+    #[test]
+    fn test_gtd_data_move_status_preserves_properties() {
+        let mut data = GtdData::new();
+        let task_id = "task-1".to_string();
+        let task = Task {
+            id: task_id.clone(),
+            title: "Important Task".to_string(),
+            status: TaskStatus::inbox,
+            project: Some("project-1".to_string()),
+            context: Some("Office".to_string()),
+            notes: Some("Important notes".to_string()),
+            start_date: NaiveDate::from_ymd_opt(2024, 12, 25),
+            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+        };
+
+        data.add_task(task);
+
+        // Move task to next_action
+        data.move_status(&task_id, TaskStatus::next_action);
+
+        // Verify all properties are preserved
+        let moved_task = data.find_task_by_id(&task_id).unwrap();
+        assert_eq!(moved_task.title, "Important Task");
+        assert_eq!(moved_task.project, Some("project-1".to_string()));
+        assert_eq!(moved_task.context, Some("Office".to_string()));
+        assert_eq!(moved_task.notes, Some("Important notes".to_string()));
+        assert_eq!(
+            moved_task.start_date,
+            NaiveDate::from_ymd_opt(2024, 12, 25)
+        );
+        assert_eq!(
+            moved_task.created_at,
+            NaiveDate::from_ymd_opt(2024, 1, 1).unwrap()
+        );
+        assert_eq!(
+            moved_task.updated_at,
+            NaiveDate::from_ymd_opt(2024, 1, 1).unwrap()
+        );
+        assert!(matches!(moved_task.status, TaskStatus::next_action));
     }
 
     // プロジェクトとコンテキスト付きタスクのテスト

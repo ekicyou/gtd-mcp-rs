@@ -157,9 +157,12 @@ impl McpServer for GtdServerHandler {
     ) -> McpResult<String> {
         let mut data = self.data.lock().unwrap();
 
-        if let Some(task) = data.find_task_by_id_mut(&task_id) {
-            task.status = TaskStatus::trash;
-            task.updated_at = local_date_today();
+        // Use move_status to properly move the task to trash container
+        if data.move_status(&task_id, TaskStatus::trash).is_some() {
+            // Update the timestamp after the move
+            if let Some(task) = data.find_task_by_id_mut(&task_id) {
+                task.updated_at = local_date_today();
+            }
             drop(data);
 
             if let Err(e) = self.save_data() {
