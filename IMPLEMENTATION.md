@@ -83,30 +83,33 @@ Lists all projects.
 Data is stored in TOML format in `gtd.toml`:
 
 ```toml
-[tasks]
-
-[tasks."task-id"]
-id = "task-id"
-title = "Task Title"
-status = "Inbox"
-project = "project-id"
-context = "context-id"
-notes = "Some notes"
+[[inbox]]
+id = "#1"
+title = "Review project proposal"
+project = "project-1"
+context = "Office"
 start_date = "2024-12-25"
+created_at = "2024-01-01"
+updated_at = "2024-01-01"
 
-[projects]
+[[next_action]]
+id = "#2"
+title = "Complete documentation"
+notes = "Review all sections and update examples"
+created_at = "2024-01-01"
+updated_at = "2024-01-01"
 
-[projects."project-id"]
-id = "project-id"
-name = "Project Name"
-description = "Project Description"
-status = "Active"
+[[projects]]
+id = "project-1"
+name = "Q1 Marketing Campaign"
+description = "Launch new product marketing campaign"
+status = "active"
 
-[contexts]
+[contexts.Office]
+description = "Work environment with desk and computer"
 
-[contexts."context-id"]
-id = "context-id"
-name = "Context Name"
+task_counter = 2
+project_counter = 1
 ```
 
 ## Building
