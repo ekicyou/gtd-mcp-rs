@@ -557,25 +557,16 @@ mod tests {
         config.set_str("user.name", "Test User").unwrap();
         config.set_str("user.email", "test@example.com").unwrap();
 
-        // 初期ファイルを作成してコミット
-        let test_path = temp_dir.path().join("gtd.toml");
-        let storage = Storage::new(&test_path, true);
-        let data = GtdData::new();
-
-        // 最初の保存（ファイル作成）
-        storage.save(&data).unwrap();
-
-        // 手動でコミット（git管理下に置く）
+        // Create an initial commit first so HEAD exists
+        let dummy_file = temp_dir.path().join("dummy.txt");
+        fs::write(&dummy_file, "dummy").unwrap();
         let mut index = repo.index().unwrap();
-        index.add_path(Path::new("gtd.toml")).unwrap();
+        index.add_path(Path::new("dummy.txt")).unwrap();
         index.write().unwrap();
-
         let tree_id = index.write_tree().unwrap();
         let tree = repo.find_tree(tree_id).unwrap();
-
         let time = Time::new(1_700_000_000, 0);
         let signature = Signature::new("Test User", "test@example.com", &time).unwrap();
-
         repo.commit(
             Some("HEAD"),
             &signature,
@@ -586,9 +577,16 @@ mod tests {
         )
         .unwrap();
 
-        // loadが成功することを確認（pullはremoteがないので何もしない）
+        // Now create gtd.toml
+        let test_path = temp_dir.path().join("gtd.toml");
+        fs::write(&test_path, "# test").unwrap();
+        
+        let storage = Storage::new(&test_path, true);
+
+        // loadを呼び出すと、pullがremoteを探してエラーが返されることを確認
+        // (Before fix: errors were silently ignored. After fix: errors are propagated)
         let loaded_data = storage.load();
-        assert!(loaded_data.is_ok());
+        assert!(loaded_data.is_err());
     }
 
     // git管理下でのsave時のsync動作テスト
@@ -648,16 +646,17 @@ mod tests {
         };
         data.add_task(task);
 
-        // 保存が成功することを確認
-        // Note: git syncはremoteがないのでpushで失敗するが、データは保存される
+        // 保存を試みるが、git syncがremoteを探してエラーで失敗することを確認
+        // (Before fix: git errors were silently ignored. After fix: errors are propagated)
         let save_result = storage.save(&data);
-        assert!(save_result.is_ok());
+        assert!(save_result.is_err());
 
-        // ファイルが作成されていることを確認
+        // ファイルは作成されているが、gitコミットは完了していない
         assert!(test_path.exists());
 
-        // データが正しく保存されていることを確認
-        let loaded_data = storage.load().unwrap();
+        // sync_git=falseで再度読み込めば、ファイルの内容は読める
+        let storage_no_sync = Storage::new(&test_path, false);
+        let loaded_data = storage_no_sync.load().unwrap();
         assert_eq!(loaded_data.task_count(), 1);
     }
 
@@ -669,13 +668,44 @@ mod tests {
 
         // テスト用のgitリポジトリを作成
         let temp_dir = TempDir::new().unwrap();
-        let _repo = Repository::init(temp_dir.path()).unwrap();
+        let repo = Repository::init(temp_dir.path()).unwrap();
+        
+        // Configure git user
+        let mut config = repo.config().unwrap();
+        config.set_str("user.name", "Test User").unwrap();
+        config.set_str("user.email", "test@example.com").unwrap();
+
+        // Create a commit so HEAD exists
+        let dummy_file = temp_dir.path().join("dummy.txt");
+        fs::write(&dummy_file, "dummy").unwrap();
+        let mut index = repo.index().unwrap();
+        index.add_path(Path::new("dummy.txt")).unwrap();
+        index.write().unwrap();
+        let tree_id = index.write_tree().unwrap();
+        let tree = repo.find_tree(tree_id).unwrap();
+        let time = git2::Time::new(1_700_000_000, 0);
+        let signature = git2::Signature::new("Test User", "test@example.com", &time).unwrap();
+        repo.commit(
+            Some("HEAD"),
+            &signature,
+            &signature,
+            "Initial commit",
+            &tree,
+            &[],
+        )
+        .unwrap();
 
         let test_path = temp_dir.path().join("gtd.toml");
         let storage = Storage::new(&test_path, true);
 
-        // shutdownを呼び出しても、remoteがないのでエラーにならないことを確認
+        // Verify that sync_git is enabled and git is detected
+        assert!(storage.sync_git);
+        assert!(storage.git_ops.is_git_managed());
+
+        // shutdownを呼び出すと、remoteがないのでエラーが返されることを確認
+        // (Before fix: errors were silently ignored. After fix: errors are propagated)
         let shutdown_result = storage.shutdown();
-        assert!(shutdown_result.is_ok());
+        // With HEAD but no remote, push will fail at find_remote
+        assert!(shutdown_result.is_err());
     }
 }
