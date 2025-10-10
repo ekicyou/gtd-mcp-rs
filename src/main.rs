@@ -130,7 +130,19 @@ impl McpServer for GtdServerHandler {
         &self,
         /// Optional status filter (inbox, next_action, waiting_for, someday, done, trash, calendar)
         status: Option<String>,
+        /// Optional date filter (format: YYYY-MM-DD). Tasks with start_date in the future are excluded
+        date: Option<String>,
     ) -> McpResult<String> {
+        // Parse the date filter if provided
+        let filter_date = if let Some(date_str) = date {
+            match NaiveDate::parse_from_str(&date_str, "%Y-%m-%d") {
+                Ok(date) => Some(date),
+                Err(_) => bail!("Invalid date format. Use YYYY-MM-DD"),
+            }
+        } else {
+            None
+        };
+
         let data = self.data.lock().unwrap();
         let mut tasks: Vec<&Task> = Vec::new();
 
@@ -168,6 +180,15 @@ impl McpServer for GtdServerHandler {
 
         let mut result = String::new();
         for task in tasks {
+            // Filter by date if specified: exclude tasks with start_date in the future
+            if let Some(ref filter_d) = filter_date {
+                if let Some(start_d) = task.start_date {
+                    if start_d > *filter_d {
+                        continue; // Skip this task as its start_date is in the future
+                    }
+                }
+            }
+
             let date_info = task
                 .start_date
                 .map(|d| format!(" [start: {}]", d))
@@ -2425,5 +2446,231 @@ mod tests {
             assert!(!content.is_empty());
             assert!(content.len() > 100); // 各プロンプトは実質的な内容を持つ
         }
+    }
+
+    // 日付フィルタリングのテスト: start_dateが未来のタスクを除外
+    #[tokio::test]
+    async fn test_list_tasks_with_date_filter_excludes_future_tasks() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // タスクを3つ作成: 過去、今日、未来の日付
+        let result = handler
+            .add_task(
+                "Past Task".to_string(),
+                None,
+                None,
+                None,
+                Some("2024-01-01".to_string()),
+            )
+            .await;
+        assert!(result.is_ok());
+
+        let result = handler
+            .add_task(
+                "Today Task".to_string(),
+                None,
+                None,
+                None,
+                Some("2024-06-15".to_string()),
+            )
+            .await;
+        assert!(result.is_ok());
+
+        let result = handler
+            .add_task(
+                "Future Task".to_string(),
+                None,
+                None,
+                None,
+                Some("2024-12-31".to_string()),
+            )
+            .await;
+        assert!(result.is_ok());
+
+        // 日付フィルタ「2024-06-15」で一覧取得
+        let result = handler
+            .list_tasks(None, Some("2024-06-15".to_string()))
+            .await;
+        assert!(result.is_ok());
+        let list = result.unwrap();
+
+        // Past TaskとToday Taskは表示される
+        assert!(list.contains("Past Task"));
+        assert!(list.contains("Today Task"));
+        // Future Taskは表示されない（start_dateが未来なので）
+        assert!(!list.contains("Future Task"));
+    }
+
+    // 日付フィルタリングのテスト: start_dateがないタスクは表示される
+    #[tokio::test]
+    async fn test_list_tasks_with_date_filter_includes_tasks_without_start_date() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // start_dateなしのタスクを作成
+        let result = handler
+            .add_task("No Date Task".to_string(), None, None, None, None)
+            .await;
+        assert!(result.is_ok());
+
+        // start_date付きのタスクを作成（未来）
+        let result = handler
+            .add_task(
+                "Future Task".to_string(),
+                None,
+                None,
+                None,
+                Some("2025-12-31".to_string()),
+            )
+            .await;
+        assert!(result.is_ok());
+
+        // 日付フィルタで一覧取得
+        let result = handler
+            .list_tasks(None, Some("2024-06-15".to_string()))
+            .await;
+        assert!(result.is_ok());
+        let list = result.unwrap();
+
+        // start_dateがないタスクは表示される
+        assert!(list.contains("No Date Task"));
+        // 未来のタスクは表示されない
+        assert!(!list.contains("Future Task"));
+    }
+
+    // 日付フィルタリングのテスト: カレンダーステータスとの組み合わせ
+    #[tokio::test]
+    async fn test_list_tasks_with_date_filter_and_calendar_status() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // カレンダータスクを作成（過去と未来）
+        let result = handler
+            .add_task(
+                "Calendar Past".to_string(),
+                None,
+                None,
+                None,
+                Some("2024-01-01".to_string()),
+            )
+            .await;
+        assert!(result.is_ok());
+        let task_id1 = result
+            .unwrap()
+            .split_whitespace()
+            .last()
+            .unwrap()
+            .to_string();
+
+        let result = handler
+            .add_task(
+                "Calendar Future".to_string(),
+                None,
+                None,
+                None,
+                Some("2025-12-31".to_string()),
+            )
+            .await;
+        assert!(result.is_ok());
+        let task_id2 = result
+            .unwrap()
+            .split_whitespace()
+            .last()
+            .unwrap()
+            .to_string();
+
+        // 両方をカレンダーステータスに移動
+        let result = handler
+            .calendar_task(task_id1.clone(), None)
+            .await;
+        assert!(result.is_ok());
+        let result = handler
+            .calendar_task(task_id2.clone(), None)
+            .await;
+        assert!(result.is_ok());
+
+        // カレンダーステータスでフィルタリングし、日付フィルタも適用
+        let result = handler
+            .list_tasks(
+                Some("calendar".to_string()),
+                Some("2024-06-15".to_string()),
+            )
+            .await;
+        assert!(result.is_ok());
+        let list = result.unwrap();
+
+        // 過去のカレンダータスクは表示される
+        assert!(list.contains("Calendar Past"));
+        // 未来のカレンダータスクは表示されない
+        assert!(!list.contains("Calendar Future"));
+    }
+
+    // 日付フィルタリングのテスト: 無効な日付形式
+    #[tokio::test]
+    async fn test_list_tasks_with_invalid_date_format() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // 無効な日付形式
+        let result = handler
+            .list_tasks(None, Some("2024/06/15".to_string()))
+            .await;
+        assert!(result.is_err());
+
+        let result = handler
+            .list_tasks(None, Some("invalid-date".to_string()))
+            .await;
+        assert!(result.is_err());
+    }
+
+    // 日付フィルタリングのテスト: 日付フィルタなしでは全タスク表示
+    #[tokio::test]
+    async fn test_list_tasks_without_date_filter_shows_all_tasks() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // 未来の日付のタスクを作成
+        let result = handler
+            .add_task(
+                "Future Task".to_string(),
+                None,
+                None,
+                None,
+                Some("2025-12-31".to_string()),
+            )
+            .await;
+        assert!(result.is_ok());
+
+        // 日付フィルタなしで一覧取得
+        let result = handler.list_tasks(None, None).await;
+        assert!(result.is_ok());
+        let list = result.unwrap();
+
+        // 未来のタスクも表示される
+        assert!(list.contains("Future Task"));
+    }
+
+    // 日付フィルタリングのテスト: start_dateが指定日と同じ場合は表示される
+    #[tokio::test]
+    async fn test_list_tasks_with_date_filter_includes_same_date() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // 指定日と同じ日付のタスクを作成
+        let result = handler
+            .add_task(
+                "Same Date Task".to_string(),
+                None,
+                None,
+                None,
+                Some("2024-06-15".to_string()),
+            )
+            .await;
+        assert!(result.is_ok());
+
+        // 同じ日付でフィルタリング
+        let result = handler
+            .list_tasks(None, Some("2024-06-15".to_string()))
+            .await;
+        assert!(result.is_ok());
+        let list = result.unwrap();
+
+        // 同じ日付のタスクは表示される（未来ではない）
+        assert!(list.contains("Same Date Task"));
     }
 }
