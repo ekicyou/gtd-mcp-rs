@@ -24,7 +24,7 @@
 - `cargo fmt --check`: コードフォーマットの検証
 - `cargo clippy`: Lintチェック（警告もエラーとして扱う）
 - `cargo build`: デバッグビルドの検証
-- `cargo test`: 全テスト（56個）の実行
+- `cargo test`: 全テスト（132個）の実行
 - `cargo build --release`: リリースビルドの検証
 
 #### 2. セキュリティ監査 (security-audit)

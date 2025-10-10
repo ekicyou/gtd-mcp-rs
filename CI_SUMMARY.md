@@ -75,7 +75,7 @@ This document summarizes the CI/CD infrastructure implemented to protect the mai
 4. **Format check** (Ubuntu only): `cargo fmt --check`
 5. **Lint check** (Ubuntu only): `cargo clippy -- -D warnings`
 6. **Debug build**: `cargo build --verbose`
-7. **Run tests**: `cargo test --verbose` (56 tests)
+7. **Run tests**: `cargo test --verbose` (132 tests)
 8. **Release build**: `cargo build --release --verbose`
 
 #### Security Audit Job
@@ -153,7 +153,7 @@ All code must pass these checks before merging:
 |-------|------|----------|
 | Code formatting | `cargo fmt --check` | ❌ Block merge |
 | Linting | `cargo clippy` | ❌ Block merge |
-| Tests (56 tests) | `cargo test` | ❌ Block merge |
+| Tests (132 tests) | `cargo test` | ❌ Block merge |
 | Build (debug) | `cargo build` | ❌ Block merge |
 | Build (release) | `cargo build --release` | ❌ Block merge |
 | Security audit | `cargo audit` | ⚠️ Warning |
@@ -169,7 +169,7 @@ This PR also includes code quality improvements:
 2. **Optimized test data**: `vec![...]` → `[...]` for static arrays
 
 ### Code Statistics
-- **56 unit tests** (100% passing)
+- **132 unit tests** (100% passing)
 - **Zero clippy warnings**
 - **Properly formatted code** (rustfmt compliant)
 - **3 source files** fixed: `gtd.rs`, `main.rs`, `storage.rs`
