@@ -14,7 +14,7 @@ This server now uses `mcp-attr` for better Windows compatibility. Previous versi
 
 - ✅ **Cross-Platform**: Works on Windows, Linux, and macOS
 - ✅ **LLM-Friendly IDs**: Uses GitHub-style IDs (`#1`, `#2` for tasks, `project-1`, `project-2` for projects) for optimal readability and LLM interaction
-- Task management (inbox, next actions, waiting for, someday/maybe, done, trash)
+- Task management (inbox, next actions, waiting for, someday/maybe, done, trash, calendar)
 - **Task and Project Updates**: Modify existing tasks and projects with full field update support
 - **Trash management**: Move tasks to trash and bulk delete
 - **Calendar management**: Tasks can have start dates for GTD tickler file workflow
@@ -200,7 +200,7 @@ Add a new task to the inbox.
 List all tasks with optional status filter. Task listings include comprehensive information for each task.
 
 **Parameters:**
-- `status` (string, optional): Filter by status (inbox, next_action, waiting_for, someday, done, trash)
+- `status` (string, optional): Filter by status (inbox, next_action, waiting_for, someday, done, trash, calendar)
 
 **Output Format:** Each task is displayed with:
 - Task ID
@@ -314,6 +314,37 @@ Move a task to done.
   "task_id": "#1"
 }
 ```
+
+#### calendar_task
+Move a task to calendar (GTD tickler file concept).
+
+In GTD, moving a task to the calendar means you're deferring it until a specific date - you "forget about it" until that date arrives. This tool requires that the task has a `start_date` set.
+
+**Parameters:**
+- `task_id` (string, required): Task ID to move to calendar
+- `start_date` (string, optional): Start date in YYYY-MM-DD format. If not provided, the task must already have a `start_date` set.
+
+**Validation:**
+- A task must have a `start_date` to be moved to calendar status
+- If the task doesn't have a `start_date` and you don't provide one, an error will be returned
+- If both the task has a `start_date` and you provide a new one, the new date will override the existing one
+
+**Example (setting new start date):**
+```json
+{
+  "task_id": "#1",
+  "start_date": "2024-12-25"
+}
+```
+
+**Example (using existing start date):**
+```json
+{
+  "task_id": "#1"
+}
+```
+
+**Note:** The calendar status represents tasks that are scheduled to start on a specific date. Setting `start_date` on a task doesn't automatically move it to calendar - you must explicitly use this tool. However, when a task has calendar status, it must have a valid `start_date`.
 
 ### trash_task
 Move a task to trash.
