@@ -404,9 +404,11 @@ impl McpServer for GtdServerHandler {
         // Check if task will have a start_date after the operation
         let current_start_date = data.find_task_by_id(&task_id).unwrap().start_date;
         let final_start_date = parsed_start_date.or(current_start_date);
-        
+
         if final_start_date.is_none() {
-            bail!("Task must have a start_date to be moved to calendar. Please provide a start_date parameter or set it first.");
+            bail!(
+                "Task must have a start_date to be moved to calendar. Please provide a start_date parameter or set it first."
+            );
         }
 
         // Move the task to calendar status
@@ -420,7 +422,9 @@ impl McpServer for GtdServerHandler {
             }
             drop(data);
 
-            if let Err(e) = self.save_data_with_message(&format!("Move task {} to calendar", task_id)) {
+            if let Err(e) =
+                self.save_data_with_message(&format!("Move task {} to calendar", task_id))
+            {
                 bail!("Failed to save: {}", e);
             }
 
@@ -1623,7 +1627,9 @@ mod tests {
             .unwrap()
             .to_string();
 
-        let result = handler.calendar_task(task_id.clone(), Some("2024-12-25".to_string())).await;
+        let result = handler
+            .calendar_task(task_id.clone(), Some("2024-12-25".to_string()))
+            .await;
         assert!(result.is_ok());
 
         let data = handler.data.lock().unwrap();
@@ -1632,7 +1638,10 @@ mod tests {
         assert_eq!(data.calendar.len(), 1);
         assert_eq!(data.inbox.len(), 0);
         assert!(task.start_date.is_some());
-        assert_eq!(task.start_date.unwrap(), NaiveDate::from_ymd_opt(2024, 12, 25).unwrap());
+        assert_eq!(
+            task.start_date.unwrap(),
+            NaiveDate::from_ymd_opt(2024, 12, 25).unwrap()
+        );
     }
 
     #[tokio::test]
@@ -1662,7 +1671,13 @@ mod tests {
 
         // start_date付きのタスクを作成
         let result = handler
-            .add_task("Test Task".to_string(), None, None, None, Some("2024-11-15".to_string()))
+            .add_task(
+                "Test Task".to_string(),
+                None,
+                None,
+                None,
+                Some("2024-11-15".to_string()),
+            )
             .await;
         assert!(result.is_ok());
         let task_id = result
@@ -1680,7 +1695,10 @@ mod tests {
         let task = data.find_task_by_id(&task_id).unwrap();
         assert!(matches!(task.status, TaskStatus::calendar));
         assert_eq!(data.calendar.len(), 1);
-        assert_eq!(task.start_date.unwrap(), NaiveDate::from_ymd_opt(2024, 11, 15).unwrap());
+        assert_eq!(
+            task.start_date.unwrap(),
+            NaiveDate::from_ymd_opt(2024, 11, 15).unwrap()
+        );
     }
 
     #[tokio::test]
@@ -1689,7 +1707,13 @@ mod tests {
 
         // start_date付きのタスクを作成
         let result = handler
-            .add_task("Test Task".to_string(), None, None, None, Some("2024-11-15".to_string()))
+            .add_task(
+                "Test Task".to_string(),
+                None,
+                None,
+                None,
+                Some("2024-11-15".to_string()),
+            )
             .await;
         assert!(result.is_ok());
         let task_id = result
@@ -1700,13 +1724,18 @@ mod tests {
             .to_string();
 
         // 新しいstart_dateを指定してcalendarに移動（既存のstart_dateを上書き）
-        let result = handler.calendar_task(task_id.clone(), Some("2024-12-31".to_string())).await;
+        let result = handler
+            .calendar_task(task_id.clone(), Some("2024-12-31".to_string()))
+            .await;
         assert!(result.is_ok());
 
         let data = handler.data.lock().unwrap();
         let task = data.find_task_by_id(&task_id).unwrap();
         assert!(matches!(task.status, TaskStatus::calendar));
-        assert_eq!(task.start_date.unwrap(), NaiveDate::from_ymd_opt(2024, 12, 31).unwrap());
+        assert_eq!(
+            task.start_date.unwrap(),
+            NaiveDate::from_ymd_opt(2024, 12, 31).unwrap()
+        );
     }
 
     #[tokio::test]
@@ -1725,7 +1754,9 @@ mod tests {
             .to_string();
 
         // 無効な日付形式
-        let result = handler.calendar_task(task_id.clone(), Some("2024/12/25".to_string())).await;
+        let result = handler
+            .calendar_task(task_id.clone(), Some("2024/12/25".to_string()))
+            .await;
         assert!(result.is_err());
     }
 

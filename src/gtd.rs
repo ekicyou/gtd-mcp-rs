@@ -626,6 +626,39 @@ mod tests {
         ));
     }
 
+    // ステータス移動テスト - カレンダーへの移動
+    // タスクをカレンダーステータスに移動し、正しくcalendarコンテナに格納されることを確認
+    #[test]
+    fn test_gtd_data_move_status_to_calendar() {
+        let mut data = GtdData::new();
+        let task_id = "task-1".to_string();
+        let date = NaiveDate::from_ymd_opt(2024, 12, 25).unwrap();
+        let task = Task {
+            id: task_id.clone(),
+            title: "Future Task".to_string(),
+            status: TaskStatus::inbox,
+            project: None,
+            context: None,
+            notes: None,
+            start_date: Some(date),
+            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+        };
+
+        data.add_task(task);
+        assert_eq!(data.inbox.len(), 1);
+
+        // inbox -> calendar
+        let result = data.move_status(&task_id, TaskStatus::calendar);
+        assert!(result.is_some());
+        assert_eq!(data.inbox.len(), 0);
+        assert_eq!(data.calendar.len(), 1);
+
+        let moved_task = data.find_task_by_id(&task_id).unwrap();
+        assert!(matches!(moved_task.status, TaskStatus::calendar));
+        assert_eq!(moved_task.start_date.unwrap(), date);
+    }
+
     // ステータス移動テスト - 存在しないタスク
     // 存在しないタスクの移動がNoneを返すことを確認
     #[test]
@@ -714,6 +747,27 @@ mod tests {
             updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
         };
 
+        assert_eq!(task.start_date.unwrap(), date);
+    }
+
+    // カレンダーステータスのタスクテスト
+    // カレンダーステータスのタスクが正しく作成され、start_dateが設定されることを確認
+    #[test]
+    fn test_calendar_task_with_start_date() {
+        let date = NaiveDate::from_ymd_opt(2024, 12, 25).unwrap();
+        let task = Task {
+            id: "task-1".to_string(),
+            title: "Christmas Task".to_string(),
+            status: TaskStatus::calendar,
+            project: None,
+            context: None,
+            notes: None,
+            start_date: Some(date),
+            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+        };
+
+        assert!(matches!(task.status, TaskStatus::calendar));
         assert_eq!(task.start_date.unwrap(), date);
     }
 
