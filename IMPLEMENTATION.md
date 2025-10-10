@@ -184,9 +184,9 @@ Or with the release build:
 - `serde` (1.x): Serialization framework
 - `toml` (0.9): TOML parsing and generation
 - `anyhow` (1.x): Error handling
-- `uuid` (1.x): Unique ID generation (kept for backward compatibility, but no longer used)
 - `chrono` (0.4): Date and time handling for task start dates
 - `git2` (0.19): Git operations for automatic version control
+- `clap` (4.x): Command-line argument parsing
 
 ## LLM-Friendly ID Generation
 

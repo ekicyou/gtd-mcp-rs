@@ -7,6 +7,7 @@ RustでGTD（Getting Things Done）タスク管理を実装するMCP（Model Con
 - **`src/main.rs`**: `mcp-attr`の宣言的マクロ（`#[mcp_server]`、`#[tool]`）を使用したMCPサーバーハンドラー
 - **`src/gtd.rs`**: TOMLシリアライゼーションを持つコアドメインモデル（`Task`、`Project`、`Context`、`GtdData`）
 - **`src/storage.rs`**: `gtd.toml`ストレージのファイル永続化層
+- **`src/git_ops.rs`**: Git操作による自動バージョン管理層
 
 データフロー: MCPクライアント → stdio → `GtdServerHandler` → `GtdData`（インメモリ） → `Storage` → `gtd.toml`ファイル
 
@@ -82,7 +83,7 @@ cargo build --release    # リリースビルド
 
 ### テスト
 ```bash
-cargo test              # 全41個のユニットテストを実行
+cargo test              # 全119個のユニットテストを実行
 ```
 テストは`env::temp_dir()`経由で一時ファイルを使用し、後でクリーンアップします。
 
@@ -124,8 +125,9 @@ cargo run               # stdio MCPサーバーを起動
 - **`tokio`**: MCPサーバー用の非同期ランタイム
 - **`toml` (0.9)**: シリアライゼーション（注：可読性のため`toml::to_string_pretty`を使用）
 - **`chrono`**: `serde`機能付き日付処理
-- **`uuid`**: `v4`機能でタスク/プロジェクトIDを生成
 - **`anyhow`**: コンテキスト付きエラーハンドリング
+- **`git2`**: Git操作による自動バージョン管理
+- **`clap`**: コマンドライン引数のパース（`--file`や`--sync-git`オプション用）
 
 ## コードスタイルパターン
 
@@ -140,5 +142,5 @@ cargo run               # stdio MCPサーバーを起動
 1. **Edition 2024**: `Cargo.toml`は`edition = "2024"`を使用（2021ではない）
 2. **クロスプラットフォーム**: Windows互換性のため`rust-mcp-sdk`の代わりに`mcp-attr`を使用
 3. **TOML構造**: タスク/プロジェクトは配列（`[[tasks]]`）、コンテキストはテーブル（`[contexts.Name]`）
-4. **ID生成**: 新しいエンティティには常に`uuid::Uuid::new_v4().to_string()`を使用
+4. **ID生成**: カウンターベースのID生成システムを使用（タスク: `#1`, `#2`, プロジェクト: `project-1`, `project-2`）。`GtdData::generate_task_id()`と`GtdData::generate_project_id()`メソッドで管理
 5. **ステータスフィルタリング**: `list_tasks`の文字列マッチングは動的なenumパースではなくハードコードされたmatchアームを使用
