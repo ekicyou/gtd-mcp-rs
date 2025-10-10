@@ -181,13 +181,11 @@ impl McpServer for GtdServerHandler {
         let mut result = String::new();
         for task in tasks {
             // Filter by date if specified: exclude tasks with start_date in the future
-            if let Some(ref filter_d) = filter_date {
-                if let Some(start_d) = task.start_date {
-                    if start_d > *filter_d {
+            if let Some(ref filter_d) = filter_date
+                && let Some(start_d) = task.start_date
+                    && start_d > *filter_d {
                         continue; // Skip this task as its start_date is in the future
                     }
-                }
-            }
 
             let date_info = task
                 .start_date
