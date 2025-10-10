@@ -84,33 +84,36 @@ See [CI_SUMMARY.md](CI_SUMMARY.md) for a complete overview of the CI/CD infrastr
 
 ## Usage
 
-The server uses stdio transport and can be integrated with MCP clients:
+The server uses stdio transport and can be integrated with MCP clients. A file path must be specified:
 
 ```bash
-cargo run
+cargo run -- gtd.toml
 ```
 
 ### Command-Line Options
 
-The server supports the following command-line options:
+The server requires a file path as the first argument and supports the following options:
 
-- `-f, --file <FILE>`: Path to the GTD data file (default: `gtd.toml`)
+**Arguments:**
+- `<FILE>`: Path to the GTD data file (required)
+
+**Options:**
 - `--sync-git`: Enable automatic git synchronization on save
 
 **Examples:**
 
 ```bash
-# Use default gtd.toml in current directory
-cargo run
+# Use gtd.toml in current directory
+cargo run -- gtd.toml
 
-# Enable git sync with default file
-cargo run -- --sync-git
+# Enable git sync with file
+cargo run -- gtd.toml --sync-git
 
 # Use custom file path
-cargo run -- --file /path/to/my-gtd-data.toml
+cargo run -- /path/to/my-gtd-data.toml
 
 # Use custom file with git sync
-cargo run -- --file /path/to/my-gtd-data.toml --sync-git
+cargo run -- /path/to/my-gtd-data.toml --sync-git
 ```
 
 ### Integration with MCP Clients
@@ -123,7 +126,8 @@ For Claude Desktop, add to your `claude_desktop_config.json`:
 {
   "mcpServers": {
     "gtd": {
-      "command": "/path/to/gtd-mcp-rs/target/release/gtd-mcp-rs"
+      "command": "/path/to/gtd-mcp-rs/target/release/gtd-mcp-rs",
+      "args": ["gtd.toml"]
     }
   }
 }
@@ -136,7 +140,7 @@ To enable automatic git synchronization:
   "mcpServers": {
     "gtd": {
       "command": "/path/to/gtd-mcp-rs/target/release/gtd-mcp-rs",
-      "args": ["--sync-git"]
+      "args": ["gtd.toml", "--sync-git"]
     }
   }
 }
@@ -149,7 +153,7 @@ To use a custom file location:
   "mcpServers": {
     "gtd": {
       "command": "/path/to/gtd-mcp-rs/target/release/gtd-mcp-rs",
-      "args": ["--file", "/path/to/your/gtd-data.toml"]
+      "args": ["/path/to/your/gtd-data.toml"]
     }
   }
 }
@@ -162,7 +166,7 @@ Or with both custom file and git sync:
   "mcpServers": {
     "gtd": {
       "command": "/path/to/gtd-mcp-rs/target/release/gtd-mcp-rs",
-      "args": ["--file", "/path/to/your/gtd-data.toml", "--sync-git"]
+      "args": ["/path/to/your/gtd-data.toml", "--sync-git"]
     }
   }
 }
@@ -536,7 +540,7 @@ Prompts are designed to be concise and token-efficient while providing comprehen
 
 ## Data Storage
 
-Tasks and projects are stored in `gtd.toml` in the current directory. This file can be version controlled with git for backup and synchronization.
+Tasks and projects are stored in the GTD data file specified at startup. This file can be version controlled with git for backup and synchronization.
 
 ### Example gtd.toml
 
@@ -569,7 +573,7 @@ The GTD MCP Server includes automatic git synchronization using the git2 crate:
 
 ### Automatic Sync
 
-When the `--sync-git` flag is enabled and `gtd.toml` is located in a git-managed directory, the server automatically:
+When the `--sync-git` flag is enabled and the data file is located in a git-managed directory, the server automatically:
 1. **Pulls** the latest changes from the remote before loading data
 2. **Commits** the updated file with descriptive messages (e.g., "Add task to inbox: Task title", "Mark task #1 as done")
 3. **Pushes** the changes to the remote repository after saving
@@ -594,7 +598,7 @@ git config user.email "your.email@example.com"
 git remote add origin https://github.com/yourusername/gtd-data.git
 
 # Create initial commit
-git add gtd.toml
+git add your-data-file.toml
 git commit -m "Initial GTD data"
 git push -u origin main
 ```

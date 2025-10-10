@@ -16,7 +16,6 @@ use storage::Storage;
 #[command(author, version, about, long_about = None)]
 struct Args {
     /// Path to the GTD data file
-    #[arg(short, long, default_value = "gtd.toml")]
     file: String,
 
     /// Enable git synchronization on save
