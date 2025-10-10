@@ -129,7 +129,7 @@ impl McpServer for GtdServerHandler {
     #[tool]
     async fn list_tasks(
         &self,
-        /// Optional status filter (inbox, next_action, waiting_for, someday, done, trash)
+        /// Optional status filter (inbox, next_action, waiting_for, someday, done, trash, calendar)
         status: Option<String>,
     ) -> McpResult<String> {
         let data = self.data.lock().unwrap();
@@ -144,6 +144,7 @@ impl McpServer for GtdServerHandler {
                 "someday" => tasks.extend(data.someday.iter()),
                 "done" => tasks.extend(data.done.iter()),
                 "trash" => tasks.extend(data.trash.iter()),
+                "calendar" => tasks.extend(data.calendar.iter()),
                 _ => {
                     // If unknown status, return all tasks
                     tasks.extend(data.inbox.iter());
@@ -152,6 +153,7 @@ impl McpServer for GtdServerHandler {
                     tasks.extend(data.someday.iter());
                     tasks.extend(data.done.iter());
                     tasks.extend(data.trash.iter());
+                    tasks.extend(data.calendar.iter());
                 }
             }
         } else {
@@ -162,6 +164,7 @@ impl McpServer for GtdServerHandler {
             tasks.extend(data.someday.iter());
             tasks.extend(data.done.iter());
             tasks.extend(data.trash.iter());
+            tasks.extend(data.calendar.iter());
         }
 
         let mut result = String::new();
@@ -369,6 +372,61 @@ impl McpServer for GtdServerHandler {
             Ok(format!("Task {} moved to done", task_id))
         } else {
             bail!("Task not found: {}", task_id);
+        }
+    }
+
+    /// Move a task to calendar
+    #[tool]
+    async fn calendar_task(
+        &self,
+        /// Task ID to move to calendar
+        task_id: String,
+        /// Optional start date (format: YYYY-MM-DD). If not provided, task must already have a start_date
+        start_date: Option<String>,
+    ) -> McpResult<String> {
+        let parsed_start_date = if let Some(date_str) = start_date {
+            match NaiveDate::parse_from_str(&date_str, "%Y-%m-%d") {
+                Ok(date) => Some(date),
+                Err(_) => bail!("Invalid date format. Use YYYY-MM-DD"),
+            }
+        } else {
+            None
+        };
+
+        let mut data = self.data.lock().unwrap();
+
+        // Check if task exists
+        let task_exists = data.find_task_by_id(&task_id).is_some();
+        if !task_exists {
+            bail!("Task not found: {}", task_id);
+        }
+
+        // Check if task will have a start_date after the operation
+        let current_start_date = data.find_task_by_id(&task_id).unwrap().start_date;
+        let final_start_date = parsed_start_date.or(current_start_date);
+        
+        if final_start_date.is_none() {
+            bail!("Task must have a start_date to be moved to calendar. Please provide a start_date parameter or set it first.");
+        }
+
+        // Move the task to calendar status
+        if data.move_status(&task_id, TaskStatus::calendar).is_some() {
+            // Update the start_date if provided, and update timestamp
+            if let Some(task) = data.find_task_by_id_mut(&task_id) {
+                if let Some(date) = parsed_start_date {
+                    task.start_date = Some(date);
+                }
+                task.updated_at = local_date_today();
+            }
+            drop(data);
+
+            if let Err(e) = self.save_data_with_message(&format!("Move task {} to calendar", task_id)) {
+                bail!("Failed to save: {}", e);
+            }
+
+            Ok(format!("Task {} moved to calendar", task_id))
+        } else {
+            bail!("Failed to move task to calendar");
         }
     }
 
@@ -1548,6 +1606,127 @@ mod tests {
         assert!(matches!(task.status, TaskStatus::done));
         assert_eq!(data.done.len(), 1);
         assert_eq!(data.inbox.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_calendar_task_with_start_date() {
+        let (handler, _temp_file) = get_test_handler();
+
+        let result = handler
+            .add_task("Test Task".to_string(), None, None, None, None)
+            .await;
+        assert!(result.is_ok());
+        let task_id = result
+            .unwrap()
+            .split_whitespace()
+            .last()
+            .unwrap()
+            .to_string();
+
+        let result = handler.calendar_task(task_id.clone(), Some("2024-12-25".to_string())).await;
+        assert!(result.is_ok());
+
+        let data = handler.data.lock().unwrap();
+        let task = data.find_task_by_id(&task_id).unwrap();
+        assert!(matches!(task.status, TaskStatus::calendar));
+        assert_eq!(data.calendar.len(), 1);
+        assert_eq!(data.inbox.len(), 0);
+        assert!(task.start_date.is_some());
+        assert_eq!(task.start_date.unwrap(), NaiveDate::from_ymd_opt(2024, 12, 25).unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_calendar_task_without_start_date_error() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // タスクを作成（start_dateなし）
+        let result = handler
+            .add_task("Test Task".to_string(), None, None, None, None)
+            .await;
+        assert!(result.is_ok());
+        let task_id = result
+            .unwrap()
+            .split_whitespace()
+            .last()
+            .unwrap()
+            .to_string();
+
+        // start_dateを指定せずにcalendarに移動しようとするとエラー
+        let result = handler.calendar_task(task_id.clone(), None).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_calendar_task_with_existing_start_date() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // start_date付きのタスクを作成
+        let result = handler
+            .add_task("Test Task".to_string(), None, None, None, Some("2024-11-15".to_string()))
+            .await;
+        assert!(result.is_ok());
+        let task_id = result
+            .unwrap()
+            .split_whitespace()
+            .last()
+            .unwrap()
+            .to_string();
+
+        // start_dateパラメータなしでcalendarに移動（既存のstart_dateを使用）
+        let result = handler.calendar_task(task_id.clone(), None).await;
+        assert!(result.is_ok());
+
+        let data = handler.data.lock().unwrap();
+        let task = data.find_task_by_id(&task_id).unwrap();
+        assert!(matches!(task.status, TaskStatus::calendar));
+        assert_eq!(data.calendar.len(), 1);
+        assert_eq!(task.start_date.unwrap(), NaiveDate::from_ymd_opt(2024, 11, 15).unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_calendar_task_override_start_date() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // start_date付きのタスクを作成
+        let result = handler
+            .add_task("Test Task".to_string(), None, None, None, Some("2024-11-15".to_string()))
+            .await;
+        assert!(result.is_ok());
+        let task_id = result
+            .unwrap()
+            .split_whitespace()
+            .last()
+            .unwrap()
+            .to_string();
+
+        // 新しいstart_dateを指定してcalendarに移動（既存のstart_dateを上書き）
+        let result = handler.calendar_task(task_id.clone(), Some("2024-12-31".to_string())).await;
+        assert!(result.is_ok());
+
+        let data = handler.data.lock().unwrap();
+        let task = data.find_task_by_id(&task_id).unwrap();
+        assert!(matches!(task.status, TaskStatus::calendar));
+        assert_eq!(task.start_date.unwrap(), NaiveDate::from_ymd_opt(2024, 12, 31).unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_calendar_task_invalid_date_format() {
+        let (handler, _temp_file) = get_test_handler();
+
+        let result = handler
+            .add_task("Test Task".to_string(), None, None, None, None)
+            .await;
+        assert!(result.is_ok());
+        let task_id = result
+            .unwrap()
+            .split_whitespace()
+            .last()
+            .unwrap()
+            .to_string();
+
+        // 無効な日付形式
+        let result = handler.calendar_task(task_id.clone(), Some("2024/12/25".to_string())).await;
+        assert!(result.is_err());
     }
 
     #[tokio::test]

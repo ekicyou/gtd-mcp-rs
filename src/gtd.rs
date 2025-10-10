@@ -34,6 +34,7 @@ pub enum TaskStatus {
     someday,
     done,
     trash,
+    calendar,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -77,6 +78,8 @@ pub struct GtdData {
     pub done: Vec<Task>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub trash: Vec<Task>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub calendar: Vec<Task>,
     pub projects: Vec<Project>,
     pub contexts: HashMap<String, Context>,
     #[serde(default, skip_serializing_if = "is_zero")]
@@ -108,6 +111,8 @@ impl<'de> Deserialize<'de> for GtdData {
             done: Vec<Task>,
             #[serde(default)]
             trash: Vec<Task>,
+            #[serde(default)]
+            calendar: Vec<Task>,
             #[serde(default)]
             projects: Vec<Project>,
             #[serde(default)]
@@ -144,6 +149,9 @@ impl<'de> Deserialize<'de> for GtdData {
         for task in &mut helper.trash {
             task.status = TaskStatus::trash;
         }
+        for task in &mut helper.calendar {
+            task.status = TaskStatus::calendar;
+        }
 
         Ok(GtdData {
             inbox: helper.inbox,
@@ -152,6 +160,7 @@ impl<'de> Deserialize<'de> for GtdData {
             someday: helper.someday,
             done: helper.done,
             trash: helper.trash,
+            calendar: helper.calendar,
             projects: helper.projects,
             contexts: helper.contexts,
             task_counter: helper.task_counter,
@@ -187,6 +196,7 @@ impl GtdData {
             TaskStatus::someday => &self.someday,
             TaskStatus::done => &self.done,
             TaskStatus::trash => &self.trash,
+            TaskStatus::calendar => &self.calendar,
         }
     }
 
@@ -199,11 +209,12 @@ impl GtdData {
             TaskStatus::someday => &mut self.someday,
             TaskStatus::done => &mut self.done,
             TaskStatus::trash => &mut self.trash,
+            TaskStatus::calendar => &mut self.calendar,
         }
     }
 
     /// Get all task lists as an array of references
-    fn all_task_lists(&self) -> [&Vec<Task>; 6] {
+    fn all_task_lists(&self) -> [&Vec<Task>; 7] {
         [
             &self.inbox,
             &self.next_action,
@@ -211,11 +222,12 @@ impl GtdData {
             &self.someday,
             &self.done,
             &self.trash,
+            &self.calendar,
         ]
     }
 
     /// Get all task lists as an array of mutable references
-    fn all_task_lists_mut(&mut self) -> [&mut Vec<Task>; 6] {
+    fn all_task_lists_mut(&mut self) -> [&mut Vec<Task>; 7] {
         [
             &mut self.inbox,
             &mut self.next_action,
@@ -223,6 +235,7 @@ impl GtdData {
             &mut self.someday,
             &mut self.done,
             &mut self.trash,
+            &mut self.calendar,
         ]
     }
 
@@ -245,6 +258,7 @@ impl GtdData {
             + self.someday.len()
             + self.done.len()
             + self.trash.len()
+            + self.calendar.len()
     }
 
     // Helper methods for task operations
@@ -704,7 +718,7 @@ mod tests {
     }
 
     // タスクステータスの全バリアントテスト
-    // 6種類のタスクステータス（Inbox、NextAction、WaitingFor、Someday、Done、Trash）がすべて正しく動作することを確認
+    // 7種類のタスクステータス（Inbox、NextAction、WaitingFor、Someday、Done、Trash、Calendar）がすべて正しく動作することを確認
     #[test]
     fn test_task_status_variants() {
         let statuses = vec![
@@ -714,6 +728,7 @@ mod tests {
             TaskStatus::someday,
             TaskStatus::done,
             TaskStatus::trash,
+            TaskStatus::calendar,
         ];
 
         for status in statuses {
@@ -736,6 +751,7 @@ mod tests {
                 TaskStatus::someday => assert!(matches!(task.status, TaskStatus::someday)),
                 TaskStatus::done => assert!(matches!(task.status, TaskStatus::done)),
                 TaskStatus::trash => assert!(matches!(task.status, TaskStatus::trash)),
+                TaskStatus::calendar => assert!(matches!(task.status, TaskStatus::calendar)),
             }
         }
     }
@@ -1037,6 +1053,7 @@ mod tests {
             TaskStatus::someday,
             TaskStatus::done,
             TaskStatus::trash,
+            TaskStatus::calendar,
         ];
 
         for (i, status) in statuses.iter().enumerate() {
@@ -1061,7 +1078,7 @@ mod tests {
         assert_eq!(data.done.len(), 1);
 
         // Verify all statuses have exactly one task
-        assert_eq!(data.task_count(), 6);
+        assert_eq!(data.task_count(), 7);
     }
 
     // プロジェクトによるタスクフィルタリングテスト
