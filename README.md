@@ -103,10 +103,13 @@ The server supports the following command-line options:
 # Use default gtd.toml in current directory
 cargo run
 
+# Enable git sync with default file
+cargo run -- --sync-git
+
 # Use custom file path
 cargo run -- --file /path/to/my-gtd-data.toml
 
-# Enable git sync with custom file
+# Use custom file with git sync
 cargo run -- --file /path/to/my-gtd-data.toml --sync-git
 ```
 
@@ -126,19 +129,6 @@ For Claude Desktop, add to your `claude_desktop_config.json`:
 }
 ```
 
-To use a custom file location:
-
-```json
-{
-  "mcpServers": {
-    "gtd": {
-      "command": "/path/to/gtd-mcp-rs/target/release/gtd-mcp-rs",
-      "args": ["--file", "/path/to/your/gtd-data.toml"]
-    }
-  }
-}
-```
-
 To enable automatic git synchronization:
 
 ```json
@@ -147,6 +137,19 @@ To enable automatic git synchronization:
     "gtd": {
       "command": "/path/to/gtd-mcp-rs/target/release/gtd-mcp-rs",
       "args": ["--sync-git"]
+    }
+  }
+}
+```
+
+To use a custom file location:
+
+```json
+{
+  "mcpServers": {
+    "gtd": {
+      "command": "/path/to/gtd-mcp-rs/target/release/gtd-mcp-rs",
+      "args": ["--file", "/path/to/your/gtd-data.toml"]
     }
   }
 }
