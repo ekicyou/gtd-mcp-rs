@@ -1958,6 +1958,19 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_trash_task_error_messages() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Test with various invalid task IDs to ensure error handling works
+        let test_cases = vec!["#999", "invalid-id", "task-999"];
+        
+        for task_id in test_cases {
+            let result = handler.trash_task(task_id.to_string()).await;
+            assert!(result.is_err(), "Expected error for task_id: {}", task_id);
+        }
+    }
+
+    #[tokio::test]
     async fn test_calendar_task_with_start_date() {
         let (handler, _temp_file) = get_test_handler();
 
