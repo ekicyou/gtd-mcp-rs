@@ -4,7 +4,7 @@ mod storage;
 
 use anyhow::Result;
 use chrono::NaiveDate;
-use clap::Parser;
+use clap::{CommandFactory, Parser};
 use gtd::{GtdData, Project, ProjectStatus, Task, TaskStatus, local_date_today};
 use mcp_attr::server::{McpServer, mcp_server, serve_stdio};
 use mcp_attr::{Result as McpResult, bail};
@@ -16,7 +16,6 @@ use storage::Storage;
 #[command(author, version, about, long_about = None)]
 struct Args {
     /// Path to the GTD data file
-    #[arg(short, long, default_value = "gtd.toml")]
     file: String,
 
     /// Enable git synchronization on save
@@ -1042,6 +1041,15 @@ Remember: Task IDs are #1, #2, #3, etc. (LLM-friendly short format)"#
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // Check if no arguments were provided (except the program name)
+    if std::env::args().len() == 1 {
+        // No arguments provided, show help and exit with error code
+        let mut cmd = Args::command();
+        cmd.print_help().ok();
+        println!(); // Add a newline after help
+        std::process::exit(2);
+    }
+
     let args = Args::parse();
     let handler = GtdServerHandler::new(&args.file, args.sync_git)?;
     serve_stdio(handler).await?;
