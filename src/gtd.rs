@@ -42,6 +42,7 @@ pub struct Project {
     pub name: String,
     pub description: Option<String>,
     pub status: ProjectStatus,
+    pub context: Option<String>,
 }
 
 #[allow(non_camel_case_types)]
@@ -344,6 +345,15 @@ impl GtdData {
     /// Returns true if all references are valid or not specified
     pub fn validate_task_references(&self, task: &Task) -> bool {
         self.validate_task_project(task) && self.validate_task_context(task)
+    }
+
+    /// Validate that a project's context reference exists (if specified)
+    /// Returns true if the project has no context reference or if the reference is valid
+    pub fn validate_project_context(&self, project: &Project) -> bool {
+        match &project.context {
+            None => true,
+            Some(context_name) => self.find_context_by_name(context_name).is_some(),
+        }
     }
 }
 
@@ -739,6 +749,7 @@ mod tests {
             name: "Test Project".to_string(),
             description: Some("Test description".to_string()),
             status: ProjectStatus::active,
+            context: None,
         };
 
         assert_eq!(project.id, "project-1");
@@ -756,6 +767,7 @@ mod tests {
             name: "Test Project".to_string(),
             description: None,
             status: ProjectStatus::active,
+            context: None,
         };
 
         assert!(project.description.is_none());
@@ -777,6 +789,7 @@ mod tests {
                 name: "Test Project".to_string(),
                 description: None,
                 status: status.clone(),
+                context: None,
             };
 
             match status {
@@ -799,6 +812,7 @@ mod tests {
             name: "Test Project".to_string(),
             description: None,
             status: ProjectStatus::active,
+            context: None,
         };
 
         data.add_project(project.clone());
@@ -820,6 +834,7 @@ mod tests {
             name: "Test Project".to_string(),
             description: None,
             status: ProjectStatus::active,
+            context: None,
         };
 
         data.add_project(project);
@@ -933,6 +948,7 @@ mod tests {
             name: "Test Project".to_string(),
             description: Some("Test description".to_string()),
             status: ProjectStatus::active,
+            context: None,
         };
 
         let serialized = toml::to_string(&project).unwrap();
@@ -990,6 +1006,7 @@ mod tests {
             name: "Test Project".to_string(),
             description: None,
             status: ProjectStatus::active,
+            context: None,
         };
         data.add_project(project);
 
@@ -1188,6 +1205,7 @@ mod tests {
             name: "Test Project".to_string(),
             description: None,
             status: ProjectStatus::on_hold,
+            context: None,
         };
 
         let serialized = toml::to_string(&project).unwrap();
@@ -1254,6 +1272,7 @@ mod tests {
                 name: format!("Project {}", i),
                 description: None,
                 status: ProjectStatus::active,
+                context: None,
             });
         }
 
@@ -1311,6 +1330,7 @@ mod tests {
             name: "Documentation Project".to_string(),
             description: Some("Comprehensive project documentation update".to_string()),
             status: ProjectStatus::active,
+            context: None,
         });
 
         // 説明付きコンテキストを追加
@@ -1466,6 +1486,7 @@ name = "Home"
             name: "Test Project".to_string(),
             description: None,
             status: ProjectStatus::active,
+            context: None,
         });
 
         let task = Task {
@@ -1604,6 +1625,7 @@ name = "Home"
             name: "Test Project".to_string(),
             description: None,
             status: ProjectStatus::active,
+            context: None,
         });
 
         data.add_context(Context {
@@ -1663,6 +1685,7 @@ name = "Home"
             name: "Test Project".to_string(),
             description: None,
             status: ProjectStatus::active,
+            context: None,
         });
 
         let task = Task {
@@ -1908,5 +1931,120 @@ name = "Home"
             !serialized.contains("project_counter"),
             "project_counter should not be serialized when 0"
         );
+    }
+
+    // プロジェクトのコンテキスト参照検証テスト - 有効な参照
+    // プロジェクトのコンテキスト参照が存在するコンテキストを指している場合、検証が成功することを確認
+    #[test]
+    fn test_validate_project_context_valid() {
+        let mut data = GtdData::new();
+
+        data.add_context(Context {
+            name: "Office".to_string(),
+            description: None,
+        });
+
+        let project = Project {
+            id: "project-1".to_string(),
+            name: "Test Project".to_string(),
+            description: None,
+            status: ProjectStatus::active,
+            context: Some("Office".to_string()),
+        };
+
+        assert!(data.validate_project_context(&project));
+    }
+
+    // プロジェクトのコンテキスト参照検証テスト - 無効な参照
+    // プロジェクトのコンテキスト参照が存在しないコンテキストを指している場合、検証が失敗することを確認
+    #[test]
+    fn test_validate_project_context_invalid() {
+        let data = GtdData::new();
+
+        let project = Project {
+            id: "project-1".to_string(),
+            name: "Test Project".to_string(),
+            description: None,
+            status: ProjectStatus::active,
+            context: Some("NonExistent".to_string()),
+        };
+
+        assert!(!data.validate_project_context(&project));
+    }
+
+    // プロジェクトのコンテキスト参照検証テスト - コンテキスト参照がNone
+    // プロジェクトのコンテキスト参照がNoneの場合、検証が成功することを確認
+    #[test]
+    fn test_validate_project_context_none() {
+        let data = GtdData::new();
+
+        let project = Project {
+            id: "project-1".to_string(),
+            name: "Test Project".to_string(),
+            description: None,
+            status: ProjectStatus::active,
+            context: None,
+        };
+
+        assert!(data.validate_project_context(&project));
+    }
+
+    // プロジェクトとタスクの両方にコンテキストを設定するテスト
+    // プロジェクトとタスクの両方が同じコンテキストを参照できることを確認
+    #[test]
+    fn test_project_and_task_with_same_context() {
+        let mut data = GtdData::new();
+
+        data.add_context(Context {
+            name: "Office".to_string(),
+            description: Some("Work environment".to_string()),
+        });
+
+        let project = Project {
+            id: "project-1".to_string(),
+            name: "Office Project".to_string(),
+            description: None,
+            status: ProjectStatus::active,
+            context: Some("Office".to_string()),
+        };
+        data.add_project(project.clone());
+
+        let task = Task {
+            id: "task-1".to_string(),
+            title: "Office Task".to_string(),
+            status: TaskStatus::next_action,
+            project: Some("project-1".to_string()),
+            context: Some("Office".to_string()),
+            notes: None,
+            start_date: None,
+            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+        };
+
+        assert!(data.validate_project_context(&project));
+        assert!(data.validate_task_context(&task));
+        assert_eq!(project.context, task.context);
+    }
+
+    // 後方互換性テスト - コンテキストフィールドなしのプロジェクト
+    // 旧バージョンのTOMLファイル（コンテキストフィールドなし）を正しく読み込めることを確認
+    #[test]
+    fn test_backward_compatibility_project_without_context() {
+        // TOML from old version without context field
+        let toml_str = r#"
+[[projects]]
+id = "project-1"
+name = "Old Project"
+description = "Project without context field"
+status = "active"
+"#;
+
+        let data: GtdData = toml::from_str(toml_str).unwrap();
+        assert_eq!(data.projects.len(), 1);
+
+        let project = &data.projects[0];
+        assert_eq!(project.id, "project-1");
+        assert_eq!(project.name, "Old Project");
+        assert_eq!(project.context, None);
     }
 }

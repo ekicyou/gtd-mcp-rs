@@ -170,9 +170,26 @@ impl McpServer for GtdServerHandler {
                 .start_date
                 .map(|d| format!(" [start: {}]", d))
                 .unwrap_or_default();
+            let project_info = task
+                .project
+                .as_ref()
+                .map(|p| format!(" [project: {}]", p))
+                .unwrap_or_default();
+            let context_info = task
+                .context
+                .as_ref()
+                .map(|c| format!(" [context: {}]", c))
+                .unwrap_or_default();
             result.push_str(&format!(
-                "- [{}] {} (status: {:?}){} [created: {}, updated: {}]\n",
-                task.id, task.title, task.status, date_info, task.created_at, task.updated_at
+                "- [{}] {} (status: {:?}){}{}{} [created: {}, updated: {}]\n",
+                task.id,
+                task.title,
+                task.status,
+                date_info,
+                project_info,
+                context_info,
+                task.created_at,
+                task.updated_at
             ));
         }
 
@@ -380,6 +397,8 @@ impl McpServer for GtdServerHandler {
         name: String,
         /// Optional project description
         description: Option<String>,
+        /// Optional context name (must exist if specified)
+        context: Option<String>,
     ) -> McpResult<String> {
         let mut data = self.data.lock().unwrap();
 
@@ -388,7 +407,14 @@ impl McpServer for GtdServerHandler {
             name: name.clone(),
             description,
             status: ProjectStatus::active,
+            context,
         };
+
+        // Validate context reference before adding the project
+        if !data.validate_project_context(&project) {
+            drop(data);
+            bail!("Invalid context reference: context does not exist");
+        }
 
         let project_id = project.id.clone();
         data.add_project(project);
@@ -409,9 +435,19 @@ impl McpServer for GtdServerHandler {
 
         let mut result = String::new();
         for project in projects {
+            let desc_info = project
+                .description
+                .as_ref()
+                .map(|d| format!(" [desc: {}]", d))
+                .unwrap_or_default();
+            let context_info = project
+                .context
+                .as_ref()
+                .map(|c| format!(" [context: {}]", c))
+                .unwrap_or_default();
             result.push_str(&format!(
-                "- [{}] {} (status: {:?})\n",
-                project.id, project.name, project.status
+                "- [{}] {} (status: {:?}){}{}\n",
+                project.id, project.name, project.status, desc_info, context_info
             ));
         }
 
@@ -527,6 +563,8 @@ impl McpServer for GtdServerHandler {
         description: Option<String>,
         /// Optional new status (active, on_hold, completed)
         status: Option<String>,
+        /// Optional new context name (use empty string to remove)
+        context: Option<String>,
     ) -> McpResult<String> {
         let mut data = self.data.lock().unwrap();
 
@@ -564,6 +602,24 @@ impl McpServer for GtdServerHandler {
                     bail!("Invalid status. Use: active, on_hold, completed");
                 }
             };
+        }
+
+        // Update context if provided (empty string removes it)
+        if let Some(new_context) = context {
+            project.context = if new_context.is_empty() {
+                None
+            } else {
+                Some(new_context)
+            };
+        }
+
+        // Clone project for validation
+        let project_clone = project.clone();
+
+        // Validate context reference
+        if !data.validate_project_context(&project_clone) {
+            drop(data);
+            bail!("Invalid context reference: context does not exist");
         }
 
         drop(data);
@@ -837,7 +893,9 @@ mod tests {
         let (handler, _temp_file) = get_test_handler();
 
         // Add a project and context first
-        let project_result = handler.add_project("Test Project".to_string(), None).await;
+        let project_result = handler
+            .add_project("Test Project".to_string(), None, None)
+            .await;
         assert!(project_result.is_ok());
         let project_id = project_result
             .unwrap()
@@ -1095,7 +1153,9 @@ mod tests {
         let (handler, _temp_file) = get_test_handler();
 
         // Add a project
-        let result = handler.add_project("Original Name".to_string(), None).await;
+        let result = handler
+            .add_project("Original Name".to_string(), None, None)
+            .await;
         assert!(result.is_ok());
         let project_id = result
             .unwrap()
@@ -1109,6 +1169,7 @@ mod tests {
             .update_project(
                 project_id.clone(),
                 Some("Updated Name".to_string()),
+                None,
                 None,
                 None,
             )
@@ -1126,7 +1187,9 @@ mod tests {
         let (handler, _temp_file) = get_test_handler();
 
         // Add a project
-        let result = handler.add_project("Test Project".to_string(), None).await;
+        let result = handler
+            .add_project("Test Project".to_string(), None, None)
+            .await;
         assert!(result.is_ok());
         let project_id = result
             .unwrap()
@@ -1142,6 +1205,7 @@ mod tests {
                 None,
                 Some("New description".to_string()),
                 None,
+                None,
             )
             .await;
         assert!(result.is_ok());
@@ -1155,7 +1219,7 @@ mod tests {
 
         // Remove description
         let result = handler
-            .update_project(project_id.clone(), None, Some("".to_string()), None)
+            .update_project(project_id.clone(), None, Some("".to_string()), None, None)
             .await;
         assert!(result.is_ok());
 
@@ -1170,7 +1234,9 @@ mod tests {
         let (handler, _temp_file) = get_test_handler();
 
         // Add a project
-        let result = handler.add_project("Test Project".to_string(), None).await;
+        let result = handler
+            .add_project("Test Project".to_string(), None, None)
+            .await;
         assert!(result.is_ok());
         let project_id = result
             .unwrap()
@@ -1188,7 +1254,13 @@ mod tests {
 
         // Update status to on_hold
         let result = handler
-            .update_project(project_id.clone(), None, None, Some("on_hold".to_string()))
+            .update_project(
+                project_id.clone(),
+                None,
+                None,
+                Some("on_hold".to_string()),
+                None,
+            )
             .await;
         assert!(result.is_ok());
 
@@ -1206,6 +1278,7 @@ mod tests {
                 None,
                 None,
                 Some("completed".to_string()),
+                None,
             )
             .await;
         assert!(result.is_ok());
@@ -1221,7 +1294,9 @@ mod tests {
         let (handler, _temp_file) = get_test_handler();
 
         // Add a project
-        let result = handler.add_project("Test Project".to_string(), None).await;
+        let result = handler
+            .add_project("Test Project".to_string(), None, None)
+            .await;
         assert!(result.is_ok());
         let project_id = result
             .unwrap()
@@ -1232,7 +1307,13 @@ mod tests {
 
         // Try to update with invalid status
         let result = handler
-            .update_project(project_id, None, None, Some("invalid_status".to_string()))
+            .update_project(
+                project_id,
+                None,
+                None,
+                Some("invalid_status".to_string()),
+                None,
+            )
             .await;
         assert!(result.is_err());
     }
@@ -1248,6 +1329,7 @@ mod tests {
                 Some("New Name".to_string()),
                 None,
                 None,
+                None,
             )
             .await;
         assert!(result.is_err());
@@ -1258,7 +1340,9 @@ mod tests {
         let (handler, _temp_file) = get_test_handler();
 
         // Add a project
-        let project_result = handler.add_project("Test Project".to_string(), None).await;
+        let project_result = handler
+            .add_project("Test Project".to_string(), None, None)
+            .await;
         assert!(project_result.is_ok());
         let project_id = project_result
             .unwrap()
@@ -1639,6 +1723,149 @@ mod tests {
         let (handler, _temp_file) = get_test_handler();
 
         let result = handler.delete_context("NonExistent".to_string()).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_add_project_with_context() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Add a context first
+        let result = handler
+            .add_context("Office".to_string(), Some("Work environment".to_string()))
+            .await;
+        assert!(result.is_ok());
+
+        // Add a project with context
+        let result = handler
+            .add_project(
+                "Office Project".to_string(),
+                Some("Project description".to_string()),
+                Some("Office".to_string()),
+            )
+            .await;
+        assert!(result.is_ok());
+
+        // Verify project has context
+        let data = handler.data.lock().unwrap();
+        let project = data.projects.first().unwrap();
+        assert_eq!(project.context, Some("Office".to_string()));
+        assert_eq!(project.name, "Office Project");
+    }
+
+    #[tokio::test]
+    async fn test_add_project_with_invalid_context() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Try to add project with non-existent context
+        let result = handler
+            .add_project(
+                "Test Project".to_string(),
+                None,
+                Some("NonExistent".to_string()),
+            )
+            .await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_update_project_context() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Add a context
+        let _ = handler
+            .add_context("Office".to_string(), Some("Work environment".to_string()))
+            .await;
+
+        // Add a project without context
+        let result = handler
+            .add_project("Test Project".to_string(), None, None)
+            .await;
+        assert!(result.is_ok());
+        let project_id = result
+            .unwrap()
+            .split_whitespace()
+            .last()
+            .unwrap()
+            .to_string();
+
+        // Update project with context
+        let result = handler
+            .update_project(
+                project_id.clone(),
+                None,
+                None,
+                None,
+                Some("Office".to_string()),
+            )
+            .await;
+        assert!(result.is_ok());
+
+        // Verify context added
+        let data = handler.data.lock().unwrap();
+        let project = data.find_project_by_id(&project_id).unwrap();
+        assert_eq!(project.context, Some("Office".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_update_project_remove_context() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Add a context
+        let _ = handler
+            .add_context("Office".to_string(), Some("Work environment".to_string()))
+            .await;
+
+        // Add a project with context
+        let result = handler
+            .add_project("Test Project".to_string(), None, Some("Office".to_string()))
+            .await;
+        assert!(result.is_ok());
+        let project_id = result
+            .unwrap()
+            .split_whitespace()
+            .last()
+            .unwrap()
+            .to_string();
+
+        // Remove context using empty string
+        let result = handler
+            .update_project(project_id.clone(), None, None, None, Some("".to_string()))
+            .await;
+        assert!(result.is_ok());
+
+        // Verify context removed
+        let data = handler.data.lock().unwrap();
+        let project = data.find_project_by_id(&project_id).unwrap();
+        assert_eq!(project.context, None);
+    }
+
+    #[tokio::test]
+    async fn test_update_project_with_invalid_context() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Add a project
+        let result = handler
+            .add_project("Test Project".to_string(), None, None)
+            .await;
+        assert!(result.is_ok());
+        let project_id = result
+            .unwrap()
+            .split_whitespace()
+            .last()
+            .unwrap()
+            .to_string();
+
+        // Try to update with non-existent context
+        let result = handler
+            .update_project(
+                project_id,
+                None,
+                None,
+                None,
+                Some("NonExistent".to_string()),
+            )
+            .await;
         assert!(result.is_err());
     }
 }

@@ -197,6 +197,7 @@ mod tests {
             name: "Test Project".to_string(),
             description: Some("Test description".to_string()),
             status: ProjectStatus::active,
+            context: None,
         };
         data.add_project(project.clone());
 
@@ -287,6 +288,7 @@ mod tests {
                 name: format!("Project {}", i),
                 description: None,
                 status: ProjectStatus::active,
+                context: None,
             };
             data.add_project(project);
         }
