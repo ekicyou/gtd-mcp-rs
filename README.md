@@ -209,6 +209,7 @@ List all tasks with optional status filter. Task listings include comprehensive 
 
 **Parameters:**
 - `status` (string, optional): Filter by status (inbox, next_action, waiting_for, someday, done, trash, calendar)
+- `date` (string, optional): Filter by date in YYYY-MM-DD format. Tasks with start_date in the future (later than the specified date) are excluded. This is particularly useful for the "calendar" status to show only tasks whose start date has arrived.
 
 **Output Format:** Each task is displayed with:
 - Task ID
@@ -226,6 +227,15 @@ List all tasks with optional status filter. Task listings include comprehensive 
   "status": "inbox"
 }
 ```
+
+**Example with date filter:**
+```json
+{
+  "status": "calendar",
+  "date": "2024-06-15"
+}
+```
+This will list calendar tasks with start_date on or before 2024-06-15, excluding tasks scheduled for future dates.
 
 ### update_task
 Update an existing task. All parameters are optional except the task_id. Only provided fields will be updated.
