@@ -15,7 +15,7 @@ This server now uses `mcp-attr` for better Windows compatibility. Previous versi
 - ✅ **Cross-Platform**: Works on Windows, Linux, and macOS
 - ✅ **LLM-Friendly IDs**: Uses GitHub-style IDs (`#1`, `#2` for tasks, `project-1`, `project-2` for projects) for optimal readability and LLM interaction
 - ✅ **MCP Prompts**: Built-in workflow guidance (GTD overview, inbox processing, weekly review, next actions, task creation best practices)
-- Task management (inbox, next actions, waiting for, someday/maybe, done, trash, calendar)
+- Task management (inbox, next actions, waiting for, someday/maybe, later, done, trash, calendar)
 - **Task and Project Updates**: Modify existing tasks and projects with full field update support
 - **Trash management**: Move tasks to trash and bulk delete
 - **Calendar management**: Tasks can have start dates for GTD tickler file workflow
@@ -320,6 +320,19 @@ Move a task to someday.
 }
 ```
 
+#### later_task
+Move a task to later (deferred but not someday).
+
+**Parameters:**
+- `task_id` (string, required): Task ID to move to later
+
+**Example:**
+```json
+{
+  "task_id": "#1"
+}
+```
+
 #### done_task
 Move a task to done.
 
@@ -514,6 +527,7 @@ Step-by-step guide for processing inbox items following GTD methodology:
 - Less than 2 minutes? (yes → do it now)
 - Can you do it yourself? (no → waiting_for)
 - Specific date? (yes → calendar)
+- Should this be done later? (yes → later)
 - Part of project? (assign project)
 - Add context and move to next_action
 
@@ -522,7 +536,7 @@ Goal: Process inbox to zero with every item clarified and organized.
 #### weekly_review
 Complete GTD weekly review process:
 - **Get Clear**: Process inbox, empty your head
-- **Get Current**: Review calendar, next actions, waiting for, someday tasks
+- **Get Current**: Review calendar, next actions, waiting for, later, someday tasks
 - **Review Projects**: Ensure each has next action, update status
 - **Get Creative**: Brainstorm new possibilities
 

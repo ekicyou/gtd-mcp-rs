@@ -32,6 +32,7 @@ pub enum TaskStatus {
     next_action,
     waiting_for,
     someday,
+    later,
     done,
     trash,
     calendar,
@@ -75,6 +76,8 @@ pub struct GtdData {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub someday: Vec<Task>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub later: Vec<Task>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub done: Vec<Task>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub trash: Vec<Task>,
@@ -107,6 +110,8 @@ impl<'de> Deserialize<'de> for GtdData {
             waiting_for: Vec<Task>,
             #[serde(default)]
             someday: Vec<Task>,
+            #[serde(default)]
+            later: Vec<Task>,
             #[serde(default)]
             done: Vec<Task>,
             #[serde(default)]
@@ -143,6 +148,9 @@ impl<'de> Deserialize<'de> for GtdData {
         for task in &mut helper.someday {
             task.status = TaskStatus::someday;
         }
+        for task in &mut helper.later {
+            task.status = TaskStatus::later;
+        }
         for task in &mut helper.done {
             task.status = TaskStatus::done;
         }
@@ -158,6 +166,7 @@ impl<'de> Deserialize<'de> for GtdData {
             next_action: helper.next_action,
             waiting_for: helper.waiting_for,
             someday: helper.someday,
+            later: helper.later,
             done: helper.done,
             trash: helper.trash,
             calendar: helper.calendar,
@@ -194,6 +203,7 @@ impl GtdData {
             TaskStatus::next_action => &self.next_action,
             TaskStatus::waiting_for => &self.waiting_for,
             TaskStatus::someday => &self.someday,
+            TaskStatus::later => &self.later,
             TaskStatus::done => &self.done,
             TaskStatus::trash => &self.trash,
             TaskStatus::calendar => &self.calendar,
@@ -207,6 +217,7 @@ impl GtdData {
             TaskStatus::next_action => &mut self.next_action,
             TaskStatus::waiting_for => &mut self.waiting_for,
             TaskStatus::someday => &mut self.someday,
+            TaskStatus::later => &mut self.later,
             TaskStatus::done => &mut self.done,
             TaskStatus::trash => &mut self.trash,
             TaskStatus::calendar => &mut self.calendar,
@@ -214,12 +225,13 @@ impl GtdData {
     }
 
     /// Get all task lists as an array of references
-    fn all_task_lists(&self) -> [&Vec<Task>; 7] {
+    fn all_task_lists(&self) -> [&Vec<Task>; 8] {
         [
             &self.inbox,
             &self.next_action,
             &self.waiting_for,
             &self.someday,
+            &self.later,
             &self.done,
             &self.trash,
             &self.calendar,
@@ -227,12 +239,13 @@ impl GtdData {
     }
 
     /// Get all task lists as an array of mutable references
-    fn all_task_lists_mut(&mut self) -> [&mut Vec<Task>; 7] {
+    fn all_task_lists_mut(&mut self) -> [&mut Vec<Task>; 8] {
         [
             &mut self.inbox,
             &mut self.next_action,
             &mut self.waiting_for,
             &mut self.someday,
+            &mut self.later,
             &mut self.done,
             &mut self.trash,
             &mut self.calendar,
@@ -256,6 +269,7 @@ impl GtdData {
             + self.next_action.len()
             + self.waiting_for.len()
             + self.someday.len()
+            + self.later.len()
             + self.done.len()
             + self.trash.len()
             + self.calendar.len()
@@ -385,6 +399,7 @@ mod tests {
         assert!(data.next_action.is_empty());
         assert!(data.waiting_for.is_empty());
         assert!(data.someday.is_empty());
+        assert!(data.later.is_empty());
         assert!(data.done.is_empty());
         assert!(data.trash.is_empty());
         assert!(data.projects.is_empty());
@@ -772,7 +787,7 @@ mod tests {
     }
 
     // タスクステータスの全バリアントテスト
-    // 7種類のタスクステータス（Inbox、NextAction、WaitingFor、Someday、Done、Trash、Calendar）がすべて正しく動作することを確認
+    // 8種類のタスクステータス（Inbox、NextAction、WaitingFor、Someday、Later、Done、Trash、Calendar）がすべて正しく動作することを確認
     #[test]
     fn test_task_status_variants() {
         let statuses = vec![
@@ -780,6 +795,7 @@ mod tests {
             TaskStatus::next_action,
             TaskStatus::waiting_for,
             TaskStatus::someday,
+            TaskStatus::later,
             TaskStatus::done,
             TaskStatus::trash,
             TaskStatus::calendar,
@@ -803,6 +819,7 @@ mod tests {
                 TaskStatus::next_action => assert!(matches!(task.status, TaskStatus::next_action)),
                 TaskStatus::waiting_for => assert!(matches!(task.status, TaskStatus::waiting_for)),
                 TaskStatus::someday => assert!(matches!(task.status, TaskStatus::someday)),
+                TaskStatus::later => assert!(matches!(task.status, TaskStatus::later)),
                 TaskStatus::done => assert!(matches!(task.status, TaskStatus::done)),
                 TaskStatus::trash => assert!(matches!(task.status, TaskStatus::trash)),
                 TaskStatus::calendar => assert!(matches!(task.status, TaskStatus::calendar)),
@@ -1105,6 +1122,7 @@ mod tests {
             TaskStatus::next_action,
             TaskStatus::waiting_for,
             TaskStatus::someday,
+            TaskStatus::later,
             TaskStatus::done,
             TaskStatus::trash,
             TaskStatus::calendar,
@@ -1132,7 +1150,7 @@ mod tests {
         assert_eq!(data.done.len(), 1);
 
         // Verify all statuses have exactly one task
-        assert_eq!(data.task_count(), 7);
+        assert_eq!(data.task_count(), 8);
     }
 
     // プロジェクトによるタスクフィルタリングテスト

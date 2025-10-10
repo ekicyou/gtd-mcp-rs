@@ -128,7 +128,7 @@ impl McpServer for GtdServerHandler {
     #[tool]
     async fn list_tasks(
         &self,
-        /// Optional status filter (inbox, next_action, waiting_for, someday, done, trash, calendar)
+        /// Optional status filter (inbox, next_action, waiting_for, someday, later, done, trash, calendar)
         status: Option<String>,
         /// Optional date filter (format: YYYY-MM-DD). Tasks with start_date in the future are excluded
         date: Option<String>,
@@ -153,6 +153,7 @@ impl McpServer for GtdServerHandler {
                 "next_action" => tasks.extend(data.next_action.iter()),
                 "waiting_for" => tasks.extend(data.waiting_for.iter()),
                 "someday" => tasks.extend(data.someday.iter()),
+                "later" => tasks.extend(data.later.iter()),
                 "done" => tasks.extend(data.done.iter()),
                 "trash" => tasks.extend(data.trash.iter()),
                 "calendar" => tasks.extend(data.calendar.iter()),
@@ -162,6 +163,7 @@ impl McpServer for GtdServerHandler {
                     tasks.extend(data.next_action.iter());
                     tasks.extend(data.waiting_for.iter());
                     tasks.extend(data.someday.iter());
+                    tasks.extend(data.later.iter());
                     tasks.extend(data.done.iter());
                     tasks.extend(data.trash.iter());
                     tasks.extend(data.calendar.iter());
@@ -173,6 +175,7 @@ impl McpServer for GtdServerHandler {
             tasks.extend(data.next_action.iter());
             tasks.extend(data.waiting_for.iter());
             tasks.extend(data.someday.iter());
+            tasks.extend(data.later.iter());
             tasks.extend(data.done.iter());
             tasks.extend(data.trash.iter());
             tasks.extend(data.calendar.iter());
@@ -181,12 +184,11 @@ impl McpServer for GtdServerHandler {
         let mut result = String::new();
         for task in tasks {
             // Filter by date if specified: exclude tasks with start_date in the future
-            if let Some(ref filter_d) = filter_date {
-                if let Some(start_d) = task.start_date {
-                    if start_d > *filter_d {
-                        continue; // Skip this task as its start_date is in the future
-                    }
-                }
+            if let Some(ref filter_d) = filter_date
+                && let Some(start_d) = task.start_date
+                && start_d > *filter_d
+            {
+                continue; // Skip this task as its start_date is in the future
             }
 
             let date_info = task
@@ -232,11 +234,19 @@ impl McpServer for GtdServerHandler {
         let task_exists = data.find_task_by_id(&task_id).is_some();
         if !task_exists {
             eprintln!("Error: Attempted to trash non-existent task: {}", task_id);
-            bail!("Task not found: {}. Please check the task ID and try again.", task_id);
+            bail!(
+                "Task not found: {}. Please check the task ID and try again.",
+                task_id
+            );
         }
 
-        let original_status = data.find_task_by_id(&task_id).map(|t| format!("{:?}", t.status));
-        eprintln!("Moving task {} from {:?} to trash", task_id, original_status);
+        let original_status = data
+            .find_task_by_id(&task_id)
+            .map(|t| format!("{:?}", t.status));
+        eprintln!(
+            "Moving task {} from {:?} to trash",
+            task_id, original_status
+        );
 
         // Use move_status to properly move the task to trash container
         if data.move_status(&task_id, TaskStatus::trash).is_some() {
@@ -248,16 +258,28 @@ impl McpServer for GtdServerHandler {
 
             if let Err(e) = self.save_data_with_message(&format!("Move task {} to trash", task_id))
             {
-                eprintln!("Error: Failed to save data after moving task {} to trash: {}", task_id, e);
-                bail!("Failed to save task to trash: {}. The task may not have been moved.", e);
+                eprintln!(
+                    "Error: Failed to save data after moving task {} to trash: {}",
+                    task_id, e
+                );
+                bail!(
+                    "Failed to save task to trash: {}. The task may not have been moved.",
+                    e
+                );
             }
 
             eprintln!("Successfully moved task {} to trash", task_id);
             Ok(format!("Task {} moved to trash", task_id))
         } else {
             // This should not happen since we checked above, but handle it anyway
-            eprintln!("Error: move_status failed for task {} (this should not happen)", task_id);
-            bail!("Failed to move task {} to trash. Internal error occurred.", task_id);
+            eprintln!(
+                "Error: move_status failed for task {} (this should not happen)",
+                task_id
+            );
+            bail!(
+                "Failed to move task {} to trash. Internal error occurred.",
+                task_id
+            );
         }
     }
 
@@ -377,6 +399,34 @@ impl McpServer for GtdServerHandler {
             }
 
             Ok(format!("Task {} moved to someday", task_id))
+        } else {
+            bail!("Task not found: {}", task_id);
+        }
+    }
+
+    /// Move a task to later
+    #[tool]
+    async fn later_task(
+        &self,
+        /// Task ID to move to later
+        task_id: String,
+    ) -> McpResult<String> {
+        let mut data = self.data.lock().unwrap();
+
+        // Use move_status to properly move the task to later container
+        if data.move_status(&task_id, TaskStatus::later).is_some() {
+            // Update the timestamp after the move
+            if let Some(task) = data.find_task_by_id_mut(&task_id) {
+                task.updated_at = local_date_today();
+            }
+            drop(data);
+
+            if let Err(e) = self.save_data_with_message(&format!("Move task {} to later", task_id))
+            {
+                bail!("Failed to save: {}", e);
+            }
+
+            Ok(format!("Task {} moved to later", task_id))
         } else {
             bail!("Task not found: {}", task_id);
         }
@@ -861,6 +911,7 @@ This MCP server implements the Getting Things Done (GTD) methodology by David Al
 - `next_action`: Actionable tasks ready to work on
 - `waiting_for`: Tasks blocked waiting for someone/something
 - `someday`: Tasks for potential future action
+- `later`: Tasks to do later (deferred but not someday)
 - `calendar`: Date-specific tasks (require start_date)
 - `done`: Completed tasks
 - `trash`: Deleted tasks
@@ -884,7 +935,7 @@ Projects use: project-1, project-2, project-3
 ## Key Tools
 
 - Task Management: add_task, update_task, list_tasks, delete_task
-- Status Movement: inbox_task, next_action_task, waiting_for_task, someday_task, calendar_task, done_task, trash_task
+- Status Movement: inbox_task, next_action_task, waiting_for_task, someday_task, later_task, calendar_task, done_task, trash_task
 - Projects: add_project, list_projects, update_project, delete_project
 - Contexts: add_context, list_contexts, update_context, delete_context
 
@@ -917,14 +968,18 @@ Use prompts like `process_inbox`, `weekly_review`, or `next_actions` for workflo
    - YES → Use `calendar_task` with start_date parameter
    - NO → Continue to step 6
 
-6. **Is it part of a larger project?**
-   - YES → Use `update_task` to assign project
+6. **Should this be done later (deferred)?**
+   - YES → Use `later_task` for tasks deferred to a later time
    - NO → Continue to step 7
 
-7. **Add context if helpful** (e.g., @office, @computer)
+7. **Is it part of a larger project?**
+   - YES → Use `update_task` to assign project
+   - NO → Continue to step 8
+
+8. **Add context if helpful** (e.g., @office, @computer)
    - Use `update_task` to set context
 
-8. **Move to next actions**
+9. **Move to next actions**
    - Use `next_action_task`
 
 ## Goal
@@ -954,11 +1009,15 @@ The weekly review keeps your system current and complete.
    - Review `next_action` tasks: `list_tasks` status "next_action"
      - Mark completed ones as `done_task`
      - Update stale tasks with `update_task`
-     - Identify tasks that should move to waiting/someday
+     - Identify tasks that should move to waiting/someday/later
 
    - Review `waiting_for` tasks: `list_tasks` status "waiting_for"
      - Check if any can now move to next actions
      - Update notes on what you're waiting for
+   
+   - Review `later` tasks: `list_tasks` status "later"
+     - Move tasks that are now ready to next actions
+     - Update or clarify deferred tasks
    
    - Review `someday` tasks: `list_tasks` status "someday"
      - Move newly relevant items to inbox or next actions
@@ -1859,6 +1918,31 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_later_task() {
+        let (handler, _temp_file) = get_test_handler();
+
+        let result = handler
+            .add_task("Test Task".to_string(), None, None, None, None)
+            .await;
+        assert!(result.is_ok());
+        let task_id = result
+            .unwrap()
+            .split_whitespace()
+            .last()
+            .unwrap()
+            .to_string();
+
+        let result = handler.later_task(task_id.clone()).await;
+        assert!(result.is_ok());
+
+        let data = handler.data.lock().unwrap();
+        let task = data.find_task_by_id(&task_id).unwrap();
+        assert!(matches!(task.status, TaskStatus::later));
+        assert_eq!(data.later.len(), 1);
+        assert_eq!(data.inbox.len(), 0);
+    }
+
+    #[tokio::test]
     async fn test_done_task() {
         let (handler, _temp_file) = get_test_handler();
 
@@ -1963,7 +2047,7 @@ mod tests {
 
         // Test with various invalid task IDs to ensure error handling works
         let test_cases = vec!["#999", "invalid-id", "task-999"];
-        
+
         for task_id in test_cases {
             let result = handler.trash_task(task_id.to_string()).await;
             assert!(result.is_err(), "Expected error for task_id: {}", task_id);
@@ -2679,21 +2763,14 @@ mod tests {
             .to_string();
 
         // 両方をカレンダーステータスに移動
-        let result = handler
-            .calendar_task(task_id1.clone(), None)
-            .await;
+        let result = handler.calendar_task(task_id1.clone(), None).await;
         assert!(result.is_ok());
-        let result = handler
-            .calendar_task(task_id2.clone(), None)
-            .await;
+        let result = handler.calendar_task(task_id2.clone(), None).await;
         assert!(result.is_ok());
 
         // カレンダーステータスでフィルタリングし、日付フィルタも適用
         let result = handler
-            .list_tasks(
-                Some("calendar".to_string()),
-                Some("2024-06-15".to_string()),
-            )
+            .list_tasks(Some("calendar".to_string()), Some("2024-06-15".to_string()))
             .await;
         assert!(result.is_ok());
         let list = result.unwrap();
