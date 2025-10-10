@@ -228,6 +228,16 @@ impl McpServer for GtdServerHandler {
     ) -> McpResult<String> {
         let mut data = self.data.lock().unwrap();
 
+        // Check if task exists before attempting to move
+        let task_exists = data.find_task_by_id(&task_id).is_some();
+        if !task_exists {
+            eprintln!("Error: Attempted to trash non-existent task: {}", task_id);
+            bail!("Task not found: {}. Please check the task ID and try again.", task_id);
+        }
+
+        let original_status = data.find_task_by_id(&task_id).map(|t| format!("{:?}", t.status));
+        eprintln!("Moving task {} from {:?} to trash", task_id, original_status);
+
         // Use move_status to properly move the task to trash container
         if data.move_status(&task_id, TaskStatus::trash).is_some() {
             // Update the timestamp after the move
@@ -238,12 +248,16 @@ impl McpServer for GtdServerHandler {
 
             if let Err(e) = self.save_data_with_message(&format!("Move task {} to trash", task_id))
             {
-                bail!("Failed to save: {}", e);
+                eprintln!("Error: Failed to save data after moving task {} to trash: {}", task_id, e);
+                bail!("Failed to save task to trash: {}. The task may not have been moved.", e);
             }
 
+            eprintln!("Successfully moved task {} to trash", task_id);
             Ok(format!("Task {} moved to trash", task_id))
         } else {
-            bail!("Task not found: {}", task_id);
+            // This should not happen since we checked above, but handle it anyway
+            eprintln!("Error: move_status failed for task {} (this should not happen)", task_id);
+            bail!("Failed to move task {} to trash. Internal error occurred.", task_id);
         }
     }
 
@@ -1892,6 +1906,55 @@ mod tests {
         assert!(matches!(task.status, TaskStatus::trash));
         assert_eq!(data.trash.len(), 1);
         assert_eq!(data.inbox.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_trash_task_workflow_comparison() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Test 1: inbox → trash directly
+        let result = handler
+            .add_task("Direct Trash Test".to_string(), None, None, None, None)
+            .await;
+        assert!(result.is_ok());
+        let task_id_1 = result
+            .unwrap()
+            .split_whitespace()
+            .last()
+            .unwrap()
+            .to_string();
+
+        let result = handler.trash_task(task_id_1.clone()).await;
+        assert!(result.is_ok(), "Direct trash failed: {:?}", result.err());
+
+        // Test 2: inbox → done → trash (the workflow user reported as working)
+        let result = handler
+            .add_task("Indirect Trash Test".to_string(), None, None, None, None)
+            .await;
+        assert!(result.is_ok());
+        let task_id_2 = result
+            .unwrap()
+            .split_whitespace()
+            .last()
+            .unwrap()
+            .to_string();
+
+        let result = handler.done_task(task_id_2.clone()).await;
+        assert!(result.is_ok(), "Moving to done failed: {:?}", result.err());
+
+        let result = handler.trash_task(task_id_2.clone()).await;
+        assert!(result.is_ok(), "Trash from done failed: {:?}", result.err());
+
+        // Verify both tasks ended up in trash
+        let data = handler.data.lock().unwrap();
+        assert_eq!(data.trash.len(), 2);
+        assert_eq!(data.inbox.len(), 0);
+        assert_eq!(data.done.len(), 0);
+
+        let task1 = data.find_task_by_id(&task_id_1).unwrap();
+        let task2 = data.find_task_by_id(&task_id_2).unwrap();
+        assert!(matches!(task1.status, TaskStatus::trash));
+        assert!(matches!(task2.status, TaskStatus::trash));
     }
 
     #[tokio::test]
