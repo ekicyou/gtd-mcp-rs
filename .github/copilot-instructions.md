@@ -83,7 +83,7 @@ cargo build --release    # リリースビルド
 
 ### テスト
 ```bash
-cargo test              # 全119個のユニットテストを実行
+cargo test              # 全132個のユニットテストを実行
 ```
 テストは`env::temp_dir()`経由で一時ファイルを使用し、後でクリーンアップします。
 
