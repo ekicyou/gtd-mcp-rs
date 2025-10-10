@@ -1870,6 +1870,31 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_trash_task_from_inbox() {
+        let (handler, _temp_file) = get_test_handler();
+
+        let result = handler
+            .add_task("Test Task".to_string(), None, None, None, None)
+            .await;
+        assert!(result.is_ok());
+        let task_id = result
+            .unwrap()
+            .split_whitespace()
+            .last()
+            .unwrap()
+            .to_string();
+
+        let result = handler.trash_task(task_id.clone()).await;
+        assert!(result.is_ok(), "Failed to trash task: {:?}", result.err());
+
+        let data = handler.data.lock().unwrap();
+        let task = data.find_task_by_id(&task_id).unwrap();
+        assert!(matches!(task.status, TaskStatus::trash));
+        assert_eq!(data.trash.len(), 1);
+        assert_eq!(data.inbox.len(), 0);
+    }
+
+    #[tokio::test]
     async fn test_calendar_task_with_start_date() {
         let (handler, _temp_file) = get_test_handler();
 
