@@ -14,6 +14,7 @@ This server now uses `mcp-attr` for better Windows compatibility. Previous versi
 
 - ✅ **Cross-Platform**: Works on Windows, Linux, and macOS
 - ✅ **LLM-Friendly IDs**: Uses GitHub-style IDs (`#1`, `#2` for tasks, `project-1`, `project-2` for projects) for optimal readability and LLM interaction
+- ✅ **MCP Prompts**: Built-in workflow guidance (GTD overview, inbox processing, weekly review, next actions, task creation best practices)
 - Task management (inbox, next actions, waiting for, someday/maybe, done, trash, calendar)
 - **Task and Project Updates**: Modify existing tasks and projects with full field update support
 - **Trash management**: Move tasks to trash and bulk delete
@@ -474,6 +475,61 @@ Delete a context from the system.
   "name": "Office"
 }
 ```
+
+## MCP Prompts
+
+This server provides several prompts to guide LLMs in using the GTD system effectively. Prompts offer workflow guidance and best practices.
+
+### Available Prompts
+
+#### gtd_overview
+Comprehensive overview of the GTD system, including:
+- Core concepts (task statuses, projects, contexts)
+- Task ID format (#1, #2, project-1, project-2)
+- Common workflows (Capture, Process, Review, Do)
+- Available tools summary
+
+Use this prompt to get oriented with the system or refresh your understanding of GTD principles.
+
+#### process_inbox
+Step-by-step guide for processing inbox items following GTD methodology:
+- Is it actionable? (no → someday/trash)
+- Less than 2 minutes? (yes → do it now)
+- Can you do it yourself? (no → waiting_for)
+- Specific date? (yes → calendar)
+- Part of project? (assign project)
+- Add context and move to next_action
+
+Goal: Process inbox to zero with every item clarified and organized.
+
+#### weekly_review
+Complete GTD weekly review process:
+- **Get Clear**: Process inbox, empty your head
+- **Get Current**: Review calendar, next actions, waiting for, someday tasks
+- **Review Projects**: Ensure each has next action, update status
+- **Get Creative**: Brainstorm new possibilities
+
+Conduct weekly to maintain system integrity (recommended every 7 days).
+
+#### next_actions
+Guide for identifying and managing next actions:
+- Characteristics of good next actions (specific, physical, doable, single-step)
+- Context-based work (@office, @computer, @phone, @home, @errands)
+- Choosing what to do (consider context, time, energy, priority)
+- Post-completion steps
+
+#### add_task_guide
+Best practices for creating well-formed tasks:
+- Good vs. poor task title examples
+- When to use optional fields (project, context, notes, start_date)
+- Recommended workflow (quick capture → process → add details)
+
+### Using Prompts
+
+Prompts are designed to be concise and token-efficient while providing comprehensive guidance. They help LLMs understand:
+- How to use the GTD system effectively
+- Best practices for task and project management
+- Recommended workflows for common scenarios
 
 ## Data Storage
 

@@ -810,6 +810,234 @@ impl McpServer for GtdServerHandler {
 
         Ok(format!("Context {} deleted successfully", name))
     }
+
+    // ==================== Prompts ====================
+
+    /// GTD system overview and available tools
+    #[prompt]
+    async fn gtd_overview(&self) -> McpResult<String> {
+        Ok(r#"# GTD Task Management System
+
+This MCP server implements the Getting Things Done (GTD) methodology by David Allen.
+
+## Core Concepts
+
+**Task Statuses:**
+- `inbox`: Unprocessed items (default for new tasks)
+- `next_action`: Actionable tasks ready to work on
+- `waiting_for`: Tasks blocked waiting for someone/something
+- `someday`: Tasks for potential future action
+- `calendar`: Date-specific tasks (require start_date)
+- `done`: Completed tasks
+- `trash`: Deleted tasks
+
+**Projects:** Collections of related tasks with statuses (active, on_hold, completed)
+
+**Contexts:** Work environments/tools needed (@office, @home, @computer, @phone)
+
+## Task IDs
+
+Tasks use GitHub-style IDs: #1, #2, #3 (efficient for LLM token usage)
+Projects use: project-1, project-2, project-3
+
+## Common Workflows
+
+1. **Capture**: Use `add_task` to capture items to inbox
+2. **Process**: Review inbox, clarify and organize with status movement tools
+3. **Review**: Regularly check all task statuses with `list_tasks`
+4. **Do**: Focus on `next_action` tasks for execution
+
+## Key Tools
+
+- Task Management: add_task, update_task, list_tasks, delete_task
+- Status Movement: inbox_task, next_action_task, waiting_for_task, someday_task, calendar_task, done_task, trash_task
+- Projects: add_project, list_projects, update_project, delete_project
+- Contexts: add_context, list_contexts, update_context, delete_context
+
+Use prompts like `process_inbox`, `weekly_review`, or `next_actions` for workflow guidance."#.to_string())
+    }
+
+    /// Guide for processing inbox items
+    #[prompt]
+    async fn process_inbox(&self) -> McpResult<String> {
+        Ok(r#"# GTD Inbox Processing Guide
+
+## Workflow for each inbox item:
+
+1. **List inbox**: Use `list_tasks` with status "inbox"
+
+2. **For each task, ask:**
+   - Is it actionable?
+     - NO → Move to `someday_task` or `trash_task`
+     - YES → Continue to step 3
+
+3. **Will it take less than 2 minutes?**
+   - YES → Do it now, then `done_task`
+   - NO → Continue to step 4
+
+4. **Can I do it myself?**
+   - NO → Use `waiting_for_task` and add notes about who/what you're waiting for
+   - YES → Continue to step 5
+
+5. **Is there a specific date?**
+   - YES → Use `calendar_task` with start_date parameter
+   - NO → Continue to step 6
+
+6. **Is it part of a larger project?**
+   - YES → Use `update_task` to assign project
+   - NO → Continue to step 7
+
+7. **Add context if helpful** (e.g., @office, @computer)
+   - Use `update_task` to set context
+
+8. **Move to next actions**
+   - Use `next_action_task`
+
+## Goal
+
+Process inbox to zero. Every item should be clarified and organized."#
+            .to_string())
+    }
+
+    /// Guide for conducting GTD weekly review
+    #[prompt]
+    async fn weekly_review(&self) -> McpResult<String> {
+        Ok(r#"# GTD Weekly Review Process
+
+The weekly review keeps your system current and complete.
+
+## Review Steps
+
+1. **Get Clear**
+   - Process inbox to zero: Use `process_inbox` prompt guide
+   - Empty your head: Add any floating thoughts with `add_task`
+
+2. **Get Current**
+   - Review `calendar` tasks: `list_tasks` status "calendar"
+     - Check dates are still accurate
+     - Move completed calendar items to done
+   
+   - Review `next_action` tasks: `list_tasks` status "next_action"
+     - Mark completed ones as `done_task`
+     - Update stale tasks with `update_task`
+     - Identify tasks that should move to waiting/someday
+
+   - Review `waiting_for` tasks: `list_tasks` status "waiting_for"
+     - Check if any can now move to next actions
+     - Update notes on what you're waiting for
+   
+   - Review `someday` tasks: `list_tasks` status "someday"
+     - Move newly relevant items to inbox or next actions
+     - Trash items no longer relevant
+
+3. **Review Projects**
+   - List all projects: `list_projects`
+   - For each project:
+     - Does it have a next action? Add one if missing
+     - Is status correct? Update if needed (active/on_hold/completed)
+     - Update project description if scope changed
+
+4. **Get Creative**
+   - Brainstorm new projects or tasks
+   - Review someday/maybe for inspiration
+
+## Frequency
+Conduct weekly reviews every 7 days to maintain system integrity."#
+            .to_string())
+    }
+
+    /// Guide for identifying and managing next actions
+    #[prompt]
+    async fn next_actions(&self) -> McpResult<String> {
+        Ok(r#"# Next Actions Guide
+
+Next actions are physical, visible activities that can be done immediately.
+
+## Identifying Next Actions
+
+A good next action is:
+- **Specific**: "Call John about proposal" not "Handle proposal"
+- **Physical**: Describes concrete action, not outcome
+- **Doable**: Can be done in current context
+- **Single-step**: One clear action, not a project
+
+## Context-Based Work
+
+Use contexts to filter by location/tools:
+- `@office`: Needs office environment
+- `@computer`: Needs computer/internet
+- `@phone`: Phone calls
+- `@home`: Home activities
+- `@errands`: Out-and-about tasks
+
+Add context with `update_task` and filter tasks by context when working.
+
+## Choosing What to Do
+
+When ready to work, consider:
+1. **Context**: What's available? (tools, location)
+2. **Time**: How much time do you have?
+3. **Energy**: High energy for hard tasks, low energy for simple ones
+4. **Priority**: What's most important now?
+
+List next actions with `list_tasks` status "next_action"
+
+## After Completion
+
+When done:
+- Use `done_task` to mark complete
+- If it was part of a project, check if project needs a new next action"#
+            .to_string())
+    }
+
+    /// Guide for creating well-formed tasks
+    #[prompt]
+    async fn add_task_guide(&self) -> McpResult<String> {
+        Ok(r#"# Task Creation Best Practices
+
+## Good Task Titles
+
+**Good examples:**
+- "Call Sarah to schedule meeting"
+- "Draft Q1 budget proposal"
+- "Buy new printer ink"
+- "Email team about project status"
+
+**Poor examples (avoid):**
+- "Sarah" (not specific)
+- "Budget" (not an action)
+- "Ink" (not actionable)
+- "Follow up" (too vague)
+
+## Using Optional Fields
+
+**project**: Link to project-1, project-2, etc.
+- Use for multi-step endeavors
+- Keep single tasks unlinked
+
+**context**: Work environment/tools needed
+- @office, @home, @computer, @phone, @errands
+- Helps filter when in specific contexts
+
+**notes**: Additional details
+- Background information
+- URLs, reference numbers
+- Why this matters
+
+**start_date**: For calendar tasks only (YYYY-MM-DD)
+- Events with specific dates
+- Tickler file items
+- Don't use for regular next actions
+
+## Workflow
+
+1. Quick capture to inbox: `add_task` with just title
+2. Later process inbox to clarify and organize
+3. Use `update_task` to add details as needed
+
+Remember: Task IDs are #1, #2, #3, etc. (LLM-friendly short format)"#
+            .to_string())
+    }
 }
 
 #[tokio::main]
@@ -2077,5 +2305,117 @@ mod tests {
             )
             .await;
         assert!(result.is_err());
+    }
+
+    // ==================== Prompt Tests ====================
+
+    #[tokio::test]
+    async fn test_prompt_gtd_overview() {
+        let (handler, _temp_file) = get_test_handler();
+
+        let result = handler.gtd_overview().await;
+        assert!(result.is_ok());
+        let content = result.unwrap();
+
+        // プロンプトが主要なGTDコンセプトを含んでいることを確認
+        assert!(content.contains("GTD"));
+        assert!(content.contains("inbox"));
+        assert!(content.contains("next_action"));
+        assert!(content.contains("waiting_for"));
+        assert!(content.contains("someday"));
+        assert!(content.contains("calendar"));
+        assert!(content.contains("done"));
+        assert!(content.contains("trash"));
+        assert!(content.contains("Projects"));
+        assert!(content.contains("Contexts"));
+    }
+
+    #[tokio::test]
+    async fn test_prompt_process_inbox() {
+        let (handler, _temp_file) = get_test_handler();
+
+        let result = handler.process_inbox().await;
+        assert!(result.is_ok());
+        let content = result.unwrap();
+
+        // インボックス処理のワークフローガイダンスを確認
+        assert!(content.contains("inbox"));
+        assert!(content.contains("actionable"));
+        assert!(content.contains("2 minutes"));
+        assert!(content.contains("waiting_for"));
+        assert!(content.contains("next_action"));
+    }
+
+    #[tokio::test]
+    async fn test_prompt_weekly_review() {
+        let (handler, _temp_file) = get_test_handler();
+
+        let result = handler.weekly_review().await;
+        assert!(result.is_ok());
+        let content = result.unwrap();
+
+        // 週次レビューのステップを確認
+        assert!(content.contains("Weekly Review"));
+        assert!(content.contains("Get Clear"));
+        assert!(content.contains("Get Current"));
+        assert!(content.contains("Projects"));
+        assert!(content.contains("calendar"));
+        assert!(content.contains("next_action"));
+        assert!(content.contains("waiting_for"));
+    }
+
+    #[tokio::test]
+    async fn test_prompt_next_actions() {
+        let (handler, _temp_file) = get_test_handler();
+
+        let result = handler.next_actions().await;
+        assert!(result.is_ok());
+        let content = result.unwrap();
+
+        // ネクストアクションガイドの内容を確認
+        assert!(content.contains("Next Actions"));
+        assert!(content.contains("Context"));
+        assert!(content.contains("@office"));
+        assert!(content.contains("@computer"));
+        assert!(content.contains("@phone"));
+        assert!(content.contains("Specific"));
+    }
+
+    #[tokio::test]
+    async fn test_prompt_add_task_guide() {
+        let (handler, _temp_file) = get_test_handler();
+
+        let result = handler.add_task_guide().await;
+        assert!(result.is_ok());
+        let content = result.unwrap();
+
+        // タスク作成ガイドの内容を確認
+        assert!(content.contains("Task Creation"));
+        assert!(content.contains("project"));
+        assert!(content.contains("context"));
+        assert!(content.contains("notes"));
+        assert!(content.contains("start_date"));
+        assert!(content.contains("#1"));
+    }
+
+    #[tokio::test]
+    async fn test_prompts_return_non_empty_strings() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // 全てのプロンプトが空でない文字列を返すことを確認
+        let prompts = vec![
+            handler.gtd_overview().await,
+            handler.process_inbox().await,
+            handler.weekly_review().await,
+            handler.next_actions().await,
+            handler.add_task_guide().await,
+        ];
+
+        for prompt in prompts {
+            assert!(prompt.is_ok());
+            let content = prompt.unwrap();
+            assert!(!content.is_empty());
+            assert!(content.len() > 100); // 各プロンプトは実質的な内容を持つ
+        }
     }
 }
