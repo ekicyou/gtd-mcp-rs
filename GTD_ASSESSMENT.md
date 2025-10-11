@@ -199,4 +199,4 @@ The gtd-mcp-rs implementation provides a **solid foundation** for LLM-assisted G
 
 **Document Version**: 1.1  
 **Last Updated**: 2025-10-10  
-**Implementation Version**: 0.1.0 + Context Management  
+**Implementation Version**: 0.2.0  

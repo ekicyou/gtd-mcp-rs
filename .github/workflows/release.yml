@@ -1,0 +1,119 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+    steps:
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          draft: false
+          prerelease: false
+
+  build:
+    name: Build ${{ matrix.target }}
+    needs: create-release
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            binary_suffix: ''
+            archive_suffix: '.tar.gz'
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            binary_suffix: ''
+            archive_suffix: '.tar.gz'
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            binary_suffix: '.exe'
+            archive_suffix: '.zip'
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            binary_suffix: ''
+            archive_suffix: '.tar.gz'
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            binary_suffix: ''
+            archive_suffix: '.tar.gz'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install musl tools (Linux musl only)
+        if: matrix.target == 'x86_64-unknown-linux-musl'
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-${{ matrix.target }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.target }}-cargo-registry-
+
+      - name: Cache cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-${{ matrix.target }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.target }}-cargo-git-
+
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-${{ matrix.target }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.target }}-cargo-build-target-
+
+      - name: Build release binary
+        run: cargo build --release --target ${{ matrix.target }} --verbose
+
+      - name: Create archive (Unix)
+        if: matrix.archive_suffix == '.tar.gz'
+        run: |
+          cd target/${{ matrix.target }}/release
+          tar czf ../../../gtd-mcp-rs-${{ matrix.target }}${{ matrix.archive_suffix }} gtd-mcp-rs${{ matrix.binary_suffix }}
+
+      - name: Create archive (Windows)
+        if: matrix.archive_suffix == '.zip'
+        shell: pwsh
+        run: |
+          cd target/${{ matrix.target }}/release
+          Compress-Archive -Path gtd-mcp-rs${{ matrix.binary_suffix }} -DestinationPath ../../../gtd-mcp-rs-${{ matrix.target }}${{ matrix.archive_suffix }}
+
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./gtd-mcp-rs-${{ matrix.target }}${{ matrix.archive_suffix }}
+          asset_name: gtd-mcp-rs-${{ matrix.target }}${{ matrix.archive_suffix }}
+          asset_content_type: application/octet-stream
