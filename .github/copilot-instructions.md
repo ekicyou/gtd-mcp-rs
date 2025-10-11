@@ -1,4 +1,4 @@
-# gtd-mcp-rs コーディング規約
+# gtd-mcp コーディング規約
 
 ## アーキテクチャ概要
 
@@ -90,7 +90,7 @@ cargo test              # 全132個のユニットテストを実行
 ### サーバーの実行
 ```bash
 cargo run               # stdio MCPサーバーを起動
-# または: ./target/release/gtd-mcp-rs
+# または: ./target/release/gtd-mcp
 ```
 サーバーはstdio（JSON-RPC）経由でClaude DesktopなどのMCPクライアントと通信します。
 
@@ -100,7 +100,7 @@ cargo run               # stdio MCPサーバーを起動
 {
   "mcpServers": {
     "gtd": {
-      "command": "/path/to/gtd-mcp-rs/target/release/gtd-mcp-rs"
+      "command": "/path/to/gtd-mcp/target/release/gtd-mcp"
     }
   }
 }
