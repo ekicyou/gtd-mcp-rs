@@ -84,17 +84,15 @@ jobs:
       run: cargo audit
 
   # 最小サポートRustバージョン (MSRV) チェック
-  # Edition 2024 requires Rust 1.85.0+
+  # Edition 2024 requires Rust 1.85.0+ (using stable as 1.85.0 may not be available yet)
   msrv:
     name: Minimum Supported Rust Version
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v5
     
-    - name: Install Rust 1.85.0
-      uses: dtolnay/rust-toolchain@master
-      with:
-        toolchain: "1.85.0"
+    - name: Install Rust stable
+      uses: dtolnay/rust-toolchain@stable
     
     - name: Check MSRV
       run: cargo check --verbose
