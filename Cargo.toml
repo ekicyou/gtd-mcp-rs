@@ -2,6 +2,11 @@
 name = "gtd-mcp"
 version = "0.3.0"
 edition = "2024"
+description = "A Model Context Protocol (MCP) server for GTD (Getting Things Done) task management"
+license = "MIT"
+repository = "https://github.com/ekicyou/gtd-mcp-rs"
+keywords = ["mcp", "gtd", "task-management", "productivity"]
+categories = ["command-line-utilities", "development-tools"]
 
 [dependencies]
 mcp-attr = "0.0.7"
