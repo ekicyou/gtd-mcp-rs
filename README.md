@@ -1,4 +1,4 @@
-# gtd-mcp-rs
+# gtd-mcp
 
 [![CI](https://github.com/ekicyou/gtd-mcp-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/ekicyou/gtd-mcp-rs/actions/workflows/ci.yml)
 
@@ -6,7 +6,7 @@ GTD MCP Server
 
 A Model Context Protocol (MCP) server for GTD (Getting Things Done) task management.
 
-**Version 0.2.0 - Cross-Platform Compatible**
+**Version 0.3.0 - Cross-Platform Compatible**
 
 ## Features
 
@@ -124,7 +124,7 @@ For Claude Desktop, add to your `claude_desktop_config.json`:
 {
   "mcpServers": {
     "gtd": {
-      "command": "/path/to/gtd-mcp-rs/target/release/gtd-mcp-rs",
+      "command": "/path/to/gtd-mcp/target/release/gtd-mcp",
       "args": ["gtd.toml"]
     }
   }
@@ -137,7 +137,7 @@ To enable automatic git synchronization:
 {
   "mcpServers": {
     "gtd": {
-      "command": "/path/to/gtd-mcp-rs/target/release/gtd-mcp-rs",
+      "command": "/path/to/gtd-mcp/target/release/gtd-mcp",
       "args": ["gtd.toml", "--sync-git"]
     }
   }
@@ -150,7 +150,7 @@ To use a custom file location:
 {
   "mcpServers": {
     "gtd": {
-      "command": "/path/to/gtd-mcp-rs/target/release/gtd-mcp-rs",
+      "command": "/path/to/gtd-mcp/target/release/gtd-mcp",
       "args": ["/path/to/your/gtd-data.toml"]
     }
   }
@@ -163,7 +163,7 @@ Or with both custom file and git sync:
 {
   "mcpServers": {
     "gtd": {
-      "command": "/path/to/gtd-mcp-rs/target/release/gtd-mcp-rs",
+      "command": "/path/to/gtd-mcp/target/release/gtd-mcp",
       "args": ["/path/to/your/gtd-data.toml", "--sync-git"]
     }
   }

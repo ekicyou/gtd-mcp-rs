@@ -4,7 +4,7 @@
 
 This is a basic implementation of a GTD (Getting Things Done) MCP (Model Context Protocol) server in Rust. The server provides task and project management capabilities through MCP tools.
 
-**Version 0.2.0 - Cross-Platform Compatible**
+**Version 0.3.0 - Cross-Platform Compatible**
 
 This version uses `mcp-attr` v0.0.7 for declarative server building:
 
@@ -173,7 +173,7 @@ cargo run
 Or with the release build:
 
 ```bash
-./target/release/gtd-mcp-rs
+./target/release/gtd-mcp
 ```
 
 ## Dependencies

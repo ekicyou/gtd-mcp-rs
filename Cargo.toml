@@ -1,6 +1,6 @@
 [package]
-name = "gtd-mcp-rs"
-version = "0.2.0"
+name = "gtd-mcp"
+version = "0.3.0"
 edition = "2024"
 
 [dependencies]

@@ -99,14 +99,14 @@ jobs:
         if: matrix.archive_suffix == '.tar.gz'
         run: |
           cd target/${{ matrix.target }}/release
-          tar czf ../../../gtd-mcp-rs-${{ matrix.target }}${{ matrix.archive_suffix }} gtd-mcp-rs${{ matrix.binary_suffix }}
+          tar czf ../../../gtd-mcp-${{ matrix.target }}${{ matrix.archive_suffix }} gtd-mcp${{ matrix.binary_suffix }}
 
       - name: Create archive (Windows)
         if: matrix.archive_suffix == '.zip'
         shell: pwsh
         run: |
           cd target/${{ matrix.target }}/release
-          Compress-Archive -Path gtd-mcp-rs${{ matrix.binary_suffix }} -DestinationPath ../../../gtd-mcp-rs-${{ matrix.target }}${{ matrix.archive_suffix }}
+          Compress-Archive -Path gtd-mcp${{ matrix.binary_suffix }} -DestinationPath ../../../gtd-mcp-${{ matrix.target }}${{ matrix.archive_suffix }}
 
       - name: Upload Release Asset
         uses: actions/upload-release-asset@v1
@@ -114,6 +114,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./gtd-mcp-rs-${{ matrix.target }}${{ matrix.archive_suffix }}
-          asset_name: gtd-mcp-rs-${{ matrix.target }}${{ matrix.archive_suffix }}
+          asset_path: ./gtd-mcp-${{ matrix.target }}${{ matrix.archive_suffix }}
+          asset_name: gtd-mcp-${{ matrix.target }}${{ matrix.archive_suffix }}
           asset_content_type: application/octet-stream
