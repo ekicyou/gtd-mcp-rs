@@ -564,6 +564,29 @@ Prompts are designed to be concise and token-efficient while providing comprehen
 
 Tasks and projects are stored in the GTD data file specified at startup. This file can be version controlled with git for backup and synchronization.
 
+### Line Ending Handling
+
+The server handles line endings in a cross-platform friendly manner:
+
+- **Serialization (saving to file)**: TOML files are written with OS-native line endings
+  - Windows: CRLF (`\r\n`)
+  - Linux/macOS: LF (`\n`)
+  - This ensures files are readable in standard text editors on each platform
+
+- **Deserialization (loading from file)**: Line endings are normalized to LF (`\n`) internally
+  - All line ending styles (CRLF, CR, LF) are accepted when reading files
+  - This ensures consistent behavior across platforms
+  - Allows files created on different platforms to be read correctly
+
+- **MCP Communication**: JSON-RPC protocol uses LF (`\n`) for newlines in string fields
+  - Task notes and other multi-line fields use `\n` in MCP tool calls
+  - The server automatically handles conversion to/from OS-native format
+
+This design ensures that:
+- Files are readable and Git-friendly on all platforms
+- Cross-platform collaboration works seamlessly
+- Multi-line content (like task notes) is handled consistently
+
 ### Example gtd.toml
 
 ```toml
