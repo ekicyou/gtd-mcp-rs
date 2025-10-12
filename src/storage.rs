@@ -853,4 +853,199 @@ mod tests {
         // Clean up
         let _ = fs::remove_file(&test_path);
     }
+
+    // Test that CR characters in existing TOML files are properly handled
+    // This reproduces issue #87 where files with \r already saved don't get
+    // converted back to CRLF on Windows
+    #[test]
+    fn test_storage_cr_in_notes_converted_to_native() {
+        let test_path = get_test_path("test_cr_notes_gtd.toml");
+        let _ = fs::remove_file(&test_path);
+
+        // Create TOML file with CR characters in notes (simulating old data)
+        let toml_with_cr = "[[inbox]]\nid = \"#1\"\ntitle = \"Test Task\"\nnotes = \"\"\"\nLine 1\rLine 2\rLine 3\r\"\"\"\ncreated_at = \"2024-01-01\"\nupdated_at = \"2024-01-01\"\n";
+        fs::write(&test_path, toml_with_cr).unwrap();
+
+        println!("Original file content:");
+        let original = fs::read_to_string(&test_path).unwrap();
+        for (i, ch) in original.chars().enumerate() {
+            if ch == '\r' {
+                println!("  Position {}: CR", i);
+            }
+        }
+
+        // Load the data
+        let storage = Storage::new(&test_path, false);
+        let data = storage.load().unwrap();
+
+        // Notes should be normalized to LF internally
+        let task = data.find_task_by_id("#1").unwrap();
+        println!("Loaded notes: {:?}", task.notes);
+        assert_eq!(task.notes, Some("Line 1\nLine 2\nLine 3\n".to_string()));
+
+        // Save the data back
+        storage.save(&data).unwrap();
+
+        // Read raw file to check line endings
+        let raw_content = fs::read_to_string(&test_path).unwrap();
+        println!("\nAfter save - file content:");
+        for (i, ch) in raw_content.chars().enumerate() {
+            if ch == '\r' {
+                println!("  Position {}: CR", i);
+            }
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            // On Windows, the notes content should have CRLF
+            assert!(
+                raw_content.contains("Line 1\r\n"),
+                "Notes should contain CRLF on Windows after resave"
+            );
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            // On Unix, notes should have LF only, no CR
+            assert!(
+                !raw_content.contains('\r'),
+                "Notes should not contain any CR on Unix after resave"
+            );
+        }
+
+        // Clean up
+        let _ = fs::remove_file(&test_path);
+    }
+
+    // Test for issue #87: TOML files with \r escape sequences should be properly converted
+    #[test]
+    fn test_storage_toml_escaped_cr_normalized() {
+        let test_path = get_test_path("test_escaped_cr_gtd.toml");
+        let _ = fs::remove_file(&test_path);
+
+        // Create TOML file with \r escape sequences as they would appear on disk
+        // This simulates the problem described in issue #87
+        let toml_with_escaped_cr = concat!(
+            "[[later]]\n",
+            "id = \"#32\"\n",
+            "title = \"クラウドを育成する\"\n",
+            "project = \"project-4\"\n",
+            "context = \"自宅\"\n",
+            "notes = \"\"\"https://example.com\\r\\r",
+            "Line 1\\r",
+            "Line 2\\r",
+            "Line 3\"\"\"\n",
+            "created_at = \"2025-10-12\"\n",
+            "updated_at = \"2025-10-12\"\n"
+        );
+        fs::write(&test_path, toml_with_escaped_cr).unwrap();
+
+        // Verify the file contains \r escape sequences
+        let file_content = fs::read_to_string(&test_path).unwrap();
+        assert!(
+            file_content.contains("\\r"),
+            "Test file should contain \\r escape sequences"
+        );
+
+        // Load the data - the normalization should happen during deserialization
+        let storage = Storage::new(&test_path, false);
+        let data = storage.load().unwrap();
+
+        // Notes should be normalized to LF internally
+        let task = data.find_task_by_id("#32").unwrap();
+        assert!(task.notes.is_some());
+        let notes = task.notes.as_ref().unwrap();
+
+        // Should not contain CR bytes
+        assert!(
+            !notes.as_bytes().contains(&b'\r'),
+            "Loaded notes should not contain CR bytes"
+        );
+        // Should contain LF bytes
+        assert!(
+            notes.contains('\n'),
+            "Loaded notes should contain LF characters"
+        );
+
+        // Save the data back
+        storage.save(&data).unwrap();
+
+        // Read raw file to verify line endings
+        let raw_content = fs::read_to_string(&test_path).unwrap();
+
+        #[cfg(target_os = "windows")]
+        {
+            // On Windows, should have CRLF, not escaped \r
+            assert!(
+                !raw_content.contains("\\r"),
+                "Saved file should not contain \\r escape sequences on Windows"
+            );
+            assert!(
+                raw_content.contains("\r\n"),
+                "Saved file should contain CRLF on Windows"
+            );
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            // On Unix, should have LF, not escaped \r or actual CR
+            assert!(
+                !raw_content.contains("\\r"),
+                "Saved file should not contain \\r escape sequences on Unix"
+            );
+            assert!(
+                !raw_content.contains('\r'),
+                "Saved file should not contain CR bytes on Unix"
+            );
+        }
+
+        // Clean up
+        let _ = fs::remove_file(&test_path);
+    }
+}
+
+#[cfg(test)]
+mod test_line_ending_normalization {
+    use crate::gtd::GtdData;
+
+    // Test that CR normalization works for project descriptions
+    #[test]
+    fn test_project_description_cr_normalized() {
+        // Create TOML with \r in project description
+        let toml_input = concat!(
+            "[[projects]]\n",
+            "id = \"project-1\"\n",
+            "name = \"Test Project\"\n",
+            "description = \"Line 1\\rLine 2\\rLine 3\"\n",
+            "status = \"active\"\n"
+        );
+
+        let data: GtdData = toml::from_str(toml_input).unwrap();
+        let project = data.find_project_by_id("project-1").unwrap();
+
+        // Description should be normalized to LF
+        assert!(project.description.is_some());
+        let desc = project.description.as_ref().unwrap();
+        assert!(!desc.as_bytes().contains(&b'\r'), "Should not contain CR");
+        assert!(desc.contains('\n'), "Should contain LF");
+    }
+
+    // Test that CR normalization works for context descriptions
+    #[test]
+    fn test_context_description_cr_normalized() {
+        // Create TOML with \r in context description
+        let toml_input = concat!(
+            "[contexts.Office]\n",
+            "description = \"Line 1\\rLine 2\\rLine 3\"\n"
+        );
+
+        let data: GtdData = toml::from_str(toml_input).unwrap();
+        let context = data.find_context_by_name("Office").unwrap();
+
+        // Description should be normalized to LF
+        assert!(context.description.is_some());
+        let desc = context.description.as_ref().unwrap();
+        assert!(!desc.as_bytes().contains(&b'\r'), "Should not contain CR");
+        assert!(desc.contains('\n'), "Should contain LF");
+    }
 }
