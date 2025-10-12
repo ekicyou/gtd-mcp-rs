@@ -387,6 +387,98 @@ impl McpServer for GtdServerHandler {
         Ok(result)
     }
 
+    /// Move multiple tasks to inbox
+    #[tool]
+    async fn inbox_tasks(
+        &self,
+        /// Task IDs to move to inbox (comma-separated or array)
+        task_ids: Vec<String>,
+    ) -> McpResult<String> {
+        let mut data = self.data.lock().unwrap();
+
+        let mut successful: Vec<String> = Vec::new();
+        let mut failed: Vec<(String, String)> = Vec::new();
+
+        // Process each task ID
+        for task_id in &task_ids {
+            let task_id = task_id.trim();
+
+            // Check if task exists
+            if data.find_task_by_id(task_id).is_none() {
+                eprintln!("Error: Task not found: {}", task_id);
+                failed.push((task_id.to_string(), "Task not found".to_string()));
+                continue;
+            }
+
+            let original_status = data
+                .find_task_by_id(task_id)
+                .map(|t| format!("{:?}", t.status));
+            eprintln!(
+                "Moving task {} from {:?} to inbox",
+                task_id, original_status
+            );
+
+            // Move task to inbox
+            if data.move_status(task_id, TaskStatus::inbox).is_some() {
+                // Update the timestamp after the move
+                if let Some(task) = data.find_task_by_id_mut(task_id) {
+                    task.updated_at = local_date_today();
+                }
+                successful.push(task_id.to_string());
+                eprintln!("Successfully moved task {} to inbox", task_id);
+            } else {
+                eprintln!("Error: Failed to move task {} to inbox", task_id);
+                failed.push((task_id.to_string(), "Failed to move task".to_string()));
+            }
+        }
+
+        drop(data);
+
+        // Save data if any tasks were successfully moved
+        if !successful.is_empty() {
+            let task_list = successful.join(", ");
+            if let Err(e) =
+                self.save_data_with_message(&format!("Move tasks to inbox: {}", task_list))
+            {
+                eprintln!(
+                    "Error: Failed to save data after moving tasks to inbox: {}",
+                    e
+                );
+                bail!(
+                    "Failed to save tasks to inbox: {}. Some tasks may not have been moved.",
+                    e
+                );
+            }
+        }
+
+        // Build result message
+        let mut result = String::new();
+        if !successful.is_empty() {
+            result.push_str(&format!(
+                "Successfully moved {} task(s) to inbox: {}",
+                successful.len(),
+                successful.join(", ")
+            ));
+        }
+        if !failed.is_empty() {
+            if !result.is_empty() {
+                result.push('\n');
+            }
+            result.push_str(&format!("Failed to move {} task(s): ", failed.len()));
+            let failures: Vec<String> = failed
+                .iter()
+                .map(|(id, reason)| format!("{} ({})", id, reason))
+                .collect();
+            result.push_str(&failures.join(", "));
+        }
+
+        if successful.is_empty() && !failed.is_empty() {
+            bail!("{}", result);
+        }
+
+        Ok(result)
+    }
+
     /// Move a task to inbox
     #[tool]
     async fn inbox_task(
@@ -447,6 +539,98 @@ impl McpServer for GtdServerHandler {
         }
     }
 
+    /// Move multiple tasks to next action
+    #[tool]
+    async fn next_action_tasks(
+        &self,
+        /// Task IDs to move to next action (comma-separated or array)
+        task_ids: Vec<String>,
+    ) -> McpResult<String> {
+        let mut data = self.data.lock().unwrap();
+
+        let mut successful: Vec<String> = Vec::new();
+        let mut failed: Vec<(String, String)> = Vec::new();
+
+        // Process each task ID
+        for task_id in &task_ids {
+            let task_id = task_id.trim();
+
+            // Check if task exists
+            if data.find_task_by_id(task_id).is_none() {
+                eprintln!("Error: Task not found: {}", task_id);
+                failed.push((task_id.to_string(), "Task not found".to_string()));
+                continue;
+            }
+
+            let original_status = data
+                .find_task_by_id(task_id)
+                .map(|t| format!("{:?}", t.status));
+            eprintln!(
+                "Moving task {} from {:?} to next_action",
+                task_id, original_status
+            );
+
+            // Move task to next_action
+            if data.move_status(task_id, TaskStatus::next_action).is_some() {
+                // Update the timestamp after the move
+                if let Some(task) = data.find_task_by_id_mut(task_id) {
+                    task.updated_at = local_date_today();
+                }
+                successful.push(task_id.to_string());
+                eprintln!("Successfully moved task {} to next_action", task_id);
+            } else {
+                eprintln!("Error: Failed to move task {} to next_action", task_id);
+                failed.push((task_id.to_string(), "Failed to move task".to_string()));
+            }
+        }
+
+        drop(data);
+
+        // Save data if any tasks were successfully moved
+        if !successful.is_empty() {
+            let task_list = successful.join(", ");
+            if let Err(e) =
+                self.save_data_with_message(&format!("Move tasks to next_action: {}", task_list))
+            {
+                eprintln!(
+                    "Error: Failed to save data after moving tasks to next_action: {}",
+                    e
+                );
+                bail!(
+                    "Failed to save tasks to next_action: {}. Some tasks may not have been moved.",
+                    e
+                );
+            }
+        }
+
+        // Build result message
+        let mut result = String::new();
+        if !successful.is_empty() {
+            result.push_str(&format!(
+                "Successfully moved {} task(s) to next action: {}",
+                successful.len(),
+                successful.join(", ")
+            ));
+        }
+        if !failed.is_empty() {
+            if !result.is_empty() {
+                result.push('\n');
+            }
+            result.push_str(&format!("Failed to move {} task(s): ", failed.len()));
+            let failures: Vec<String> = failed
+                .iter()
+                .map(|(id, reason)| format!("{} ({})", id, reason))
+                .collect();
+            result.push_str(&failures.join(", "));
+        }
+
+        if successful.is_empty() && !failed.is_empty() {
+            bail!("{}", result);
+        }
+
+        Ok(result)
+    }
+
     /// Move a task to waiting for
     #[tool]
     async fn waiting_for_task(
@@ -479,6 +663,98 @@ impl McpServer for GtdServerHandler {
         }
     }
 
+    /// Move multiple tasks to waiting for
+    #[tool]
+    async fn waiting_for_tasks(
+        &self,
+        /// Task IDs to move to waiting for (comma-separated or array)
+        task_ids: Vec<String>,
+    ) -> McpResult<String> {
+        let mut data = self.data.lock().unwrap();
+
+        let mut successful: Vec<String> = Vec::new();
+        let mut failed: Vec<(String, String)> = Vec::new();
+
+        // Process each task ID
+        for task_id in &task_ids {
+            let task_id = task_id.trim();
+
+            // Check if task exists
+            if data.find_task_by_id(task_id).is_none() {
+                eprintln!("Error: Task not found: {}", task_id);
+                failed.push((task_id.to_string(), "Task not found".to_string()));
+                continue;
+            }
+
+            let original_status = data
+                .find_task_by_id(task_id)
+                .map(|t| format!("{:?}", t.status));
+            eprintln!(
+                "Moving task {} from {:?} to waiting_for",
+                task_id, original_status
+            );
+
+            // Move task to waiting_for
+            if data.move_status(task_id, TaskStatus::waiting_for).is_some() {
+                // Update the timestamp after the move
+                if let Some(task) = data.find_task_by_id_mut(task_id) {
+                    task.updated_at = local_date_today();
+                }
+                successful.push(task_id.to_string());
+                eprintln!("Successfully moved task {} to waiting_for", task_id);
+            } else {
+                eprintln!("Error: Failed to move task {} to waiting_for", task_id);
+                failed.push((task_id.to_string(), "Failed to move task".to_string()));
+            }
+        }
+
+        drop(data);
+
+        // Save data if any tasks were successfully moved
+        if !successful.is_empty() {
+            let task_list = successful.join(", ");
+            if let Err(e) =
+                self.save_data_with_message(&format!("Move tasks to waiting_for: {}", task_list))
+            {
+                eprintln!(
+                    "Error: Failed to save data after moving tasks to waiting_for: {}",
+                    e
+                );
+                bail!(
+                    "Failed to save tasks to waiting_for: {}. Some tasks may not have been moved.",
+                    e
+                );
+            }
+        }
+
+        // Build result message
+        let mut result = String::new();
+        if !successful.is_empty() {
+            result.push_str(&format!(
+                "Successfully moved {} task(s) to waiting for: {}",
+                successful.len(),
+                successful.join(", ")
+            ));
+        }
+        if !failed.is_empty() {
+            if !result.is_empty() {
+                result.push('\n');
+            }
+            result.push_str(&format!("Failed to move {} task(s): ", failed.len()));
+            let failures: Vec<String> = failed
+                .iter()
+                .map(|(id, reason)| format!("{} ({})", id, reason))
+                .collect();
+            result.push_str(&failures.join(", "));
+        }
+
+        if successful.is_empty() && !failed.is_empty() {
+            bail!("{}", result);
+        }
+
+        Ok(result)
+    }
+
     /// Move a task to someday
     #[tool]
     async fn someday_task(
@@ -506,6 +782,98 @@ impl McpServer for GtdServerHandler {
         } else {
             bail!("Task not found: {}", task_id);
         }
+    }
+
+    /// Move multiple tasks to someday
+    #[tool]
+    async fn someday_tasks(
+        &self,
+        /// Task IDs to move to someday (comma-separated or array)
+        task_ids: Vec<String>,
+    ) -> McpResult<String> {
+        let mut data = self.data.lock().unwrap();
+
+        let mut successful: Vec<String> = Vec::new();
+        let mut failed: Vec<(String, String)> = Vec::new();
+
+        // Process each task ID
+        for task_id in &task_ids {
+            let task_id = task_id.trim();
+
+            // Check if task exists
+            if data.find_task_by_id(task_id).is_none() {
+                eprintln!("Error: Task not found: {}", task_id);
+                failed.push((task_id.to_string(), "Task not found".to_string()));
+                continue;
+            }
+
+            let original_status = data
+                .find_task_by_id(task_id)
+                .map(|t| format!("{:?}", t.status));
+            eprintln!(
+                "Moving task {} from {:?} to someday",
+                task_id, original_status
+            );
+
+            // Move task to someday
+            if data.move_status(task_id, TaskStatus::someday).is_some() {
+                // Update the timestamp after the move
+                if let Some(task) = data.find_task_by_id_mut(task_id) {
+                    task.updated_at = local_date_today();
+                }
+                successful.push(task_id.to_string());
+                eprintln!("Successfully moved task {} to someday", task_id);
+            } else {
+                eprintln!("Error: Failed to move task {} to someday", task_id);
+                failed.push((task_id.to_string(), "Failed to move task".to_string()));
+            }
+        }
+
+        drop(data);
+
+        // Save data if any tasks were successfully moved
+        if !successful.is_empty() {
+            let task_list = successful.join(", ");
+            if let Err(e) =
+                self.save_data_with_message(&format!("Move tasks to someday: {}", task_list))
+            {
+                eprintln!(
+                    "Error: Failed to save data after moving tasks to someday: {}",
+                    e
+                );
+                bail!(
+                    "Failed to save tasks to someday: {}. Some tasks may not have been moved.",
+                    e
+                );
+            }
+        }
+
+        // Build result message
+        let mut result = String::new();
+        if !successful.is_empty() {
+            result.push_str(&format!(
+                "Successfully moved {} task(s) to someday: {}",
+                successful.len(),
+                successful.join(", ")
+            ));
+        }
+        if !failed.is_empty() {
+            if !result.is_empty() {
+                result.push('\n');
+            }
+            result.push_str(&format!("Failed to move {} task(s): ", failed.len()));
+            let failures: Vec<String> = failed
+                .iter()
+                .map(|(id, reason)| format!("{} ({})", id, reason))
+                .collect();
+            result.push_str(&failures.join(", "));
+        }
+
+        if successful.is_empty() && !failed.is_empty() {
+            bail!("{}", result);
+        }
+
+        Ok(result)
     }
 
     /// Move a task to later
@@ -536,6 +904,98 @@ impl McpServer for GtdServerHandler {
         }
     }
 
+    /// Move multiple tasks to later
+    #[tool]
+    async fn later_tasks(
+        &self,
+        /// Task IDs to move to later (comma-separated or array)
+        task_ids: Vec<String>,
+    ) -> McpResult<String> {
+        let mut data = self.data.lock().unwrap();
+
+        let mut successful: Vec<String> = Vec::new();
+        let mut failed: Vec<(String, String)> = Vec::new();
+
+        // Process each task ID
+        for task_id in &task_ids {
+            let task_id = task_id.trim();
+
+            // Check if task exists
+            if data.find_task_by_id(task_id).is_none() {
+                eprintln!("Error: Task not found: {}", task_id);
+                failed.push((task_id.to_string(), "Task not found".to_string()));
+                continue;
+            }
+
+            let original_status = data
+                .find_task_by_id(task_id)
+                .map(|t| format!("{:?}", t.status));
+            eprintln!(
+                "Moving task {} from {:?} to later",
+                task_id, original_status
+            );
+
+            // Move task to later
+            if data.move_status(task_id, TaskStatus::later).is_some() {
+                // Update the timestamp after the move
+                if let Some(task) = data.find_task_by_id_mut(task_id) {
+                    task.updated_at = local_date_today();
+                }
+                successful.push(task_id.to_string());
+                eprintln!("Successfully moved task {} to later", task_id);
+            } else {
+                eprintln!("Error: Failed to move task {} to later", task_id);
+                failed.push((task_id.to_string(), "Failed to move task".to_string()));
+            }
+        }
+
+        drop(data);
+
+        // Save data if any tasks were successfully moved
+        if !successful.is_empty() {
+            let task_list = successful.join(", ");
+            if let Err(e) =
+                self.save_data_with_message(&format!("Move tasks to later: {}", task_list))
+            {
+                eprintln!(
+                    "Error: Failed to save data after moving tasks to later: {}",
+                    e
+                );
+                bail!(
+                    "Failed to save tasks to later: {}. Some tasks may not have been moved.",
+                    e
+                );
+            }
+        }
+
+        // Build result message
+        let mut result = String::new();
+        if !successful.is_empty() {
+            result.push_str(&format!(
+                "Successfully moved {} task(s) to later: {}",
+                successful.len(),
+                successful.join(", ")
+            ));
+        }
+        if !failed.is_empty() {
+            if !result.is_empty() {
+                result.push('\n');
+            }
+            result.push_str(&format!("Failed to move {} task(s): ", failed.len()));
+            let failures: Vec<String> = failed
+                .iter()
+                .map(|(id, reason)| format!("{} ({})", id, reason))
+                .collect();
+            result.push_str(&failures.join(", "));
+        }
+
+        if successful.is_empty() && !failed.is_empty() {
+            bail!("{}", result);
+        }
+
+        Ok(result)
+    }
+
     /// Move a task to done
     #[tool]
     async fn done_task(
@@ -561,6 +1021,98 @@ impl McpServer for GtdServerHandler {
         } else {
             bail!("Task not found: {}", task_id);
         }
+    }
+
+    /// Move multiple tasks to done
+    #[tool]
+    async fn done_tasks(
+        &self,
+        /// Task IDs to move to done (comma-separated or array)
+        task_ids: Vec<String>,
+    ) -> McpResult<String> {
+        let mut data = self.data.lock().unwrap();
+
+        let mut successful: Vec<String> = Vec::new();
+        let mut failed: Vec<(String, String)> = Vec::new();
+
+        // Process each task ID
+        for task_id in &task_ids {
+            let task_id = task_id.trim();
+
+            // Check if task exists
+            if data.find_task_by_id(task_id).is_none() {
+                eprintln!("Error: Task not found: {}", task_id);
+                failed.push((task_id.to_string(), "Task not found".to_string()));
+                continue;
+            }
+
+            let original_status = data
+                .find_task_by_id(task_id)
+                .map(|t| format!("{:?}", t.status));
+            eprintln!(
+                "Moving task {} from {:?} to done",
+                task_id, original_status
+            );
+
+            // Move task to done
+            if data.move_status(task_id, TaskStatus::done).is_some() {
+                // Update the timestamp after the move
+                if let Some(task) = data.find_task_by_id_mut(task_id) {
+                    task.updated_at = local_date_today();
+                }
+                successful.push(task_id.to_string());
+                eprintln!("Successfully moved task {} to done", task_id);
+            } else {
+                eprintln!("Error: Failed to move task {} to done", task_id);
+                failed.push((task_id.to_string(), "Failed to move task".to_string()));
+            }
+        }
+
+        drop(data);
+
+        // Save data if any tasks were successfully moved
+        if !successful.is_empty() {
+            let task_list = successful.join(", ");
+            if let Err(e) =
+                self.save_data_with_message(&format!("Mark tasks as done: {}", task_list))
+            {
+                eprintln!(
+                    "Error: Failed to save data after moving tasks to done: {}",
+                    e
+                );
+                bail!(
+                    "Failed to save tasks to done: {}. Some tasks may not have been moved.",
+                    e
+                );
+            }
+        }
+
+        // Build result message
+        let mut result = String::new();
+        if !successful.is_empty() {
+            result.push_str(&format!(
+                "Successfully moved {} task(s) to done: {}",
+                successful.len(),
+                successful.join(", ")
+            ));
+        }
+        if !failed.is_empty() {
+            if !result.is_empty() {
+                result.push('\n');
+            }
+            result.push_str(&format!("Failed to move {} task(s): ", failed.len()));
+            let failures: Vec<String> = failed
+                .iter()
+                .map(|(id, reason)| format!("{} ({})", id, reason))
+                .collect();
+            result.push_str(&failures.join(", "));
+        }
+
+        if successful.is_empty() && !failed.is_empty() {
+            bail!("{}", result);
+        }
+
+        Ok(result)
     }
 
     /// Move a task to calendar
@@ -620,6 +1172,125 @@ impl McpServer for GtdServerHandler {
         } else {
             bail!("Failed to move task to calendar");
         }
+    }
+
+    /// Move multiple tasks to calendar
+    #[tool]
+    async fn calendar_tasks(
+        &self,
+        /// Task IDs to move to calendar (comma-separated or array)
+        task_ids: Vec<String>,
+        /// Optional start date (format: YYYY-MM-DD). If not provided, each task must already have a start_date
+        start_date: Option<String>,
+    ) -> McpResult<String> {
+        let parsed_start_date = if let Some(date_str) = start_date {
+            match NaiveDate::parse_from_str(&date_str, "%Y-%m-%d") {
+                Ok(date) => Some(date),
+                Err(_) => bail!("Invalid date format. Use YYYY-MM-DD"),
+            }
+        } else {
+            None
+        };
+
+        let mut data = self.data.lock().unwrap();
+
+        let mut successful: Vec<String> = Vec::new();
+        let mut failed: Vec<(String, String)> = Vec::new();
+
+        // Process each task ID
+        for task_id in &task_ids {
+            let task_id = task_id.trim();
+
+            // Check if task exists
+            if data.find_task_by_id(task_id).is_none() {
+                eprintln!("Error: Task not found: {}", task_id);
+                failed.push((task_id.to_string(), "Task not found".to_string()));
+                continue;
+            }
+
+            // Check if task will have a start_date after the operation
+            let current_start_date = data.find_task_by_id(task_id).unwrap().start_date;
+            let final_start_date = parsed_start_date.or(current_start_date);
+
+            if final_start_date.is_none() {
+                eprintln!("Error: Task {} has no start_date", task_id);
+                failed.push((
+                    task_id.to_string(),
+                    "Task must have a start_date".to_string(),
+                ));
+                continue;
+            }
+
+            let original_status = data
+                .find_task_by_id(task_id)
+                .map(|t| format!("{:?}", t.status));
+            eprintln!(
+                "Moving task {} from {:?} to calendar",
+                task_id, original_status
+            );
+
+            // Move task to calendar
+            if data.move_status(task_id, TaskStatus::calendar).is_some() {
+                // Update the start_date if provided, and update timestamp
+                if let Some(task) = data.find_task_by_id_mut(task_id) {
+                    if let Some(date) = parsed_start_date {
+                        task.start_date = Some(date);
+                    }
+                    task.updated_at = local_date_today();
+                }
+                successful.push(task_id.to_string());
+                eprintln!("Successfully moved task {} to calendar", task_id);
+            } else {
+                eprintln!("Error: Failed to move task {} to calendar", task_id);
+                failed.push((task_id.to_string(), "Failed to move task".to_string()));
+            }
+        }
+
+        drop(data);
+
+        // Save data if any tasks were successfully moved
+        if !successful.is_empty() {
+            let task_list = successful.join(", ");
+            if let Err(e) =
+                self.save_data_with_message(&format!("Move tasks to calendar: {}", task_list))
+            {
+                eprintln!(
+                    "Error: Failed to save data after moving tasks to calendar: {}",
+                    e
+                );
+                bail!(
+                    "Failed to save tasks to calendar: {}. Some tasks may not have been moved.",
+                    e
+                );
+            }
+        }
+
+        // Build result message
+        let mut result = String::new();
+        if !successful.is_empty() {
+            result.push_str(&format!(
+                "Successfully moved {} task(s) to calendar: {}",
+                successful.len(),
+                successful.join(", ")
+            ));
+        }
+        if !failed.is_empty() {
+            if !result.is_empty() {
+                result.push('\n');
+            }
+            result.push_str(&format!("Failed to move {} task(s): ", failed.len()));
+            let failures: Vec<String> = failed
+                .iter()
+                .map(|(id, reason)| format!("{} ({})", id, reason))
+                .collect();
+            result.push_str(&failures.join(", "));
+        }
+
+        if successful.is_empty() && !failed.is_empty() {
+            bail!("{}", result);
+        }
+
+        Ok(result)
     }
 
     /// Empty trash - permanently delete all trashed tasks
@@ -3264,5 +3935,388 @@ mod tests {
         // notesが含まれていることを確認（改行も含む）
         assert!(list.contains("Complex task"));
         assert!(list.contains("[notes: Line 1\nLine 2\nLine 3]"));
+    }
+
+    #[tokio::test]
+    async fn test_inbox_tasks_multiple_tasks() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // 複数のタスクを作成してnext_actionに移動
+        let mut task_ids = Vec::new();
+        for i in 1..=3 {
+            let result = handler
+                .add_task(format!("Test Task {}", i), None, None, None, None)
+                .await;
+            assert!(result.is_ok());
+            let task_id = result
+                .unwrap()
+                .split_whitespace()
+                .last()
+                .unwrap()
+                .to_string();
+            // Move to next_action first
+            let _ = handler.next_action_task(task_id.clone()).await;
+            task_ids.push(task_id);
+        }
+
+        // 複数のタスクを一度にinboxに移動
+        let result = handler.inbox_tasks(task_ids.clone()).await;
+        assert!(
+            result.is_ok(),
+            "Failed to move multiple tasks to inbox: {:?}",
+            result.err()
+        );
+
+        // すべてのタスクがinboxに移動されたことを確認
+        let data = handler.data.lock().unwrap();
+        assert_eq!(data.inbox.len(), 3);
+        assert_eq!(data.next_action.len(), 0);
+
+        for task_id in &task_ids {
+            let task = data.find_task_by_id(task_id).unwrap();
+            assert!(matches!(task.status, TaskStatus::inbox));
+        }
+    }
+
+    #[tokio::test]
+    async fn test_next_action_tasks_multiple_tasks() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // 複数のタスクを作成
+        let mut task_ids = Vec::new();
+        for i in 1..=4 {
+            let result = handler
+                .add_task(format!("Test Task {}", i), None, None, None, None)
+                .await;
+            assert!(result.is_ok());
+            let task_id = result
+                .unwrap()
+                .split_whitespace()
+                .last()
+                .unwrap()
+                .to_string();
+            task_ids.push(task_id);
+        }
+
+        // 複数のタスクを一度にnext_actionに移動
+        let result = handler.next_action_tasks(task_ids.clone()).await;
+        assert!(
+            result.is_ok(),
+            "Failed to move multiple tasks to next_action: {:?}",
+            result.err()
+        );
+
+        // すべてのタスクがnext_actionに移動されたことを確認
+        let data = handler.data.lock().unwrap();
+        assert_eq!(data.next_action.len(), 4);
+        assert_eq!(data.inbox.len(), 0);
+
+        for task_id in &task_ids {
+            let task = data.find_task_by_id(task_id).unwrap();
+            assert!(matches!(task.status, TaskStatus::next_action));
+        }
+    }
+
+    #[tokio::test]
+    async fn test_waiting_for_tasks_multiple_tasks() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // 複数のタスクを作成
+        let mut task_ids = Vec::new();
+        for i in 1..=3 {
+            let result = handler
+                .add_task(format!("Test Task {}", i), None, None, None, None)
+                .await;
+            assert!(result.is_ok());
+            let task_id = result
+                .unwrap()
+                .split_whitespace()
+                .last()
+                .unwrap()
+                .to_string();
+            task_ids.push(task_id);
+        }
+
+        // 複数のタスクを一度にwaiting_forに移動
+        let result = handler.waiting_for_tasks(task_ids.clone()).await;
+        assert!(
+            result.is_ok(),
+            "Failed to move multiple tasks to waiting_for: {:?}",
+            result.err()
+        );
+
+        // すべてのタスクがwaiting_forに移動されたことを確認
+        let data = handler.data.lock().unwrap();
+        assert_eq!(data.waiting_for.len(), 3);
+        assert_eq!(data.inbox.len(), 0);
+
+        for task_id in &task_ids {
+            let task = data.find_task_by_id(task_id).unwrap();
+            assert!(matches!(task.status, TaskStatus::waiting_for));
+        }
+    }
+
+    #[tokio::test]
+    async fn test_someday_tasks_multiple_tasks() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // 複数のタスクを作成
+        let mut task_ids = Vec::new();
+        for i in 1..=3 {
+            let result = handler
+                .add_task(format!("Test Task {}", i), None, None, None, None)
+                .await;
+            assert!(result.is_ok());
+            let task_id = result
+                .unwrap()
+                .split_whitespace()
+                .last()
+                .unwrap()
+                .to_string();
+            task_ids.push(task_id);
+        }
+
+        // 複数のタスクを一度にsomedayに移動
+        let result = handler.someday_tasks(task_ids.clone()).await;
+        assert!(
+            result.is_ok(),
+            "Failed to move multiple tasks to someday: {:?}",
+            result.err()
+        );
+
+        // すべてのタスクがsomedayに移動されたことを確認
+        let data = handler.data.lock().unwrap();
+        assert_eq!(data.someday.len(), 3);
+        assert_eq!(data.inbox.len(), 0);
+
+        for task_id in &task_ids {
+            let task = data.find_task_by_id(task_id).unwrap();
+            assert!(matches!(task.status, TaskStatus::someday));
+        }
+    }
+
+    #[tokio::test]
+    async fn test_later_tasks_multiple_tasks() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // 複数のタスクを作成
+        let mut task_ids = Vec::new();
+        for i in 1..=3 {
+            let result = handler
+                .add_task(format!("Test Task {}", i), None, None, None, None)
+                .await;
+            assert!(result.is_ok());
+            let task_id = result
+                .unwrap()
+                .split_whitespace()
+                .last()
+                .unwrap()
+                .to_string();
+            task_ids.push(task_id);
+        }
+
+        // 複数のタスクを一度にlaterに移動
+        let result = handler.later_tasks(task_ids.clone()).await;
+        assert!(
+            result.is_ok(),
+            "Failed to move multiple tasks to later: {:?}",
+            result.err()
+        );
+
+        // すべてのタスクがlaterに移動されたことを確認
+        let data = handler.data.lock().unwrap();
+        assert_eq!(data.later.len(), 3);
+        assert_eq!(data.inbox.len(), 0);
+
+        for task_id in &task_ids {
+            let task = data.find_task_by_id(task_id).unwrap();
+            assert!(matches!(task.status, TaskStatus::later));
+        }
+    }
+
+    #[tokio::test]
+    async fn test_done_tasks_multiple_tasks() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // 複数のタスクを作成
+        let mut task_ids = Vec::new();
+        for i in 1..=3 {
+            let result = handler
+                .add_task(format!("Test Task {}", i), None, None, None, None)
+                .await;
+            assert!(result.is_ok());
+            let task_id = result
+                .unwrap()
+                .split_whitespace()
+                .last()
+                .unwrap()
+                .to_string();
+            task_ids.push(task_id);
+        }
+
+        // 複数のタスクを一度にdoneに移動
+        let result = handler.done_tasks(task_ids.clone()).await;
+        assert!(
+            result.is_ok(),
+            "Failed to move multiple tasks to done: {:?}",
+            result.err()
+        );
+
+        // すべてのタスクがdoneに移動されたことを確認
+        let data = handler.data.lock().unwrap();
+        assert_eq!(data.done.len(), 3);
+        assert_eq!(data.inbox.len(), 0);
+
+        for task_id in &task_ids {
+            let task = data.find_task_by_id(task_id).unwrap();
+            assert!(matches!(task.status, TaskStatus::done));
+        }
+    }
+
+    #[tokio::test]
+    async fn test_calendar_tasks_multiple_tasks_with_date() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // 複数のタスクを作成
+        let mut task_ids = Vec::new();
+        for i in 1..=3 {
+            let result = handler
+                .add_task(format!("Test Task {}", i), None, None, None, None)
+                .await;
+            assert!(result.is_ok());
+            let task_id = result
+                .unwrap()
+                .split_whitespace()
+                .last()
+                .unwrap()
+                .to_string();
+            task_ids.push(task_id);
+        }
+
+        // 複数のタスクを一度にcalendarに移動（start_date指定）
+        let result = handler
+            .calendar_tasks(task_ids.clone(), Some("2025-01-15".to_string()))
+            .await;
+        assert!(
+            result.is_ok(),
+            "Failed to move multiple tasks to calendar: {:?}",
+            result.err()
+        );
+
+        // すべてのタスクがcalendarに移動されたことを確認
+        let data = handler.data.lock().unwrap();
+        assert_eq!(data.calendar.len(), 3);
+        assert_eq!(data.inbox.len(), 0);
+
+        for task_id in &task_ids {
+            let task = data.find_task_by_id(task_id).unwrap();
+            assert!(matches!(task.status, TaskStatus::calendar));
+            assert_eq!(
+                task.start_date,
+                Some(NaiveDate::from_ymd_opt(2025, 1, 15).unwrap())
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_calendar_tasks_with_existing_dates() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // start_dateを持つタスクを作成
+        let mut task_ids = Vec::new();
+        for i in 1..=2 {
+            let result = handler
+                .add_task(
+                    format!("Test Task {}", i),
+                    None,
+                    None,
+                    None,
+                    Some("2025-02-01".to_string()),
+                )
+                .await;
+            assert!(result.is_ok());
+            let task_id = result
+                .unwrap()
+                .split_whitespace()
+                .last()
+                .unwrap()
+                .to_string();
+            task_ids.push(task_id);
+        }
+
+        // start_dateを指定せずにcalendarに移動（既存のstart_dateを使用）
+        let result = handler.calendar_tasks(task_ids.clone(), None).await;
+        assert!(
+            result.is_ok(),
+            "Failed to move multiple tasks to calendar: {:?}",
+            result.err()
+        );
+
+        // すべてのタスクがcalendarに移動され、既存のstart_dateが保持されていることを確認
+        let data = handler.data.lock().unwrap();
+        assert_eq!(data.calendar.len(), 2);
+        for task_id in &task_ids {
+            let task = data.find_task_by_id(task_id).unwrap();
+            assert!(matches!(task.status, TaskStatus::calendar));
+            assert_eq!(
+                task.start_date,
+                Some(NaiveDate::from_ymd_opt(2025, 2, 1).unwrap())
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_calendar_tasks_partial_failure() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // start_dateを持つタスクと持たないタスクを作成
+        let mut task_ids = Vec::new();
+        
+        // start_dateを持つタスク
+        let result = handler
+            .add_task(
+                "Task with date".to_string(),
+                None,
+                None,
+                None,
+                Some("2025-03-01".to_string()),
+            )
+            .await;
+        assert!(result.is_ok());
+        task_ids.push(
+            result
+                .unwrap()
+                .split_whitespace()
+                .last()
+                .unwrap()
+                .to_string(),
+        );
+
+        // start_dateを持たないタスク
+        let result = handler
+            .add_task("Task without date".to_string(), None, None, None, None)
+            .await;
+        assert!(result.is_ok());
+        task_ids.push(
+            result
+                .unwrap()
+                .split_whitespace()
+                .last()
+                .unwrap()
+                .to_string(),
+        );
+
+        // start_dateを指定せずに移動を試みる（部分的な失敗）
+        let result = handler.calendar_tasks(task_ids.clone(), None).await;
+        assert!(
+            result.is_ok(),
+            "Should succeed with partial success: {:?}",
+            result.err()
+        );
+
+        // 1つのタスクだけが移動されたことを確認
+        let data = handler.data.lock().unwrap();
+        assert_eq!(data.calendar.len(), 1);
+        assert_eq!(data.inbox.len(), 1);
     }
 }
