@@ -401,10 +401,11 @@ mod tests {
             TaskStatus::inbox,
             TaskStatus::next_action,
             TaskStatus::waiting_for,
+            TaskStatus::later,
+            TaskStatus::calendar,
             TaskStatus::someday,
             TaskStatus::done,
             TaskStatus::trash,
-            TaskStatus::calendar,
         ];
 
         for (i, status) in statuses.iter().enumerate() {
@@ -425,7 +426,7 @@ mod tests {
         storage.save(&data).unwrap();
         let loaded_data = storage.load().unwrap();
 
-        assert_eq!(loaded_data.task_count(), 7);
+        assert_eq!(loaded_data.task_count(), 8);
 
         // Clean up
         let _ = fs::remove_file(&test_path);

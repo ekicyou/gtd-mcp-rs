@@ -31,11 +31,11 @@ pub enum TaskStatus {
     inbox,
     next_action,
     waiting_for,
-    someday,
     later,
+    calendar,
+    someday,
     done,
     trash,
-    calendar,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -74,15 +74,15 @@ pub struct GtdData {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub waiting_for: Vec<Task>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub someday: Vec<Task>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub later: Vec<Task>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub calendar: Vec<Task>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub someday: Vec<Task>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub done: Vec<Task>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub trash: Vec<Task>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub calendar: Vec<Task>,
     pub projects: Vec<Project>,
     pub contexts: HashMap<String, Context>,
     #[serde(default, skip_serializing_if = "is_zero")]
@@ -109,15 +109,15 @@ impl<'de> Deserialize<'de> for GtdData {
             #[serde(default)]
             waiting_for: Vec<Task>,
             #[serde(default)]
-            someday: Vec<Task>,
-            #[serde(default)]
             later: Vec<Task>,
+            #[serde(default)]
+            calendar: Vec<Task>,
+            #[serde(default)]
+            someday: Vec<Task>,
             #[serde(default)]
             done: Vec<Task>,
             #[serde(default)]
             trash: Vec<Task>,
-            #[serde(default)]
-            calendar: Vec<Task>,
             #[serde(default)]
             projects: Vec<Project>,
             #[serde(default)]
@@ -145,11 +145,14 @@ impl<'de> Deserialize<'de> for GtdData {
         for task in &mut helper.waiting_for {
             task.status = TaskStatus::waiting_for;
         }
-        for task in &mut helper.someday {
-            task.status = TaskStatus::someday;
-        }
         for task in &mut helper.later {
             task.status = TaskStatus::later;
+        }
+        for task in &mut helper.calendar {
+            task.status = TaskStatus::calendar;
+        }
+        for task in &mut helper.someday {
+            task.status = TaskStatus::someday;
         }
         for task in &mut helper.done {
             task.status = TaskStatus::done;
@@ -157,19 +160,16 @@ impl<'de> Deserialize<'de> for GtdData {
         for task in &mut helper.trash {
             task.status = TaskStatus::trash;
         }
-        for task in &mut helper.calendar {
-            task.status = TaskStatus::calendar;
-        }
 
         Ok(GtdData {
             inbox: helper.inbox,
             next_action: helper.next_action,
             waiting_for: helper.waiting_for,
-            someday: helper.someday,
             later: helper.later,
+            calendar: helper.calendar,
+            someday: helper.someday,
             done: helper.done,
             trash: helper.trash,
-            calendar: helper.calendar,
             projects: helper.projects,
             contexts: helper.contexts,
             task_counter: helper.task_counter,
@@ -2135,5 +2135,67 @@ status = "active"
         assert_eq!(project.id, "project-1");
         assert_eq!(project.name, "Old Project");
         assert_eq!(project.context, None);
+    }
+
+    // タスクステータスの順序がTOMLシリアライズに反映されることを確認
+    // TaskStatus enumの順序とGtdDataフィールドの順序が一致し、TOML出力もその順序になることを検証
+    #[test]
+    fn test_task_status_order_in_toml_serialization() {
+        let mut data = GtdData::new();
+        
+        // Add one task for each status in enum order
+        let statuses = [
+            TaskStatus::inbox,
+            TaskStatus::next_action,
+            TaskStatus::waiting_for,
+            TaskStatus::later,
+            TaskStatus::calendar,
+            TaskStatus::someday,
+            TaskStatus::done,
+            TaskStatus::trash,
+        ];
+        
+        for (i, status) in statuses.iter().enumerate() {
+            data.add_task(Task {
+                id: format!("task-{}", i),
+                title: format!("Task {}", i),
+                status: status.clone(),
+                project: None,
+                context: None,
+                notes: None,
+                start_date: None,
+                created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+                updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            });
+        }
+        
+        let toml_str = toml::to_string(&data).unwrap();
+        
+        // Extract section headers in order they appear in TOML
+        let sections: Vec<&str> = toml_str
+            .lines()
+            .filter(|line| line.starts_with("[["))
+            .collect();
+            
+        // Verify the order matches TaskStatus enum order
+        let expected_sections = [
+            "[[inbox]]",
+            "[[next_action]]",
+            "[[waiting_for]]",
+            "[[later]]",
+            "[[calendar]]",
+            "[[someday]]",
+            "[[done]]",
+            "[[trash]]",
+        ];
+        
+        assert_eq!(sections.len(), expected_sections.len(), 
+            "Expected {} sections but found {}", expected_sections.len(), sections.len());
+            
+        for (i, expected) in expected_sections.iter().enumerate() {
+            assert_eq!(sections[i], *expected, 
+                "Section at position {} should be {}, but got {}", 
+                i, expected, sections[i]);
+        }
     }
 }
