@@ -95,6 +95,14 @@ fn is_zero(n: &u32) -> bool {
     *n == 0
 }
 
+/// Normalize line endings in a string to LF (\n)
+/// This handles cases where TOML files contain \r escape sequences that get
+/// unescaped to CR bytes during deserialization. We normalize these to LF
+/// so they can be properly converted to OS-native format on save.
+fn normalize_string_line_endings(s: &str) -> String {
+    s.replace("\r\n", "\n").replace('\r', "\n")
+}
+
 impl<'de> Deserialize<'de> for GtdData {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -133,6 +141,34 @@ impl<'de> Deserialize<'de> for GtdData {
         // Populate the name field in each Context from the HashMap key
         for (key, context) in helper.contexts.iter_mut() {
             context.name = key.clone();
+        }
+
+        // Normalize line endings in all string fields that might contain newlines
+        // This handles CR characters that result from TOML's \r escape sequence unescaping
+        for task in helper.inbox.iter_mut()
+            .chain(helper.next_action.iter_mut())
+            .chain(helper.waiting_for.iter_mut())
+            .chain(helper.later.iter_mut())
+            .chain(helper.calendar.iter_mut())
+            .chain(helper.someday.iter_mut())
+            .chain(helper.done.iter_mut())
+            .chain(helper.trash.iter_mut())
+        {
+            if let Some(notes) = &task.notes {
+                task.notes = Some(normalize_string_line_endings(notes));
+            }
+        }
+
+        for project in &mut helper.projects {
+            if let Some(description) = &project.description {
+                project.description = Some(normalize_string_line_endings(description));
+            }
+        }
+
+        for context in helper.contexts.values_mut() {
+            if let Some(description) = &context.description {
+                context.description = Some(normalize_string_line_endings(description));
+            }
         }
 
         // Set the status field for each task based on which collection it's in

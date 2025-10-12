@@ -919,86 +919,137 @@ mod tests {
         // Clean up
         let _ = fs::remove_file(&test_path);
     }
-}
 
-#[cfg(test)]
-mod test_toml_cr_escape {
-    use super::*;
-    
+    // Test for issue #87: TOML files with \r escape sequences should be properly converted
     #[test]
-    fn test_toml_escapes_cr_characters() {
-        use crate::gtd::{Task, TaskStatus, GtdData};
-        use chrono::NaiveDate;
+    fn test_storage_toml_escaped_cr_normalized() {
+        let test_path = get_test_path("test_escaped_cr_gtd.toml");
+        let _ = fs::remove_file(&test_path);
+
+        // Create TOML file with \r escape sequences as they would appear on disk
+        // This simulates the problem described in issue #87
+        let toml_with_escaped_cr = concat!(
+            "[[later]]\n",
+            "id = \"#32\"\n",
+            "title = \"クラウドを育成する\"\n",
+            "project = \"project-4\"\n",
+            "context = \"自宅\"\n",
+            "notes = \"\"\"https://example.com\\r\\r",
+            "Line 1\\r",
+            "Line 2\\r",
+            "Line 3\"\"\"\n",
+            "created_at = \"2025-10-12\"\n",
+            "updated_at = \"2025-10-12\"\n"
+        );
+        fs::write(&test_path, toml_with_escaped_cr).unwrap();
+
+        // Verify the file contains \r escape sequences
+        let file_content = fs::read_to_string(&test_path).unwrap();
+        assert!(
+            file_content.contains("\\r"),
+            "Test file should contain \\r escape sequences"
+        );
+
+        // Load the data - the normalization should happen during deserialization
+        let storage = Storage::new(&test_path, false);
+        let data = storage.load().unwrap();
+
+        // Notes should be normalized to LF internally
+        let task = data.find_task_by_id("#32").unwrap();
+        assert!(task.notes.is_some());
+        let notes = task.notes.as_ref().unwrap();
         
-        let mut data = GtdData::new();
-        let task = Task {
-            id: "#1".to_string(),
-            title: "Test".to_string(),
-            status: TaskStatus::inbox,
-            notes: Some("Line 1\rLine 2\rLine 3".to_string()),
-            project: None,
-            context: None,
-            start_date: None,
-            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
-            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
-        };
-        data.add_task(task);
-        
-        // Serialize to TOML
-        let toml_output = toml::to_string_pretty(&data).unwrap();
-        println!("TOML output:\n{}", toml_output);
-        println!("\nSearching for escape sequences:");
-        
-        // Check if \r appears as escape sequence (backslash-r)
-        if toml_output.contains("\\r") {
-            println!("Found \\r escape sequence in TOML output!");
+        // Should not contain CR bytes
+        assert!(
+            !notes.as_bytes().contains(&b'\r'),
+            "Loaded notes should not contain CR bytes"
+        );
+        // Should contain LF bytes
+        assert!(
+            notes.contains('\n'),
+            "Loaded notes should contain LF characters"
+        );
+
+        // Save the data back
+        storage.save(&data).unwrap();
+
+        // Read raw file to verify line endings
+        let raw_content = fs::read_to_string(&test_path).unwrap();
+
+        #[cfg(target_os = "windows")]
+        {
+            // On Windows, should have CRLF, not escaped \r
+            assert!(
+                !raw_content.contains("\\r"),
+                "Saved file should not contain \\r escape sequences on Windows"
+            );
+            assert!(
+                raw_content.contains("\r\n"),
+                "Saved file should contain CRLF on Windows"
+            );
         }
-        
-        // Check for actual CR bytes
-        for (i, byte) in toml_output.bytes().enumerate() {
-            if byte == b'\r' {
-                println!("Found actual CR byte at position {}", i);
-            }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            // On Unix, should have LF, not escaped \r or actual CR
+            assert!(
+                !raw_content.contains("\\r"),
+                "Saved file should not contain \\r escape sequences on Unix"
+            );
+            assert!(
+                !raw_content.contains('\r'),
+                "Saved file should not contain CR bytes on Unix"
+            );
         }
+
+        // Clean up
+        let _ = fs::remove_file(&test_path);
     }
 }
 
 #[cfg(test)]
-mod test_toml_unescape {
+mod test_line_ending_normalization {
+    use super::*;
+    use crate::gtd::GtdData;
+
+    // Test that CR normalization works for project descriptions
     #[test]
-    fn test_toml_unescapes_backslash_r() {
-        // TOML with \r escape sequence (backslash + r, not actual CR)
-        // Using concat to build the string with escaped \r
+    fn test_project_description_cr_normalized() {
+        // Create TOML with \r in project description
         let toml_input = concat!(
-            "[[inbox]]\n",
-            "id = \"#1\"\n",
-            "title = \"Test\"\n",
-            "notes = \"Line 1\\rLine 2\\rLine 3\"\n",
-            "created_at = \"2024-01-01\"\n",
-            "updated_at = \"2024-01-01\"\n"
+            "[[projects]]\n",
+            "id = \"project-1\"\n",
+            "name = \"Test Project\"\n",
+            "description = \"Line 1\\rLine 2\\rLine 3\"\n",
+            "status = \"active\"\n"
         );
+
+        let data: GtdData = toml::from_str(toml_input).unwrap();
+        let project = data.find_project_by_id("project-1").unwrap();
         
-        println!("Input TOML:\n{}", toml_input);
-        println!("\nInput contains backslash-r: {}", toml_input.contains("\\r"));
+        // Description should be normalized to LF
+        assert!(project.description.is_some());
+        let desc = project.description.as_ref().unwrap();
+        assert!(!desc.as_bytes().contains(&b'\r'), "Should not contain CR");
+        assert!(desc.contains('\n'), "Should contain LF");
+    }
+
+    // Test that CR normalization works for context descriptions
+    #[test]
+    fn test_context_description_cr_normalized() {
+        // Create TOML with \r in context description
+        let toml_input = concat!(
+            "[contexts.Office]\n",
+            "description = \"Line 1\\rLine 2\\rLine 3\"\n"
+        );
+
+        let data: GtdData = toml::from_str(toml_input).unwrap();
+        let context = data.find_context_by_name("Office").unwrap();
         
-        // Parse it
-        use crate::gtd::GtdData;
-        let parsed: GtdData = toml::from_str(toml_input).unwrap();
-        
-        let task = parsed.find_task_by_id("#1").unwrap();
-        println!("\nParsed notes: {:?}", task.notes);
-        println!("Notes bytes: {:?}", task.notes.as_ref().unwrap().as_bytes());
-        
-        // Check if TOML parser converted \r to actual CR
-        if let Some(notes) = &task.notes {
-            for (i, byte) in notes.bytes().enumerate() {
-                if byte == b'\r' {
-                    println!("Found CR byte at position {}", i);
-                }
-                if byte == b'\n' {
-                    println!("Found LF byte at position {}", i);
-                }
-            }
-        }
+        // Description should be normalized to LF
+        assert!(context.description.is_some());
+        let desc = context.description.as_ref().unwrap();
+        assert!(!desc.as_bytes().contains(&b'\r'), "Should not contain CR");
+        assert!(desc.contains('\n'), "Should contain LF");
     }
 }
