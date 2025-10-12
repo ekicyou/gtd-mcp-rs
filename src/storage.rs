@@ -853,4 +853,152 @@ mod tests {
         // Clean up
         let _ = fs::remove_file(&test_path);
     }
+
+    // Test that CR characters in existing TOML files are properly handled
+    // This reproduces issue #87 where files with \r already saved don't get
+    // converted back to CRLF on Windows
+    #[test]
+    fn test_storage_cr_in_notes_converted_to_native() {
+        let test_path = get_test_path("test_cr_notes_gtd.toml");
+        let _ = fs::remove_file(&test_path);
+
+        // Create TOML file with CR characters in notes (simulating old data)
+        let toml_with_cr = "[[inbox]]\nid = \"#1\"\ntitle = \"Test Task\"\nnotes = \"\"\"\nLine 1\rLine 2\rLine 3\r\"\"\"\ncreated_at = \"2024-01-01\"\nupdated_at = \"2024-01-01\"\n";
+        fs::write(&test_path, &toml_with_cr).unwrap();
+
+        println!("Original file content:");
+        let original = fs::read_to_string(&test_path).unwrap();
+        for (i, ch) in original.chars().enumerate() {
+            if ch == '\r' {
+                println!("  Position {}: CR", i);
+            }
+        }
+
+        // Load the data
+        let storage = Storage::new(&test_path, false);
+        let data = storage.load().unwrap();
+
+        // Notes should be normalized to LF internally
+        let task = data.find_task_by_id("#1").unwrap();
+        println!("Loaded notes: {:?}", task.notes);
+        assert_eq!(
+            task.notes,
+            Some("Line 1\nLine 2\nLine 3\n".to_string())
+        );
+
+        // Save the data back
+        storage.save(&data).unwrap();
+
+        // Read raw file to check line endings
+        let raw_content = fs::read_to_string(&test_path).unwrap();
+        println!("\nAfter save - file content:");
+        for (i, ch) in raw_content.chars().enumerate() {
+            if ch == '\r' {
+                println!("  Position {}: CR", i);
+            }
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            // On Windows, the notes content should have CRLF
+            assert!(
+                raw_content.contains("Line 1\r\n"),
+                "Notes should contain CRLF on Windows after resave"
+            );
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            // On Unix, notes should have LF only, no CR
+            assert!(
+                !raw_content.contains('\r'),
+                "Notes should not contain any CR on Unix after resave"
+            );
+        }
+
+        // Clean up
+        let _ = fs::remove_file(&test_path);
+    }
+}
+
+#[cfg(test)]
+mod test_toml_cr_escape {
+    use super::*;
+    
+    #[test]
+    fn test_toml_escapes_cr_characters() {
+        use crate::gtd::{Task, TaskStatus, GtdData};
+        use chrono::NaiveDate;
+        
+        let mut data = GtdData::new();
+        let task = Task {
+            id: "#1".to_string(),
+            title: "Test".to_string(),
+            status: TaskStatus::inbox,
+            notes: Some("Line 1\rLine 2\rLine 3".to_string()),
+            project: None,
+            context: None,
+            start_date: None,
+            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+        };
+        data.add_task(task);
+        
+        // Serialize to TOML
+        let toml_output = toml::to_string_pretty(&data).unwrap();
+        println!("TOML output:\n{}", toml_output);
+        println!("\nSearching for escape sequences:");
+        
+        // Check if \r appears as escape sequence (backslash-r)
+        if toml_output.contains("\\r") {
+            println!("Found \\r escape sequence in TOML output!");
+        }
+        
+        // Check for actual CR bytes
+        for (i, byte) in toml_output.bytes().enumerate() {
+            if byte == b'\r' {
+                println!("Found actual CR byte at position {}", i);
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod test_toml_unescape {
+    #[test]
+    fn test_toml_unescapes_backslash_r() {
+        // TOML with \r escape sequence (backslash + r, not actual CR)
+        // Using concat to build the string with escaped \r
+        let toml_input = concat!(
+            "[[inbox]]\n",
+            "id = \"#1\"\n",
+            "title = \"Test\"\n",
+            "notes = \"Line 1\\rLine 2\\rLine 3\"\n",
+            "created_at = \"2024-01-01\"\n",
+            "updated_at = \"2024-01-01\"\n"
+        );
+        
+        println!("Input TOML:\n{}", toml_input);
+        println!("\nInput contains backslash-r: {}", toml_input.contains("\\r"));
+        
+        // Parse it
+        use crate::gtd::GtdData;
+        let parsed: GtdData = toml::from_str(toml_input).unwrap();
+        
+        let task = parsed.find_task_by_id("#1").unwrap();
+        println!("\nParsed notes: {:?}", task.notes);
+        println!("Notes bytes: {:?}", task.notes.as_ref().unwrap().as_bytes());
+        
+        // Check if TOML parser converted \r to actual CR
+        if let Some(notes) = &task.notes {
+            for (i, byte) in notes.bytes().enumerate() {
+                if byte == b'\r' {
+                    println!("Found CR byte at position {}", i);
+                }
+                if byte == b'\n' {
+                    println!("Found LF byte at position {}", i);
+                }
+            }
+        }
+    }
 }
