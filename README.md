@@ -6,7 +6,7 @@ GTD MCP Server
 
 A Model Context Protocol (MCP) server for GTD (Getting Things Done) task management.
 
-**Version 0.3.0 - Cross-Platform Compatible**
+**Version 0.3.2 - Cross-Platform Compatible**
 
 ## Features
 

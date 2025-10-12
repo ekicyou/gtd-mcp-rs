@@ -2782,7 +2782,11 @@ mod tests {
 
         // カレンダーステータスでフィルタリングし、日付フィルタも適用
         let result = handler
-            .list_tasks(Some("calendar".to_string()), Some("2024-06-15".to_string()), None)
+            .list_tasks(
+                Some("calendar".to_string()),
+                Some("2024-06-15".to_string()),
+                None,
+            )
             .await;
         assert!(result.is_ok());
         let list = result.unwrap();
@@ -2988,4 +2992,3 @@ mod tests {
         assert!(list.contains("[notes: Line 1\nLine 2\nLine 3]"));
     }
 }
-
