@@ -811,10 +811,7 @@ impl McpServer for GtdServerHandler {
             let original_status = data
                 .find_task_by_id(task_id)
                 .map(|t| format!("{:?}", t.status));
-            eprintln!(
-                "Moving task {} from {:?} to done",
-                task_id, original_status
-            );
+            eprintln!("Moving task {} from {:?} to done", task_id, original_status);
 
             // Move task to done
             if data.move_status(task_id, TaskStatus::done).is_some() {
@@ -2684,7 +2681,10 @@ mod tests {
             .last()
             .unwrap()
             .to_string();
-        handler.done_tasks(vec![done_task_id.clone()]).await.unwrap();
+        handler
+            .done_tasks(vec![done_task_id.clone()])
+            .await
+            .unwrap();
 
         // 異なるステータスのタスクを一度にtrashに移動
         let task_ids = vec![
@@ -2897,13 +2897,17 @@ mod tests {
     async fn test_status_movement_nonexistent_task() {
         let (handler, _temp_file) = get_test_handler();
 
-        let result = handler.next_action_tasks(vec!["nonexistent-id".to_string()]).await;
+        let result = handler
+            .next_action_tasks(vec!["nonexistent-id".to_string()])
+            .await;
         assert!(result.is_err());
 
         let result = handler.done_tasks(vec!["nonexistent-id".to_string()]).await;
         assert!(result.is_err());
 
-        let result = handler.trash_tasks(vec!["nonexistent-id".to_string()]).await;
+        let result = handler
+            .trash_tasks(vec!["nonexistent-id".to_string()])
+            .await;
         assert!(result.is_err());
     }
 
@@ -3974,7 +3978,7 @@ mod tests {
 
         // start_dateを持つタスクと持たないタスクを作成
         let mut task_ids = Vec::new();
-        
+
         // start_dateを持つタスク
         let result = handler
             .add_task(

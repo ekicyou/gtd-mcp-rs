@@ -61,11 +61,28 @@ Lists all tasks with optional status filtering.
 **Parameters:**
 - `status` (optional): Filter by status (inbox, next_action, waiting_for, someday, done, trash)
 
-### trash_task
-Moves a task to trash.
+### Status Movement Methods
+
+All status movement methods support batch operations (moving multiple tasks at once).
+
+#### trash_tasks
+Moves one or more tasks to trash.
 
 **Parameters:**
-- `task_id` (required): Task ID to move to trash
+- `task_ids` (required): Array of task IDs to move to trash
+
+#### inbox_tasks, next_action_tasks, waiting_for_tasks, someday_tasks, later_tasks, done_tasks
+Move one or more tasks to the specified status.
+
+**Parameters:**
+- `task_ids` (required): Array of task IDs to move
+
+#### calendar_tasks
+Move one or more tasks to calendar (GTD tickler file).
+
+**Parameters:**
+- `task_ids` (required): Array of task IDs to move
+- `start_date` (optional): Start date in YYYY-MM-DD format
 
 ### empty_trash
 Permanently deletes all trashed tasks.
