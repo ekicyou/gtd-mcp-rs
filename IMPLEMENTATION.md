@@ -184,7 +184,7 @@ Or with the release build:
 - `toml` (0.9): TOML parsing and generation
 - `anyhow` (1.x): Error handling
 - `chrono` (0.4): Date and time handling for task start dates
-- `git2` (0.19): Git operations for automatic version control
+- `git2` (0.20): Git operations for automatic version control
 - `clap` (4.x): Command-line argument parsing
 
 ## LLM-Friendly ID Generation
