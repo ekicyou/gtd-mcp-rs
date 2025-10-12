@@ -132,6 +132,8 @@ impl McpServer for GtdServerHandler {
         status: Option<String>,
         /// Optional date filter (format: YYYY-MM-DD). Tasks with start_date in the future are excluded
         date: Option<String>,
+        /// Exclude notes from output to reduce token usage (default: false)
+        exclude_notes: Option<bool>,
     ) -> McpResult<String> {
         // Parse the date filter if provided
         let filter_date = if let Some(date_str) = date {
@@ -181,6 +183,7 @@ impl McpServer for GtdServerHandler {
             tasks.extend(data.calendar.iter());
         }
 
+        let exclude_notes = exclude_notes.unwrap_or(false);
         let mut result = String::new();
         for task in tasks {
             // Filter by date if specified: exclude tasks with start_date in the future
@@ -205,14 +208,23 @@ impl McpServer for GtdServerHandler {
                 .as_ref()
                 .map(|c| format!(" [context: {}]", c))
                 .unwrap_or_default();
+            let notes_info = if exclude_notes {
+                String::new()
+            } else {
+                task.notes
+                    .as_ref()
+                    .map(|n| format!(" [notes: {}]", n))
+                    .unwrap_or_default()
+            };
             result.push_str(&format!(
-                "- [{}] {} (status: {:?}){}{}{} [created: {}, updated: {}]\n",
+                "- [{}] {} (status: {:?}){}{}{}{} [created: {}, updated: {}]\n",
                 task.id,
                 task.title,
                 task.status,
                 date_info,
                 project_info,
                 context_info,
+                notes_info,
                 task.created_at,
                 task.updated_at
             ));
@@ -2674,7 +2686,7 @@ mod tests {
 
         // 日付フィルタ「2024-06-15」で一覧取得
         let result = handler
-            .list_tasks(None, Some("2024-06-15".to_string()))
+            .list_tasks(None, Some("2024-06-15".to_string()), None)
             .await;
         assert!(result.is_ok());
         let list = result.unwrap();
@@ -2711,7 +2723,7 @@ mod tests {
 
         // 日付フィルタで一覧取得
         let result = handler
-            .list_tasks(None, Some("2024-06-15".to_string()))
+            .list_tasks(None, Some("2024-06-15".to_string()), None)
             .await;
         assert!(result.is_ok());
         let list = result.unwrap();
@@ -2770,7 +2782,7 @@ mod tests {
 
         // カレンダーステータスでフィルタリングし、日付フィルタも適用
         let result = handler
-            .list_tasks(Some("calendar".to_string()), Some("2024-06-15".to_string()))
+            .list_tasks(Some("calendar".to_string()), Some("2024-06-15".to_string()), None)
             .await;
         assert!(result.is_ok());
         let list = result.unwrap();
@@ -2788,12 +2800,12 @@ mod tests {
 
         // 無効な日付形式
         let result = handler
-            .list_tasks(None, Some("2024/06/15".to_string()))
+            .list_tasks(None, Some("2024/06/15".to_string()), None)
             .await;
         assert!(result.is_err());
 
         let result = handler
-            .list_tasks(None, Some("invalid-date".to_string()))
+            .list_tasks(None, Some("invalid-date".to_string()), None)
             .await;
         assert!(result.is_err());
     }
@@ -2816,7 +2828,7 @@ mod tests {
         assert!(result.is_ok());
 
         // 日付フィルタなしで一覧取得
-        let result = handler.list_tasks(None, None).await;
+        let result = handler.list_tasks(None, None, None).await;
         assert!(result.is_ok());
         let list = result.unwrap();
 
@@ -2843,7 +2855,7 @@ mod tests {
 
         // 同じ日付でフィルタリング
         let result = handler
-            .list_tasks(None, Some("2024-06-15".to_string()))
+            .list_tasks(None, Some("2024-06-15".to_string()), None)
             .await;
         assert!(result.is_ok());
         let list = result.unwrap();
@@ -2851,4 +2863,129 @@ mod tests {
         // 同じ日付のタスクは表示される（未来ではない）
         assert!(list.contains("Same Date Task"));
     }
+
+    // notesフィールドがlist_tasksの出力に含まれることを確認
+    #[tokio::test]
+    async fn test_list_tasks_includes_notes_by_default() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // notesを持つタスクを作成
+        let result = handler
+            .add_task(
+                "Task with notes".to_string(),
+                None,
+                None,
+                Some("Important notes here".to_string()),
+                None,
+            )
+            .await;
+        assert!(result.is_ok());
+
+        // notesなしのタスクも作成
+        let result = handler
+            .add_task("Task without notes".to_string(), None, None, None, None)
+            .await;
+        assert!(result.is_ok());
+
+        // デフォルト（exclude_notes=None）で一覧取得
+        let result = handler.list_tasks(None, None, None).await;
+        assert!(result.is_ok());
+        let list = result.unwrap();
+
+        // notesが含まれていることを確認
+        assert!(list.contains("Task with notes"));
+        assert!(list.contains("[notes: Important notes here]"));
+
+        // notesなしのタスクにはnotesフィールドがないことを確認
+        assert!(list.contains("Task without notes"));
+        let lines: Vec<&str> = list.lines().collect();
+        let without_notes_line = lines
+            .iter()
+            .find(|line| line.contains("Task without notes"))
+            .unwrap();
+        assert!(!without_notes_line.contains("[notes:"));
+    }
+
+    // exclude_notes=trueでnotesが除外されることを確認
+    #[tokio::test]
+    async fn test_list_tasks_excludes_notes_when_requested() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // notesを持つタスクを作成
+        let result = handler
+            .add_task(
+                "Task with notes".to_string(),
+                None,
+                None,
+                Some("Important notes here".to_string()),
+                None,
+            )
+            .await;
+        assert!(result.is_ok());
+
+        // exclude_notes=trueで一覧取得
+        let result = handler.list_tasks(None, None, Some(true)).await;
+        assert!(result.is_ok());
+        let list = result.unwrap();
+
+        // タスクは存在するがnotesは含まれていないことを確認
+        assert!(list.contains("Task with notes"));
+        assert!(!list.contains("[notes:"));
+        assert!(!list.contains("Important notes here"));
+    }
+
+    // exclude_notes=falseで明示的にnotesを含めることを確認
+    #[tokio::test]
+    async fn test_list_tasks_includes_notes_when_explicitly_false() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // notesを持つタスクを作成
+        let result = handler
+            .add_task(
+                "Task with notes".to_string(),
+                None,
+                None,
+                Some("Important notes here".to_string()),
+                None,
+            )
+            .await;
+        assert!(result.is_ok());
+
+        // exclude_notes=falseで明示的に一覧取得
+        let result = handler.list_tasks(None, None, Some(false)).await;
+        assert!(result.is_ok());
+        let list = result.unwrap();
+
+        // notesが含まれていることを確認
+        assert!(list.contains("Task with notes"));
+        assert!(list.contains("[notes: Important notes here]"));
+    }
+
+    // notesに複数行やspecial charactersが含まれる場合のテスト
+    #[tokio::test]
+    async fn test_list_tasks_with_multiline_notes() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // 複数行のnotesを持つタスクを作成（改行を含む）
+        let result = handler
+            .add_task(
+                "Complex task".to_string(),
+                None,
+                None,
+                Some("Line 1\nLine 2\nLine 3".to_string()),
+                None,
+            )
+            .await;
+        assert!(result.is_ok());
+
+        // デフォルトで一覧取得
+        let result = handler.list_tasks(None, None, None).await;
+        assert!(result.is_ok());
+        let list = result.unwrap();
+
+        // notesが含まれていることを確認（改行も含む）
+        assert!(list.contains("Complex task"));
+        assert!(list.contains("[notes: Line 1\nLine 2\nLine 3]"));
+    }
 }
+
