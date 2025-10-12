@@ -233,68 +233,6 @@ impl McpServer for GtdServerHandler {
         Ok(result)
     }
 
-    /// Move a task to trash
-    #[tool]
-    async fn trash_task(
-        &self,
-        /// Task ID to move to trash
-        task_id: String,
-    ) -> McpResult<String> {
-        let mut data = self.data.lock().unwrap();
-
-        // Check if task exists before attempting to move
-        let task_exists = data.find_task_by_id(&task_id).is_some();
-        if !task_exists {
-            eprintln!("Error: Attempted to trash non-existent task: {}", task_id);
-            bail!(
-                "Task not found: {}. Please check the task ID and try again.",
-                task_id
-            );
-        }
-
-        let original_status = data
-            .find_task_by_id(&task_id)
-            .map(|t| format!("{:?}", t.status));
-        eprintln!(
-            "Moving task {} from {:?} to trash",
-            task_id, original_status
-        );
-
-        // Use move_status to properly move the task to trash container
-        if data.move_status(&task_id, TaskStatus::trash).is_some() {
-            // Update the timestamp after the move
-            if let Some(task) = data.find_task_by_id_mut(&task_id) {
-                task.updated_at = local_date_today();
-            }
-            drop(data);
-
-            if let Err(e) = self.save_data_with_message(&format!("Move task {} to trash", task_id))
-            {
-                eprintln!(
-                    "Error: Failed to save data after moving task {} to trash: {}",
-                    task_id, e
-                );
-                bail!(
-                    "Failed to save task to trash: {}. The task may not have been moved.",
-                    e
-                );
-            }
-
-            eprintln!("Successfully moved task {} to trash", task_id);
-            Ok(format!("Task {} moved to trash", task_id))
-        } else {
-            // This should not happen since we checked above, but handle it anyway
-            eprintln!(
-                "Error: move_status failed for task {} (this should not happen)",
-                task_id
-            );
-            bail!(
-                "Failed to move task {} to trash. Internal error occurred.",
-                task_id
-            );
-        }
-    }
-
     /// Move multiple tasks to trash
     #[tool]
     async fn trash_tasks(
@@ -479,66 +417,6 @@ impl McpServer for GtdServerHandler {
         Ok(result)
     }
 
-    /// Move a task to inbox
-    #[tool]
-    async fn inbox_task(
-        &self,
-        /// Task ID to move to inbox
-        task_id: String,
-    ) -> McpResult<String> {
-        let mut data = self.data.lock().unwrap();
-
-        // Use move_status to properly move the task to inbox container
-        if data.move_status(&task_id, TaskStatus::inbox).is_some() {
-            // Update the timestamp after the move
-            if let Some(task) = data.find_task_by_id_mut(&task_id) {
-                task.updated_at = local_date_today();
-            }
-            drop(data);
-
-            if let Err(e) = self.save_data_with_message(&format!("Move task {} to inbox", task_id))
-            {
-                bail!("Failed to save: {}", e);
-            }
-
-            Ok(format!("Task {} moved to inbox", task_id))
-        } else {
-            bail!("Task not found: {}", task_id);
-        }
-    }
-
-    /// Move a task to next action
-    #[tool]
-    async fn next_action_task(
-        &self,
-        /// Task ID to move to next action
-        task_id: String,
-    ) -> McpResult<String> {
-        let mut data = self.data.lock().unwrap();
-
-        // Use move_status to properly move the task to next_action container
-        if data
-            .move_status(&task_id, TaskStatus::next_action)
-            .is_some()
-        {
-            // Update the timestamp after the move
-            if let Some(task) = data.find_task_by_id_mut(&task_id) {
-                task.updated_at = local_date_today();
-            }
-            drop(data);
-
-            if let Err(e) =
-                self.save_data_with_message(&format!("Move task {} to next_action", task_id))
-            {
-                bail!("Failed to save: {}", e);
-            }
-
-            Ok(format!("Task {} moved to next action", task_id))
-        } else {
-            bail!("Task not found: {}", task_id);
-        }
-    }
-
     /// Move multiple tasks to next action
     #[tool]
     async fn next_action_tasks(
@@ -629,38 +507,6 @@ impl McpServer for GtdServerHandler {
         }
 
         Ok(result)
-    }
-
-    /// Move a task to waiting for
-    #[tool]
-    async fn waiting_for_task(
-        &self,
-        /// Task ID to move to waiting for
-        task_id: String,
-    ) -> McpResult<String> {
-        let mut data = self.data.lock().unwrap();
-
-        // Use move_status to properly move the task to waiting_for container
-        if data
-            .move_status(&task_id, TaskStatus::waiting_for)
-            .is_some()
-        {
-            // Update the timestamp after the move
-            if let Some(task) = data.find_task_by_id_mut(&task_id) {
-                task.updated_at = local_date_today();
-            }
-            drop(data);
-
-            if let Err(e) =
-                self.save_data_with_message(&format!("Move task {} to waiting_for", task_id))
-            {
-                bail!("Failed to save: {}", e);
-            }
-
-            Ok(format!("Task {} moved to waiting for", task_id))
-        } else {
-            bail!("Task not found: {}", task_id);
-        }
     }
 
     /// Move multiple tasks to waiting for
@@ -755,35 +601,6 @@ impl McpServer for GtdServerHandler {
         Ok(result)
     }
 
-    /// Move a task to someday
-    #[tool]
-    async fn someday_task(
-        &self,
-        /// Task ID to move to someday
-        task_id: String,
-    ) -> McpResult<String> {
-        let mut data = self.data.lock().unwrap();
-
-        // Use move_status to properly move the task to someday container
-        if data.move_status(&task_id, TaskStatus::someday).is_some() {
-            // Update the timestamp after the move
-            if let Some(task) = data.find_task_by_id_mut(&task_id) {
-                task.updated_at = local_date_today();
-            }
-            drop(data);
-
-            if let Err(e) =
-                self.save_data_with_message(&format!("Move task {} to someday", task_id))
-            {
-                bail!("Failed to save: {}", e);
-            }
-
-            Ok(format!("Task {} moved to someday", task_id))
-        } else {
-            bail!("Task not found: {}", task_id);
-        }
-    }
-
     /// Move multiple tasks to someday
     #[tool]
     async fn someday_tasks(
@@ -874,34 +691,6 @@ impl McpServer for GtdServerHandler {
         }
 
         Ok(result)
-    }
-
-    /// Move a task to later
-    #[tool]
-    async fn later_task(
-        &self,
-        /// Task ID to move to later
-        task_id: String,
-    ) -> McpResult<String> {
-        let mut data = self.data.lock().unwrap();
-
-        // Use move_status to properly move the task to later container
-        if data.move_status(&task_id, TaskStatus::later).is_some() {
-            // Update the timestamp after the move
-            if let Some(task) = data.find_task_by_id_mut(&task_id) {
-                task.updated_at = local_date_today();
-            }
-            drop(data);
-
-            if let Err(e) = self.save_data_with_message(&format!("Move task {} to later", task_id))
-            {
-                bail!("Failed to save: {}", e);
-            }
-
-            Ok(format!("Task {} moved to later", task_id))
-        } else {
-            bail!("Task not found: {}", task_id);
-        }
     }
 
     /// Move multiple tasks to later
@@ -996,33 +785,6 @@ impl McpServer for GtdServerHandler {
         Ok(result)
     }
 
-    /// Move a task to done
-    #[tool]
-    async fn done_task(
-        &self,
-        /// Task ID to move to done
-        task_id: String,
-    ) -> McpResult<String> {
-        let mut data = self.data.lock().unwrap();
-
-        // Use move_status to properly move the task to done container
-        if data.move_status(&task_id, TaskStatus::done).is_some() {
-            // Update the timestamp after the move
-            if let Some(task) = data.find_task_by_id_mut(&task_id) {
-                task.updated_at = local_date_today();
-            }
-            drop(data);
-
-            if let Err(e) = self.save_data_with_message(&format!("Mark task {} as done", task_id)) {
-                bail!("Failed to save: {}", e);
-            }
-
-            Ok(format!("Task {} moved to done", task_id))
-        } else {
-            bail!("Task not found: {}", task_id);
-        }
-    }
-
     /// Move multiple tasks to done
     #[tool]
     async fn done_tasks(
@@ -1113,65 +875,6 @@ impl McpServer for GtdServerHandler {
         }
 
         Ok(result)
-    }
-
-    /// Move a task to calendar
-    #[tool]
-    async fn calendar_task(
-        &self,
-        /// Task ID to move to calendar
-        task_id: String,
-        /// Optional start date (format: YYYY-MM-DD). If not provided, task must already have a start_date
-        start_date: Option<String>,
-    ) -> McpResult<String> {
-        let parsed_start_date = if let Some(date_str) = start_date {
-            match NaiveDate::parse_from_str(&date_str, "%Y-%m-%d") {
-                Ok(date) => Some(date),
-                Err(_) => bail!("Invalid date format. Use YYYY-MM-DD"),
-            }
-        } else {
-            None
-        };
-
-        let mut data = self.data.lock().unwrap();
-
-        // Check if task exists
-        let task_exists = data.find_task_by_id(&task_id).is_some();
-        if !task_exists {
-            bail!("Task not found: {}", task_id);
-        }
-
-        // Check if task will have a start_date after the operation
-        let current_start_date = data.find_task_by_id(&task_id).unwrap().start_date;
-        let final_start_date = parsed_start_date.or(current_start_date);
-
-        if final_start_date.is_none() {
-            bail!(
-                "Task must have a start_date to be moved to calendar. Please provide a start_date parameter or set it first."
-            );
-        }
-
-        // Move the task to calendar status
-        if data.move_status(&task_id, TaskStatus::calendar).is_some() {
-            // Update the start_date if provided, and update timestamp
-            if let Some(task) = data.find_task_by_id_mut(&task_id) {
-                if let Some(date) = parsed_start_date {
-                    task.start_date = Some(date);
-                }
-                task.updated_at = local_date_today();
-            }
-            drop(data);
-
-            if let Err(e) =
-                self.save_data_with_message(&format!("Move task {} to calendar", task_id))
-            {
-                bail!("Failed to save: {}", e);
-            }
-
-            Ok(format!("Task {} moved to calendar", task_id))
-        } else {
-            bail!("Failed to move task to calendar");
-        }
     }
 
     /// Move multiple tasks to calendar
@@ -2042,7 +1745,7 @@ mod tests {
         }
 
         // Update status to next_action using new method
-        let result = handler.next_action_task(task_id.clone()).await;
+        let result = handler.next_action_tasks(vec![task_id.clone()]).await;
         assert!(result.is_ok());
 
         // Verify status changed and task moved
@@ -2555,7 +2258,7 @@ mod tests {
         assert!(result.is_ok());
 
         // Change status separately using new method
-        let result = handler.done_task(task_id.clone()).await;
+        let result = handler.done_tasks(vec![task_id.clone()]).await;
         assert!(result.is_ok());
 
         // Verify all updates
@@ -2591,7 +2294,7 @@ mod tests {
             .to_string();
 
         // Move to next_action first
-        let result = handler.next_action_task(task_id.clone()).await;
+        let result = handler.next_action_tasks(vec![task_id.clone()]).await;
         assert!(result.is_ok());
 
         // Verify it's in next_action
@@ -2604,7 +2307,7 @@ mod tests {
         }
 
         // Move back to inbox
-        let result = handler.inbox_task(task_id.clone()).await;
+        let result = handler.inbox_tasks(vec![task_id.clone()]).await;
         assert!(result.is_ok());
 
         // Verify it's back in inbox
@@ -2632,7 +2335,7 @@ mod tests {
             .unwrap()
             .to_string();
 
-        let result = handler.next_action_task(task_id.clone()).await;
+        let result = handler.next_action_tasks(vec![task_id.clone()]).await;
         assert!(result.is_ok());
 
         let data = handler.data.lock().unwrap();
@@ -2657,7 +2360,7 @@ mod tests {
             .unwrap()
             .to_string();
 
-        let result = handler.waiting_for_task(task_id.clone()).await;
+        let result = handler.waiting_for_tasks(vec![task_id.clone()]).await;
         assert!(result.is_ok());
 
         let data = handler.data.lock().unwrap();
@@ -2682,7 +2385,7 @@ mod tests {
             .unwrap()
             .to_string();
 
-        let result = handler.someday_task(task_id.clone()).await;
+        let result = handler.someday_tasks(vec![task_id.clone()]).await;
         assert!(result.is_ok());
 
         let data = handler.data.lock().unwrap();
@@ -2707,7 +2410,7 @@ mod tests {
             .unwrap()
             .to_string();
 
-        let result = handler.later_task(task_id.clone()).await;
+        let result = handler.later_tasks(vec![task_id.clone()]).await;
         assert!(result.is_ok());
 
         let data = handler.data.lock().unwrap();
@@ -2732,7 +2435,7 @@ mod tests {
             .unwrap()
             .to_string();
 
-        let result = handler.done_task(task_id.clone()).await;
+        let result = handler.done_tasks(vec![task_id.clone()]).await;
         assert!(result.is_ok());
 
         let data = handler.data.lock().unwrap();
@@ -2757,7 +2460,7 @@ mod tests {
             .unwrap()
             .to_string();
 
-        let result = handler.trash_task(task_id.clone()).await;
+        let result = handler.trash_tasks(vec![task_id.clone()]).await;
         assert!(result.is_ok(), "Failed to trash task: {:?}", result.err());
 
         let data = handler.data.lock().unwrap();
@@ -2783,7 +2486,7 @@ mod tests {
             .unwrap()
             .to_string();
 
-        let result = handler.trash_task(task_id_1.clone()).await;
+        let result = handler.trash_tasks(vec![task_id_1.clone()]).await;
         assert!(result.is_ok(), "Direct trash failed: {:?}", result.err());
 
         // Test 2: inbox → done → trash (the workflow user reported as working)
@@ -2798,10 +2501,10 @@ mod tests {
             .unwrap()
             .to_string();
 
-        let result = handler.done_task(task_id_2.clone()).await;
+        let result = handler.done_tasks(vec![task_id_2.clone()]).await;
         assert!(result.is_ok(), "Moving to done failed: {:?}", result.err());
 
-        let result = handler.trash_task(task_id_2.clone()).await;
+        let result = handler.trash_tasks(vec![task_id_2.clone()]).await;
         assert!(result.is_ok(), "Trash from done failed: {:?}", result.err());
 
         // Verify both tasks ended up in trash
@@ -2824,7 +2527,7 @@ mod tests {
         let test_cases = vec!["#999", "invalid-id", "task-999"];
 
         for task_id in test_cases {
-            let result = handler.trash_task(task_id.to_string()).await;
+            let result = handler.trash_tasks(vec![task_id.to_string()]).await;
             assert!(result.is_err(), "Expected error for task_id: {}", task_id);
         }
     }
@@ -2966,7 +2669,7 @@ mod tests {
             .unwrap()
             .to_string();
         handler
-            .next_action_task(next_action_task_id.clone())
+            .next_action_tasks(vec![next_action_task_id.clone()])
             .await
             .unwrap();
 
@@ -2981,7 +2684,7 @@ mod tests {
             .last()
             .unwrap()
             .to_string();
-        handler.done_task(done_task_id.clone()).await.unwrap();
+        handler.done_tasks(vec![done_task_id.clone()]).await.unwrap();
 
         // 異なるステータスのタスクを一度にtrashに移動
         let task_ids = vec![
@@ -3027,7 +2730,7 @@ mod tests {
             .to_string();
 
         let result = handler
-            .calendar_task(task_id.clone(), Some("2024-12-25".to_string()))
+            .calendar_tasks(vec![task_id.clone()], Some("2024-12-25".to_string()))
             .await;
         assert!(result.is_ok());
 
@@ -3060,7 +2763,7 @@ mod tests {
             .to_string();
 
         // start_dateを指定せずにcalendarに移動しようとするとエラー
-        let result = handler.calendar_task(task_id.clone(), None).await;
+        let result = handler.calendar_tasks(vec![task_id.clone()], None).await;
         assert!(result.is_err());
     }
 
@@ -3087,7 +2790,7 @@ mod tests {
             .to_string();
 
         // start_dateパラメータなしでcalendarに移動（既存のstart_dateを使用）
-        let result = handler.calendar_task(task_id.clone(), None).await;
+        let result = handler.calendar_tasks(vec![task_id.clone()], None).await;
         assert!(result.is_ok());
 
         let data = handler.data.lock().unwrap();
@@ -3124,7 +2827,7 @@ mod tests {
 
         // 新しいstart_dateを指定してcalendarに移動（既存のstart_dateを上書き）
         let result = handler
-            .calendar_task(task_id.clone(), Some("2024-12-31".to_string()))
+            .calendar_tasks(vec![task_id.clone()], Some("2024-12-31".to_string()))
             .await;
         assert!(result.is_ok());
 
@@ -3154,7 +2857,7 @@ mod tests {
 
         // 無効な日付形式
         let result = handler
-            .calendar_task(task_id.clone(), Some("2024/12/25".to_string()))
+            .calendar_tasks(vec![task_id.clone()], Some("2024/12/25".to_string()))
             .await;
         assert!(result.is_err());
     }
@@ -3181,7 +2884,7 @@ mod tests {
         };
 
         // Move to next_action
-        let result = handler.next_action_task(task_id.clone()).await;
+        let result = handler.next_action_tasks(vec![task_id.clone()]).await;
         assert!(result.is_ok());
 
         // Verify created_at unchanged
@@ -3194,13 +2897,13 @@ mod tests {
     async fn test_status_movement_nonexistent_task() {
         let (handler, _temp_file) = get_test_handler();
 
-        let result = handler.next_action_task("nonexistent-id".to_string()).await;
+        let result = handler.next_action_tasks(vec!["nonexistent-id".to_string()]).await;
         assert!(result.is_err());
 
-        let result = handler.done_task("nonexistent-id".to_string()).await;
+        let result = handler.done_tasks(vec!["nonexistent-id".to_string()]).await;
         assert!(result.is_err());
 
-        let result = handler.trash_task("nonexistent-id".to_string()).await;
+        let result = handler.trash_tasks(vec!["nonexistent-id".to_string()]).await;
         assert!(result.is_err());
     }
 
@@ -3720,9 +3423,9 @@ mod tests {
             .to_string();
 
         // 両方をカレンダーステータスに移動
-        let result = handler.calendar_task(task_id1.clone(), None).await;
+        let result = handler.calendar_tasks(vec![task_id1.clone()], None).await;
         assert!(result.is_ok());
-        let result = handler.calendar_task(task_id2.clone(), None).await;
+        let result = handler.calendar_tasks(vec![task_id2.clone()], None).await;
         assert!(result.is_ok());
 
         // カレンダーステータスでフィルタリングし、日付フィルタも適用
@@ -3955,7 +3658,7 @@ mod tests {
                 .unwrap()
                 .to_string();
             // Move to next_action first
-            let _ = handler.next_action_task(task_id.clone()).await;
+            let _ = handler.next_action_tasks(vec![task_id.clone()]).await;
             task_ids.push(task_id);
         }
 
