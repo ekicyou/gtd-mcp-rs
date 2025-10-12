@@ -310,7 +310,7 @@ impl McpServer for GtdServerHandler {
         // Process each task ID
         for task_id in &task_ids {
             let task_id = task_id.trim();
-            
+
             // Check if task exists
             if data.find_task_by_id(task_id).is_none() {
                 eprintln!("Error: Task not found: {}", task_id);
@@ -345,7 +345,8 @@ impl McpServer for GtdServerHandler {
         // Save data if any tasks were successfully moved
         if !successful.is_empty() {
             let task_list = successful.join(", ");
-            if let Err(e) = self.save_data_with_message(&format!("Move tasks to trash: {}", task_list))
+            if let Err(e) =
+                self.save_data_with_message(&format!("Move tasks to trash: {}", task_list))
             {
                 eprintln!(
                     "Error: Failed to save data after moving tasks to trash: {}",
@@ -361,15 +362,19 @@ impl McpServer for GtdServerHandler {
         // Build result message
         let mut result = String::new();
         if !successful.is_empty() {
-            result.push_str(&format!("Successfully moved {} task(s) to trash: {}", 
-                successful.len(), successful.join(", ")));
+            result.push_str(&format!(
+                "Successfully moved {} task(s) to trash: {}",
+                successful.len(),
+                successful.join(", ")
+            ));
         }
         if !failed.is_empty() {
             if !result.is_empty() {
                 result.push('\n');
             }
             result.push_str(&format!("Failed to move {} task(s): ", failed.len()));
-            let failures: Vec<String> = failed.iter()
+            let failures: Vec<String> = failed
+                .iter()
                 .map(|(id, reason)| format!("{} ({})", id, reason))
                 .collect();
             result.push_str(&failures.join(", "));
@@ -2175,7 +2180,11 @@ mod tests {
 
         // 複数のタスクを一度にtrashに移動
         let result = handler.trash_tasks(task_ids.clone()).await;
-        assert!(result.is_ok(), "Failed to trash multiple tasks: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to trash multiple tasks: {:?}",
+            result.err()
+        );
 
         // すべてのタスクがtrashに移動されたことを確認
         let data = handler.data.lock().unwrap();
@@ -2214,8 +2223,12 @@ mod tests {
 
         // 部分的な成功を確認
         let result = handler.trash_tasks(task_ids.clone()).await;
-        assert!(result.is_ok(), "Should succeed with partial success: {:?}", result.err());
-        
+        assert!(
+            result.is_ok(),
+            "Should succeed with partial success: {:?}",
+            result.err()
+        );
+
         let result_msg = result.unwrap();
         assert!(result_msg.contains("Successfully moved 2 task(s)"));
         assert!(result_msg.contains("Failed to move 2 task(s)"));
@@ -2231,7 +2244,11 @@ mod tests {
         let (handler, _temp_file) = get_test_handler();
 
         // すべて無効なタスクID
-        let task_ids = vec!["#999".to_string(), "invalid-id".to_string(), "task-999".to_string()];
+        let task_ids = vec![
+            "#999".to_string(),
+            "invalid-id".to_string(),
+            "task-999".to_string(),
+        ];
 
         // すべて失敗する場合はエラーを返す
         let result = handler.trash_tasks(task_ids).await;
@@ -2277,7 +2294,10 @@ mod tests {
             .last()
             .unwrap()
             .to_string();
-        handler.next_action_task(next_action_task_id.clone()).await.unwrap();
+        handler
+            .next_action_task(next_action_task_id.clone())
+            .await
+            .unwrap();
 
         // doneに移動
         let result = handler
@@ -2293,9 +2313,17 @@ mod tests {
         handler.done_task(done_task_id.clone()).await.unwrap();
 
         // 異なるステータスのタスクを一度にtrashに移動
-        let task_ids = vec![inbox_task_id.clone(), next_action_task_id.clone(), done_task_id.clone()];
+        let task_ids = vec![
+            inbox_task_id.clone(),
+            next_action_task_id.clone(),
+            done_task_id.clone(),
+        ];
         let result = handler.trash_tasks(task_ids).await;
-        assert!(result.is_ok(), "Failed to trash tasks from different statuses: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Failed to trash tasks from different statuses: {:?}",
+            result.err()
+        );
 
         // すべてがtrashに移動されたことを確認
         let data = handler.data.lock().unwrap();
