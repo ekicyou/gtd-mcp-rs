@@ -295,6 +295,98 @@ impl McpServer for GtdServerHandler {
         }
     }
 
+    /// Move multiple tasks to trash
+    #[tool]
+    async fn trash_tasks(
+        &self,
+        /// Task IDs to move to trash (comma-separated or array)
+        task_ids: Vec<String>,
+    ) -> McpResult<String> {
+        let mut data = self.data.lock().unwrap();
+
+        let mut successful: Vec<String> = Vec::new();
+        let mut failed: Vec<(String, String)> = Vec::new();
+
+        // Process each task ID
+        for task_id in &task_ids {
+            let task_id = task_id.trim();
+
+            // Check if task exists
+            if data.find_task_by_id(task_id).is_none() {
+                eprintln!("Error: Task not found: {}", task_id);
+                failed.push((task_id.to_string(), "Task not found".to_string()));
+                continue;
+            }
+
+            let original_status = data
+                .find_task_by_id(task_id)
+                .map(|t| format!("{:?}", t.status));
+            eprintln!(
+                "Moving task {} from {:?} to trash",
+                task_id, original_status
+            );
+
+            // Move task to trash
+            if data.move_status(task_id, TaskStatus::trash).is_some() {
+                // Update the timestamp after the move
+                if let Some(task) = data.find_task_by_id_mut(task_id) {
+                    task.updated_at = local_date_today();
+                }
+                successful.push(task_id.to_string());
+                eprintln!("Successfully moved task {} to trash", task_id);
+            } else {
+                eprintln!("Error: Failed to move task {} to trash", task_id);
+                failed.push((task_id.to_string(), "Failed to move task".to_string()));
+            }
+        }
+
+        drop(data);
+
+        // Save data if any tasks were successfully moved
+        if !successful.is_empty() {
+            let task_list = successful.join(", ");
+            if let Err(e) =
+                self.save_data_with_message(&format!("Move tasks to trash: {}", task_list))
+            {
+                eprintln!(
+                    "Error: Failed to save data after moving tasks to trash: {}",
+                    e
+                );
+                bail!(
+                    "Failed to save tasks to trash: {}. Some tasks may not have been moved.",
+                    e
+                );
+            }
+        }
+
+        // Build result message
+        let mut result = String::new();
+        if !successful.is_empty() {
+            result.push_str(&format!(
+                "Successfully moved {} task(s) to trash: {}",
+                successful.len(),
+                successful.join(", ")
+            ));
+        }
+        if !failed.is_empty() {
+            if !result.is_empty() {
+                result.push('\n');
+            }
+            result.push_str(&format!("Failed to move {} task(s): ", failed.len()));
+            let failures: Vec<String> = failed
+                .iter()
+                .map(|(id, reason)| format!("{} ({})", id, reason))
+                .collect();
+            result.push_str(&failures.join(", "));
+        }
+
+        if successful.is_empty() && !failed.is_empty() {
+            bail!("{}", result);
+        }
+
+        Ok(result)
+    }
+
     /// Move a task to inbox
     #[tool]
     async fn inbox_task(
@@ -2064,6 +2156,188 @@ mod tests {
             let result = handler.trash_task(task_id.to_string()).await;
             assert!(result.is_err(), "Expected error for task_id: {}", task_id);
         }
+    }
+
+    #[tokio::test]
+    async fn test_trash_tasks_multiple_tasks() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // 複数のタスクを作成
+        let mut task_ids = Vec::new();
+        for i in 1..=5 {
+            let result = handler
+                .add_task(format!("Test Task {}", i), None, None, None, None)
+                .await;
+            assert!(result.is_ok());
+            let task_id = result
+                .unwrap()
+                .split_whitespace()
+                .last()
+                .unwrap()
+                .to_string();
+            task_ids.push(task_id);
+        }
+
+        // 複数のタスクを一度にtrashに移動
+        let result = handler.trash_tasks(task_ids.clone()).await;
+        assert!(
+            result.is_ok(),
+            "Failed to trash multiple tasks: {:?}",
+            result.err()
+        );
+
+        // すべてのタスクがtrashに移動されたことを確認
+        let data = handler.data.lock().unwrap();
+        assert_eq!(data.trash.len(), 5);
+        assert_eq!(data.inbox.len(), 0);
+
+        for task_id in &task_ids {
+            let task = data.find_task_by_id(task_id).unwrap();
+            assert!(matches!(task.status, TaskStatus::trash));
+        }
+    }
+
+    #[tokio::test]
+    async fn test_trash_tasks_partial_success() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // 有効なタスクを2つ作成
+        let mut task_ids = Vec::new();
+        for i in 1..=2 {
+            let result = handler
+                .add_task(format!("Test Task {}", i), None, None, None, None)
+                .await;
+            assert!(result.is_ok());
+            let task_id = result
+                .unwrap()
+                .split_whitespace()
+                .last()
+                .unwrap()
+                .to_string();
+            task_ids.push(task_id);
+        }
+
+        // 無効なタスクIDを追加
+        task_ids.push("#999".to_string());
+        task_ids.push("invalid-id".to_string());
+
+        // 部分的な成功を確認
+        let result = handler.trash_tasks(task_ids.clone()).await;
+        assert!(
+            result.is_ok(),
+            "Should succeed with partial success: {:?}",
+            result.err()
+        );
+
+        let result_msg = result.unwrap();
+        assert!(result_msg.contains("Successfully moved 2 task(s)"));
+        assert!(result_msg.contains("Failed to move 2 task(s)"));
+
+        // 有効なタスクだけがtrashに移動されたことを確認
+        let data = handler.data.lock().unwrap();
+        assert_eq!(data.trash.len(), 2);
+        assert_eq!(data.inbox.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_trash_tasks_all_invalid() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // すべて無効なタスクID
+        let task_ids = vec![
+            "#999".to_string(),
+            "invalid-id".to_string(),
+            "task-999".to_string(),
+        ];
+
+        // すべて失敗する場合はエラーを返す
+        let result = handler.trash_tasks(task_ids).await;
+        assert!(result.is_err(), "Expected error when all tasks are invalid");
+    }
+
+    #[tokio::test]
+    async fn test_trash_tasks_empty_list() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // 空のリスト
+        let task_ids: Vec<String> = Vec::new();
+
+        let result = handler.trash_tasks(task_ids).await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), "");
+    }
+
+    #[tokio::test]
+    async fn test_trash_tasks_from_different_statuses() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // inboxからタスクを作成
+        let result = handler
+            .add_task("Inbox Task".to_string(), None, None, None, None)
+            .await;
+        assert!(result.is_ok());
+        let inbox_task_id = result
+            .unwrap()
+            .split_whitespace()
+            .last()
+            .unwrap()
+            .to_string();
+
+        // next_actionに移動
+        let result = handler
+            .add_task("Next Action Task".to_string(), None, None, None, None)
+            .await;
+        assert!(result.is_ok());
+        let next_action_task_id = result
+            .unwrap()
+            .split_whitespace()
+            .last()
+            .unwrap()
+            .to_string();
+        handler
+            .next_action_task(next_action_task_id.clone())
+            .await
+            .unwrap();
+
+        // doneに移動
+        let result = handler
+            .add_task("Done Task".to_string(), None, None, None, None)
+            .await;
+        assert!(result.is_ok());
+        let done_task_id = result
+            .unwrap()
+            .split_whitespace()
+            .last()
+            .unwrap()
+            .to_string();
+        handler.done_task(done_task_id.clone()).await.unwrap();
+
+        // 異なるステータスのタスクを一度にtrashに移動
+        let task_ids = vec![
+            inbox_task_id.clone(),
+            next_action_task_id.clone(),
+            done_task_id.clone(),
+        ];
+        let result = handler.trash_tasks(task_ids).await;
+        assert!(
+            result.is_ok(),
+            "Failed to trash tasks from different statuses: {:?}",
+            result.err()
+        );
+
+        // すべてがtrashに移動されたことを確認
+        let data = handler.data.lock().unwrap();
+        assert_eq!(data.trash.len(), 3);
+        assert_eq!(data.inbox.len(), 0);
+        assert_eq!(data.next_action.len(), 0);
+        assert_eq!(data.done.len(), 0);
+
+        let task1 = data.find_task_by_id(&inbox_task_id).unwrap();
+        let task2 = data.find_task_by_id(&next_action_task_id).unwrap();
+        let task3 = data.find_task_by_id(&done_task_id).unwrap();
+        assert!(matches!(task1.status, TaskStatus::trash));
+        assert!(matches!(task2.status, TaskStatus::trash));
+        assert!(matches!(task3.status, TaskStatus::trash));
     }
 
     #[tokio::test]
