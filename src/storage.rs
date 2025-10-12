@@ -864,7 +864,7 @@ mod tests {
 
         // Create TOML file with CR characters in notes (simulating old data)
         let toml_with_cr = "[[inbox]]\nid = \"#1\"\ntitle = \"Test Task\"\nnotes = \"\"\"\nLine 1\rLine 2\rLine 3\r\"\"\"\ncreated_at = \"2024-01-01\"\nupdated_at = \"2024-01-01\"\n";
-        fs::write(&test_path, &toml_with_cr).unwrap();
+        fs::write(&test_path, toml_with_cr).unwrap();
 
         println!("Original file content:");
         let original = fs::read_to_string(&test_path).unwrap();
@@ -881,10 +881,7 @@ mod tests {
         // Notes should be normalized to LF internally
         let task = data.find_task_by_id("#1").unwrap();
         println!("Loaded notes: {:?}", task.notes);
-        assert_eq!(
-            task.notes,
-            Some("Line 1\nLine 2\nLine 3\n".to_string())
-        );
+        assert_eq!(task.notes, Some("Line 1\nLine 2\nLine 3\n".to_string()));
 
         // Save the data back
         storage.save(&data).unwrap();
@@ -958,7 +955,7 @@ mod tests {
         let task = data.find_task_by_id("#32").unwrap();
         assert!(task.notes.is_some());
         let notes = task.notes.as_ref().unwrap();
-        
+
         // Should not contain CR bytes
         assert!(
             !notes.as_bytes().contains(&b'\r'),
@@ -1009,7 +1006,6 @@ mod tests {
 
 #[cfg(test)]
 mod test_line_ending_normalization {
-    use super::*;
     use crate::gtd::GtdData;
 
     // Test that CR normalization works for project descriptions
@@ -1026,7 +1022,7 @@ mod test_line_ending_normalization {
 
         let data: GtdData = toml::from_str(toml_input).unwrap();
         let project = data.find_project_by_id("project-1").unwrap();
-        
+
         // Description should be normalized to LF
         assert!(project.description.is_some());
         let desc = project.description.as_ref().unwrap();
@@ -1045,7 +1041,7 @@ mod test_line_ending_normalization {
 
         let data: GtdData = toml::from_str(toml_input).unwrap();
         let context = data.find_context_by_name("Office").unwrap();
-        
+
         // Description should be normalized to LF
         assert!(context.description.is_some());
         let desc = context.description.as_ref().unwrap();

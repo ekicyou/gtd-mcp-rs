@@ -145,7 +145,9 @@ impl<'de> Deserialize<'de> for GtdData {
 
         // Normalize line endings in all string fields that might contain newlines
         // This handles CR characters that result from TOML's \r escape sequence unescaping
-        for task in helper.inbox.iter_mut()
+        for task in helper
+            .inbox
+            .iter_mut()
             .chain(helper.next_action.iter_mut())
             .chain(helper.waiting_for.iter_mut())
             .chain(helper.later.iter_mut())
