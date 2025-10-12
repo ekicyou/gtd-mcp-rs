@@ -208,6 +208,7 @@ List all tasks with optional status filter. Task listings include comprehensive 
 **Parameters:**
 - `status` (string, optional): Filter by status (inbox, next_action, waiting_for, someday, done, trash, calendar)
 - `date` (string, optional): Filter by date in YYYY-MM-DD format. Tasks with start_date in the future (later than the specified date) are excluded. This is particularly useful for the "calendar" status to show only tasks whose start date has arrived.
+- `exclude_notes` (boolean, optional): Set to `true` to exclude notes from output and reduce token usage. Default is `false` (notes are included).
 
 **Output Format:** Each task is displayed with:
 - Task ID
@@ -216,6 +217,7 @@ List all tasks with optional status filter. Task listings include comprehensive 
 - Start date (if set)
 - Project reference (if set)
 - Context reference (if set)
+- Notes (if set and not excluded)
 - Creation date
 - Last update date
 
@@ -234,6 +236,15 @@ List all tasks with optional status filter. Task listings include comprehensive 
 }
 ```
 This will list calendar tasks with start_date on or before 2024-06-15, excluding tasks scheduled for future dates.
+
+**Example excluding notes to reduce tokens:**
+```json
+{
+  "status": "next_action",
+  "exclude_notes": true
+}
+```
+This will list next actions without including the notes field, which can be useful when you need a quick overview without the full details.
 
 ### update_task
 Update an existing task. All parameters are optional except the task_id. Only provided fields will be updated.
