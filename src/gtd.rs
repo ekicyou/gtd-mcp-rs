@@ -31,11 +31,11 @@ pub enum TaskStatus {
     inbox,
     next_action,
     waiting_for,
-    someday,
     later,
+    calendar,
+    someday,
     done,
     trash,
-    calendar,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -74,15 +74,15 @@ pub struct GtdData {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub waiting_for: Vec<Task>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub someday: Vec<Task>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub later: Vec<Task>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub calendar: Vec<Task>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub someday: Vec<Task>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub done: Vec<Task>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub trash: Vec<Task>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub calendar: Vec<Task>,
     pub projects: Vec<Project>,
     pub contexts: HashMap<String, Context>,
     #[serde(default, skip_serializing_if = "is_zero")]
@@ -109,15 +109,15 @@ impl<'de> Deserialize<'de> for GtdData {
             #[serde(default)]
             waiting_for: Vec<Task>,
             #[serde(default)]
-            someday: Vec<Task>,
-            #[serde(default)]
             later: Vec<Task>,
+            #[serde(default)]
+            calendar: Vec<Task>,
+            #[serde(default)]
+            someday: Vec<Task>,
             #[serde(default)]
             done: Vec<Task>,
             #[serde(default)]
             trash: Vec<Task>,
-            #[serde(default)]
-            calendar: Vec<Task>,
             #[serde(default)]
             projects: Vec<Project>,
             #[serde(default)]
@@ -145,11 +145,14 @@ impl<'de> Deserialize<'de> for GtdData {
         for task in &mut helper.waiting_for {
             task.status = TaskStatus::waiting_for;
         }
-        for task in &mut helper.someday {
-            task.status = TaskStatus::someday;
-        }
         for task in &mut helper.later {
             task.status = TaskStatus::later;
+        }
+        for task in &mut helper.calendar {
+            task.status = TaskStatus::calendar;
+        }
+        for task in &mut helper.someday {
+            task.status = TaskStatus::someday;
         }
         for task in &mut helper.done {
             task.status = TaskStatus::done;
@@ -157,19 +160,16 @@ impl<'de> Deserialize<'de> for GtdData {
         for task in &mut helper.trash {
             task.status = TaskStatus::trash;
         }
-        for task in &mut helper.calendar {
-            task.status = TaskStatus::calendar;
-        }
 
         Ok(GtdData {
             inbox: helper.inbox,
             next_action: helper.next_action,
             waiting_for: helper.waiting_for,
-            someday: helper.someday,
             later: helper.later,
+            calendar: helper.calendar,
+            someday: helper.someday,
             done: helper.done,
             trash: helper.trash,
-            calendar: helper.calendar,
             projects: helper.projects,
             contexts: helper.contexts,
             task_counter: helper.task_counter,
