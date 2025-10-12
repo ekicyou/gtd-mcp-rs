@@ -366,7 +366,7 @@ impl McpServer for GtdServerHandler {
         }
         if !failed.is_empty() {
             if !result.is_empty() {
-                result.push_str("\n");
+                result.push('\n');
             }
             result.push_str(&format!("Failed to move {} task(s): ", failed.len()));
             let failures: Vec<String> = failed.iter()
