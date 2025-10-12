@@ -2136,4 +2136,66 @@ status = "active"
         assert_eq!(project.name, "Old Project");
         assert_eq!(project.context, None);
     }
+
+    // タスクステータスの順序がTOMLシリアライズに反映されることを確認
+    // TaskStatus enumの順序とGtdDataフィールドの順序が一致し、TOML出力もその順序になることを検証
+    #[test]
+    fn test_task_status_order_in_toml_serialization() {
+        let mut data = GtdData::new();
+        
+        // Add one task for each status in enum order
+        let statuses = [
+            TaskStatus::inbox,
+            TaskStatus::next_action,
+            TaskStatus::waiting_for,
+            TaskStatus::later,
+            TaskStatus::calendar,
+            TaskStatus::someday,
+            TaskStatus::done,
+            TaskStatus::trash,
+        ];
+        
+        for (i, status) in statuses.iter().enumerate() {
+            data.add_task(Task {
+                id: format!("task-{}", i),
+                title: format!("Task {}", i),
+                status: status.clone(),
+                project: None,
+                context: None,
+                notes: None,
+                start_date: None,
+                created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+                updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            });
+        }
+        
+        let toml_str = toml::to_string(&data).unwrap();
+        
+        // Extract section headers in order they appear in TOML
+        let sections: Vec<&str> = toml_str
+            .lines()
+            .filter(|line| line.starts_with("[["))
+            .collect();
+            
+        // Verify the order matches TaskStatus enum order
+        let expected_sections = [
+            "[[inbox]]",
+            "[[next_action]]",
+            "[[waiting_for]]",
+            "[[later]]",
+            "[[calendar]]",
+            "[[someday]]",
+            "[[done]]",
+            "[[trash]]",
+        ];
+        
+        assert_eq!(sections.len(), expected_sections.len(), 
+            "Expected {} sections but found {}", expected_sections.len(), sections.len());
+            
+        for (i, expected) in expected_sections.iter().enumerate() {
+            assert_eq!(sections[i], *expected, 
+                "Section at position {} should be {}, but got {}", 
+                i, expected, sections[i]);
+        }
+    }
 }
