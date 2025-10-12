@@ -4,6 +4,28 @@ use anyhow::Result;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+/// Normalize line endings to LF (\n) for internal use
+/// This ensures consistent behavior across platforms when deserializing
+fn normalize_line_endings(content: &str) -> String {
+    content.replace("\r\n", "\n").replace('\r', "\n")
+}
+
+/// Convert line endings to OS-native format for file output
+/// On Windows: LF (\n) -> CRLF (\r\n)
+/// On Unix/Linux/macOS: LF (\n) remains as-is
+#[cfg(target_os = "windows")]
+fn to_native_line_endings(content: &str) -> String {
+    // First normalize to LF, then convert to CRLF
+    let normalized = normalize_line_endings(content);
+    normalized.replace('\n', "\r\n")
+}
+
+#[cfg(not(target_os = "windows"))]
+fn to_native_line_endings(content: &str) -> String {
+    // On Unix-like systems, just normalize to LF
+    normalize_line_endings(content)
+}
+
 pub struct Storage {
     pub file_path: PathBuf,
     git_ops: GitOps,
@@ -32,7 +54,9 @@ impl Storage {
         }
 
         let content = fs::read_to_string(&self.file_path)?;
-        let data: GtdData = toml::from_str(&content)?;
+        // Normalize line endings to LF for consistent parsing across platforms
+        let normalized_content = normalize_line_endings(&content);
+        let data: GtdData = toml::from_str(&normalized_content)?;
         Ok(data)
     }
 
@@ -44,12 +68,15 @@ impl Storage {
     pub fn save_with_message(&self, data: &GtdData, commit_message: &str) -> Result<()> {
         let content = toml::to_string_pretty(data)?;
 
+        // Convert to OS-native line endings for file output
+        let native_content = to_native_line_endings(&content);
+
         // Ensure parent directory exists
         if let Some(parent) = self.file_path.parent() {
             fs::create_dir_all(parent)?;
         }
 
-        fs::write(&self.file_path, content)?;
+        fs::write(&self.file_path, native_content)?;
 
         // Perform git operations only if sync_git flag is enabled and in a git repository
         if self.sync_git && self.git_ops.is_git_managed() {
@@ -712,5 +739,118 @@ mod tests {
         let shutdown_result = storage.shutdown();
         // With HEAD but no remote, push will fail at find_remote
         assert!(shutdown_result.is_err());
+    }
+
+    // Test line ending normalization on load
+    #[test]
+    fn test_storage_normalize_line_endings_on_load() {
+        let test_path = get_test_path("test_line_endings_gtd.toml");
+        let _ = fs::remove_file(&test_path);
+
+        // Create TOML file with CRLF line endings
+        let toml_with_crlf = "[[inbox]]\r\nid = \"#1\"\r\ntitle = \"Test Task\"\r\ncreated_at = \"2024-01-01\"\r\nupdated_at = \"2024-01-01\"\r\n";
+        fs::write(&test_path, toml_with_crlf).unwrap();
+
+        let storage = Storage::new(&test_path, false);
+        let load_result = storage.load();
+
+        // Should load successfully despite CRLF
+        assert!(load_result.is_ok());
+        let data = load_result.unwrap();
+        assert_eq!(data.task_count(), 1);
+
+        let task = data.find_task_by_id("#1").unwrap();
+        assert_eq!(task.title, "Test Task");
+
+        // Clean up
+        let _ = fs::remove_file(&test_path);
+    }
+
+    // Test line endings in multi-line strings (notes field)
+    #[test]
+    fn test_storage_multiline_notes_line_endings() {
+        let test_path = get_test_path("test_multiline_notes_gtd.toml");
+        let _ = fs::remove_file(&test_path);
+
+        let storage = Storage::new(&test_path, false);
+        let mut data = GtdData::new();
+
+        // Create task with multi-line notes
+        let task = Task {
+            id: "#1".to_string(),
+            title: "Task with notes".to_string(),
+            status: TaskStatus::inbox,
+            project: None,
+            context: None,
+            notes: Some("Line 1\nLine 2\nLine 3".to_string()),
+            start_date: None,
+            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+        };
+        data.add_task(task);
+
+        // Save and load
+        storage.save(&data).unwrap();
+        let loaded_data = storage.load().unwrap();
+
+        // Verify notes are preserved with normalized line endings
+        let loaded_task = loaded_data.find_task_by_id("#1").unwrap();
+        assert_eq!(
+            loaded_task.notes,
+            Some("Line 1\nLine 2\nLine 3".to_string())
+        );
+
+        // Clean up
+        let _ = fs::remove_file(&test_path);
+    }
+
+    // Test that file is written with OS-native line endings
+    #[test]
+    fn test_storage_file_has_native_line_endings() {
+        let test_path = get_test_path("test_native_endings_gtd.toml");
+        let _ = fs::remove_file(&test_path);
+
+        let storage = Storage::new(&test_path, false);
+        let mut data = GtdData::new();
+
+        let task = Task {
+            id: "#1".to_string(),
+            title: "Test".to_string(),
+            status: TaskStatus::inbox,
+            project: None,
+            context: None,
+            notes: None,
+            start_date: None,
+            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+        };
+        data.add_task(task);
+
+        storage.save(&data).unwrap();
+
+        // Read raw file content to check line endings
+        let raw_content = fs::read_to_string(&test_path).unwrap();
+
+        #[cfg(target_os = "windows")]
+        {
+            // On Windows, should have CRLF
+            assert!(
+                raw_content.contains("\r\n"),
+                "File should contain CRLF on Windows"
+            );
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            // On Unix-like systems, should only have LF
+            assert!(
+                !raw_content.contains("\r\n"),
+                "File should not contain CRLF on Unix"
+            );
+            assert!(raw_content.contains('\n'), "File should contain LF");
+        }
+
+        // Clean up
+        let _ = fs::remove_file(&test_path);
     }
 }

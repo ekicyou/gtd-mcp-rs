@@ -2142,7 +2142,7 @@ status = "active"
     #[test]
     fn test_task_status_order_in_toml_serialization() {
         let mut data = GtdData::new();
-        
+
         // Add one task for each status in enum order
         let statuses = [
             TaskStatus::inbox,
@@ -2154,7 +2154,7 @@ status = "active"
             TaskStatus::done,
             TaskStatus::trash,
         ];
-        
+
         for (i, status) in statuses.iter().enumerate() {
             data.add_task(Task {
                 id: format!("task-{}", i),
@@ -2168,15 +2168,15 @@ status = "active"
                 updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
             });
         }
-        
+
         let toml_str = toml::to_string(&data).unwrap();
-        
+
         // Extract section headers in order they appear in TOML
         let sections: Vec<&str> = toml_str
             .lines()
             .filter(|line| line.starts_with("[["))
             .collect();
-            
+
         // Verify the order matches TaskStatus enum order
         let expected_sections = [
             "[[inbox]]",
@@ -2188,14 +2188,21 @@ status = "active"
             "[[done]]",
             "[[trash]]",
         ];
-        
-        assert_eq!(sections.len(), expected_sections.len(), 
-            "Expected {} sections but found {}", expected_sections.len(), sections.len());
-            
+
+        assert_eq!(
+            sections.len(),
+            expected_sections.len(),
+            "Expected {} sections but found {}",
+            expected_sections.len(),
+            sections.len()
+        );
+
         for (i, expected) in expected_sections.iter().enumerate() {
-            assert_eq!(sections[i], *expected, 
-                "Section at position {} should be {}, but got {}", 
-                i, expected, sections[i]);
+            assert_eq!(
+                sections[i], *expected,
+                "Section at position {} should be {}, but got {}",
+                i, expected, sections[i]
+            );
         }
     }
 }
