@@ -35,31 +35,31 @@ pub enum ProjectsFormat {
 pub struct GtdDataMigrationHelper {
     #[serde(default)]
     #[allow(dead_code)] // Used for format detection
-    pub format_version: u32,
+    pub(crate) format_version: u32,
     #[serde(default)]
-    pub inbox: Vec<Task>,
+    pub(crate) inbox: Vec<Task>,
     #[serde(default)]
-    pub next_action: Vec<Task>,
+    pub(crate) next_action: Vec<Task>,
     #[serde(default)]
-    pub waiting_for: Vec<Task>,
+    pub(crate) waiting_for: Vec<Task>,
     #[serde(default)]
-    pub later: Vec<Task>,
+    pub(crate) later: Vec<Task>,
     #[serde(default)]
-    pub calendar: Vec<Task>,
+    pub(crate) calendar: Vec<Task>,
     #[serde(default)]
-    pub someday: Vec<Task>,
+    pub(crate) someday: Vec<Task>,
     #[serde(default)]
-    pub done: Vec<Task>,
+    pub(crate) done: Vec<Task>,
     #[serde(default)]
-    pub trash: Vec<Task>,
+    pub(crate) trash: Vec<Task>,
     #[serde(default)]
-    pub projects: Option<ProjectsFormat>,
+    pub(crate) projects: Option<ProjectsFormat>,
     #[serde(default)]
-    pub contexts: HashMap<String, Context>,
+    pub(crate) contexts: HashMap<String, Context>,
     #[serde(default)]
-    pub task_counter: u32,
+    pub(crate) task_counter: u32,
     #[serde(default)]
-    pub project_counter: u32,
+    pub(crate) project_counter: u32,
 }
 
 /// Migrate projects from Version 1 format (Vec) to Version 2 format (HashMap)
