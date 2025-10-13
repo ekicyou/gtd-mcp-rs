@@ -1063,29 +1063,23 @@ impl McpServer for GtdServerHandler {
         &self,
         /// Project name
         name: String,
+        /// Project ID (must be unique)
+        id: String,
         /// Optional project description
         description: Option<String>,
         /// Optional context name (must exist if specified)
         context: Option<String>,
-        /// Optional custom project ID (auto-generated if not specified)
-        id: Option<String>,
     ) -> McpResult<String> {
         let mut data = self.data.lock().unwrap();
 
-        // Determine project ID: use provided or generate
-        let project_id = if let Some(custom_id) = id {
-            // Validate that custom ID doesn't already exist
-            if data.find_project_by_id(&custom_id).is_some() {
-                drop(data);
-                bail!("Project ID already exists: {}", custom_id);
-            }
-            custom_id
-        } else {
-            data.generate_project_id()
-        };
+        // Validate that ID doesn't already exist
+        if data.find_project_by_id(&id).is_some() {
+            drop(data);
+            bail!("Project ID already exists: {}", id);
+        }
 
         let project = Project {
-            id: project_id.clone(),
+            id: id.clone(),
             name: name.clone(),
             description,
             status: ProjectStatus::active,
@@ -1105,7 +1099,7 @@ impl McpServer for GtdServerHandler {
             bail!("Failed to save: {}", e);
         }
 
-        Ok(format!("Project created with ID: {}", project_id))
+        Ok(format!("Project created with ID: {}", id))
     }
 
     /// List all projects
@@ -1839,7 +1833,12 @@ mod tests {
 
         // Add a project and context first
         let project_result = handler
-            .add_project("Test Project".to_string(), None, None, None)
+            .add_project(
+                "Test Project".to_string(),
+                "test-project-1".to_string(),
+                None,
+                None,
+            )
             .await;
         assert!(project_result.is_ok());
         let project_id = project_result
@@ -2099,7 +2098,12 @@ mod tests {
 
         // Add a project
         let result = handler
-            .add_project("Original Name".to_string(), None, None, None)
+            .add_project(
+                "Original Name".to_string(),
+                "test-project-1".to_string(),
+                None,
+                None,
+            )
             .await;
         assert!(result.is_ok());
         let project_id = result
@@ -2134,7 +2138,12 @@ mod tests {
 
         // Add a project
         let result = handler
-            .add_project("Test Project".to_string(), None, None, None)
+            .add_project(
+                "Test Project".to_string(),
+                "test-project-1".to_string(),
+                None,
+                None,
+            )
             .await;
         assert!(result.is_ok());
         let project_id = result
@@ -2189,7 +2198,12 @@ mod tests {
 
         // Add a project
         let result = handler
-            .add_project("Test Project".to_string(), None, None, None)
+            .add_project(
+                "Test Project".to_string(),
+                "test-project-1".to_string(),
+                None,
+                None,
+            )
             .await;
         assert!(result.is_ok());
         let project_id = result
@@ -2251,7 +2265,12 @@ mod tests {
 
         // Add a project
         let result = handler
-            .add_project("Test Project".to_string(), None, None, None)
+            .add_project(
+                "Test Project".to_string(),
+                "test-project-1".to_string(),
+                None,
+                None,
+            )
             .await;
         assert!(result.is_ok());
         let project_id = result
@@ -2299,7 +2318,12 @@ mod tests {
 
         // Add a project
         let project_result = handler
-            .add_project("Test Project".to_string(), None, None, None)
+            .add_project(
+                "Test Project".to_string(),
+                "test-project-1".to_string(),
+                None,
+                None,
+            )
             .await;
         assert!(project_result.is_ok());
         let project_id = project_result
@@ -3147,9 +3171,9 @@ mod tests {
         let result = handler
             .add_project(
                 "Office Project".to_string(),
+                "office-project-1".to_string(),
                 Some("Project description".to_string()),
                 Some("Office".to_string()),
-                None,
             )
             .await;
         assert!(result.is_ok());
@@ -3169,9 +3193,9 @@ mod tests {
         let result = handler
             .add_project(
                 "Test Project".to_string(),
+                "test-project-1".to_string(),
                 None,
                 Some("NonExistent".to_string()),
-                None,
             )
             .await;
         assert!(result.is_err());
@@ -3188,7 +3212,12 @@ mod tests {
 
         // Add a project without context
         let result = handler
-            .add_project("Test Project".to_string(), None, None, None)
+            .add_project(
+                "Test Project".to_string(),
+                "test-project-1".to_string(),
+                None,
+                None,
+            )
             .await;
         assert!(result.is_ok());
         let project_id = result
@@ -3230,9 +3259,9 @@ mod tests {
         let result = handler
             .add_project(
                 "Test Project".to_string(),
+                "test-project-1".to_string(),
                 None,
                 Some("Office".to_string()),
-                None,
             )
             .await;
         assert!(result.is_ok());
@@ -3268,7 +3297,12 @@ mod tests {
 
         // Add a project
         let result = handler
-            .add_project("Test Project".to_string(), None, None, None)
+            .add_project(
+                "Test Project".to_string(),
+                "test-project-1".to_string(),
+                None,
+                None,
+            )
             .await;
         assert!(result.is_ok());
         let project_id = result
@@ -3300,9 +3334,9 @@ mod tests {
         let result = handler
             .add_project(
                 "Custom ID Project".to_string(),
+                "my-custom-id".to_string(),
                 Some("Project with custom ID".to_string()),
                 None,
-                Some("my-custom-id".to_string()),
             )
             .await;
         assert!(result.is_ok());
@@ -3323,9 +3357,9 @@ mod tests {
         let result = handler
             .add_project(
                 "First Project".to_string(),
+                "duplicate-id".to_string(),
                 None,
                 None,
-                Some("duplicate-id".to_string()),
             )
             .await;
         assert!(result.is_ok());
@@ -3334,9 +3368,9 @@ mod tests {
         let result = handler
             .add_project(
                 "Second Project".to_string(),
+                "duplicate-id".to_string(),
                 None,
                 None,
-                Some("duplicate-id".to_string()),
             )
             .await;
         assert!(result.is_err());
@@ -3348,7 +3382,12 @@ mod tests {
 
         // Add a project
         let result = handler
-            .add_project("Test Project".to_string(), None, None, None)
+            .add_project(
+                "Test Project".to_string(),
+                "test-project-1".to_string(),
+                None,
+                None,
+            )
             .await;
         assert!(result.is_ok());
         let project_id = result
@@ -3385,7 +3424,7 @@ mod tests {
 
         // Add two projects
         let result1 = handler
-            .add_project("Project 1".to_string(), None, None, None)
+            .add_project("Project 1".to_string(), "project-1".to_string(), None, None)
             .await;
         assert!(result1.is_ok());
         let project1_id = result1
@@ -3396,7 +3435,7 @@ mod tests {
             .to_string();
 
         let result2 = handler
-            .add_project("Project 2".to_string(), None, None, None)
+            .add_project("Project 2".to_string(), "project-2".to_string(), None, None)
             .await;
         assert!(result2.is_ok());
         let project2_id = result2
@@ -3426,7 +3465,12 @@ mod tests {
 
         // Add a project
         let result = handler
-            .add_project("Test Project".to_string(), None, None, None)
+            .add_project(
+                "Test Project".to_string(),
+                "test-project-1".to_string(),
+                None,
+                None,
+            )
             .await;
         assert!(result.is_ok());
         let project_id = result
