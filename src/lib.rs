@@ -27,6 +27,7 @@
 
 mod git_ops;
 mod gtd;
+mod migration;
 mod storage;
 
 use anyhow::Result;

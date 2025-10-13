@@ -201,112 +201,39 @@ fn is_zero(n: &u32) -> bool {
     *n == 0
 }
 
-/// Normalize line endings in a string to LF (\n)
-/// This handles cases where TOML files contain \r escape sequences that get
-/// unescaped to CR bytes during deserialization. We normalize these to LF
-/// so they can be properly converted to OS-native format on save.
-fn normalize_string_line_endings(s: &str) -> String {
-    s.replace("\r\n", "\n").replace('\r', "\n")
-}
-
 impl<'de> Deserialize<'de> for GtdData {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
-        #[derive(Deserialize)]
-        #[serde(untagged)]
-        enum ProjectsFormat {
-            Map(HashMap<String, Project>),
-            Vec(Vec<Project>),
-        }
-
-        #[derive(Deserialize)]
-        struct GtdDataHelper {
-            #[serde(default)]
-            #[allow(dead_code)] // Used for format detection
-            format_version: u32,
-            #[serde(default)]
-            inbox: Vec<Task>,
-            #[serde(default)]
-            next_action: Vec<Task>,
-            #[serde(default)]
-            waiting_for: Vec<Task>,
-            #[serde(default)]
-            later: Vec<Task>,
-            #[serde(default)]
-            calendar: Vec<Task>,
-            #[serde(default)]
-            someday: Vec<Task>,
-            #[serde(default)]
-            done: Vec<Task>,
-            #[serde(default)]
-            trash: Vec<Task>,
-            #[serde(default)]
-            projects: Option<ProjectsFormat>,
-            #[serde(default)]
-            contexts: HashMap<String, Context>,
-            #[serde(default)]
-            task_counter: u32,
-            #[serde(default)]
-            project_counter: u32,
-        }
-
-        let mut helper = GtdDataHelper::deserialize(deserializer)?;
-
-        // Convert projects to HashMap based on format
-        let projects = match helper.projects {
-            Some(ProjectsFormat::Map(map)) => map,
-            Some(ProjectsFormat::Vec(vec)) => {
-                let mut map = HashMap::new();
-                for project in vec {
-                    map.insert(project.id.clone(), project);
-                }
-                map
-            }
-            None => HashMap::new(),
+        use crate::migration::{
+            GtdDataMigrationHelper, migrate_projects_to_latest, normalize_context_line_endings,
+            normalize_project_line_endings, normalize_task_line_endings, populate_context_names,
+            populate_project_ids,
         };
 
+        let mut helper = GtdDataMigrationHelper::deserialize(deserializer)?;
+
+        // Migrate projects to latest format (HashMap)
+        let mut projects = migrate_projects_to_latest(helper.projects);
+
         // Populate the name field in each Context from the HashMap key
-        for (key, context) in helper.contexts.iter_mut() {
-            context.name = key.clone();
-        }
+        populate_context_names(&mut helper.contexts);
 
         // Populate the id field in each Project from the HashMap key
-        let mut projects = projects;
-        for (key, project) in projects.iter_mut() {
-            project.id = key.clone();
-        }
+        populate_project_ids(&mut projects);
 
-        // Normalize line endings in all string fields that might contain newlines
-        // This handles CR characters that result from TOML's \r escape sequence unescaping
-        for task in helper
-            .inbox
-            .iter_mut()
-            .chain(helper.next_action.iter_mut())
-            .chain(helper.waiting_for.iter_mut())
-            .chain(helper.later.iter_mut())
-            .chain(helper.calendar.iter_mut())
-            .chain(helper.someday.iter_mut())
-            .chain(helper.done.iter_mut())
-            .chain(helper.trash.iter_mut())
-        {
-            if let Some(notes) = &task.notes {
-                task.notes = Some(normalize_string_line_endings(notes));
-            }
-        }
-
-        for project in projects.values_mut() {
-            if let Some(description) = &project.description {
-                project.description = Some(normalize_string_line_endings(description));
-            }
-        }
-
-        for context in helper.contexts.values_mut() {
-            if let Some(description) = &context.description {
-                context.description = Some(normalize_string_line_endings(description));
-            }
-        }
+        // Normalize line endings in all string fields
+        normalize_task_line_endings(&mut helper.inbox);
+        normalize_task_line_endings(&mut helper.next_action);
+        normalize_task_line_endings(&mut helper.waiting_for);
+        normalize_task_line_endings(&mut helper.later);
+        normalize_task_line_endings(&mut helper.calendar);
+        normalize_task_line_endings(&mut helper.someday);
+        normalize_task_line_endings(&mut helper.done);
+        normalize_task_line_endings(&mut helper.trash);
+        normalize_project_line_endings(&mut projects);
+        normalize_context_line_endings(&mut helper.contexts);
 
         // Set the status field for each task based on which collection it's in
         for task in &mut helper.inbox {
