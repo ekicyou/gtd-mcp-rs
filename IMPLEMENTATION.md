@@ -4,7 +4,7 @@
 
 This is a basic implementation of a GTD (Getting Things Done) MCP (Model Context Protocol) server in Rust. The server provides task and project management capabilities through MCP tools.
 
-**Version 0.3.2 - Cross-Platform Compatible**
+**Version 0.4.0 - Cross-Platform Compatible**
 
 This version uses `mcp-attr` v0.0.7 for declarative server building:
 
@@ -45,25 +45,64 @@ This version uses `mcp-attr` v0.0.7 for declarative server building:
 
 The server exposes the following tools:
 
-### add_task
+### Task Management
+
+#### add_task
 Adds a new task to the inbox.
 
 **Parameters:**
 - `title` (required): Task title
-- `project` (optional): Project ID
-- `context` (optional): Context ID
+- `project` (optional): Project ID (must exist if specified)
+- `context` (optional): Context name (must exist if specified)
 - `notes` (optional): Additional notes
 - `start_date` (optional): Start date in YYYY-MM-DD format for GTD tickler file workflow
 
-### list_tasks
+**Automatic Fields:**
+- `created_at` (date): Automatically set to current local date when task is created
+- `updated_at` (date): Automatically set to current local date when task is created or modified
+
+**Referential Integrity:** If a project or context is specified, the server validates that it exists before creating the task.
+
+#### list_tasks
 Lists all tasks with optional status filtering.
 
 **Parameters:**
-- `status` (optional): Filter by status (inbox, next_action, waiting_for, someday, done, trash)
+- `status` (optional): Filter by status (inbox, next_action, waiting_for, someday, later, done, trash, calendar)
+- `date` (optional): Filter by date in YYYY-MM-DD format. Tasks with start_date in the future (later than the specified date) are excluded.
+- `exclude_notes` (optional): Set to `true` to exclude notes from output and reduce token usage. Default is `false`.
+
+**Output Format:** Each task is displayed with:
+- Task ID
+- Task title
+- Status
+- Start date (if set)
+- Project reference (if set)
+- Context reference (if set)
+- Notes (if set and not excluded)
+- Creation date
+- Last update date
+
+#### update_task
+Updates an existing task. All parameters are optional except the task_id. Only provided fields will be updated.
+
+**Parameters:**
+- `task_id` (required): Task ID to update
+- `title` (optional): New task title
+- `project` (optional): New project ID (use empty string to remove)
+- `context` (optional): New context name (use empty string to remove)
+- `notes` (optional): New notes (use empty string to remove)
+- `start_date` (optional): New start date in YYYY-MM-DD format (use empty string to remove)
+
+**Automatic Updates:**
+- `updated_at` (date): Automatically updated to current local date when task is modified
+
+**Note:** 
+- Project and context references are validated to ensure referential integrity.
+- To change task status, use the specialized status movement methods instead of this method.
 
 ### Status Movement Methods
 
-All status movement methods support batch operations (moving multiple tasks at once).
+All status movement methods support batch operations (moving multiple tasks at once) and automatically update the `updated_at` timestamp.
 
 #### trash_tasks
 Moves one or more tasks to trash.
@@ -71,69 +110,186 @@ Moves one or more tasks to trash.
 **Parameters:**
 - `task_ids` (required): Array of task IDs to move to trash
 
-#### inbox_tasks, next_action_tasks, waiting_for_tasks, someday_tasks, later_tasks, done_tasks
-Move one or more tasks to the specified status.
+**Example:**
+```json
+{
+  "task_ids": ["#1", "#3", "#5"]
+}
+```
+
+#### inbox_tasks
+Move one or more tasks to inbox.
 
 **Parameters:**
-- `task_ids` (required): Array of task IDs to move
+- `task_ids` (required): Array of task IDs to move to inbox
+
+#### next_action_tasks
+Move one or more tasks to next action.
+
+**Parameters:**
+- `task_ids` (required): Array of task IDs to move to next action
+
+#### waiting_for_tasks
+Move one or more tasks to waiting for.
+
+**Parameters:**
+- `task_ids` (required): Array of task IDs to move to waiting for
+
+#### someday_tasks
+Move one or more tasks to someday/maybe.
+
+**Parameters:**
+- `task_ids` (required): Array of task IDs to move to someday
+
+#### later_tasks
+Move one or more tasks to later (deferred but not someday).
+
+**Parameters:**
+- `task_ids` (required): Array of task IDs to move to later
+
+#### done_tasks
+Move one or more tasks to done.
+
+**Parameters:**
+- `task_ids` (required): Array of task IDs to move to done
 
 #### calendar_tasks
 Move one or more tasks to calendar (GTD tickler file).
 
 **Parameters:**
 - `task_ids` (required): Array of task IDs to move
-- `start_date` (optional): Start date in YYYY-MM-DD format
+- `start_date` (optional): Start date in YYYY-MM-DD format. If provided, all tasks will have their start_date set to this value. If not provided, each task must already have a `start_date`.
+
+**Validation:**
+- Each task must have a `start_date` to be moved to calendar status
+- If a task doesn't have a `start_date` and you don't provide one, that task will fail to move (but others may succeed)
+- If you provide a `start_date`, it will be applied to all tasks
+
+**Example (setting new start date for all tasks):**
+```json
+{
+  "task_ids": ["#1", "#2"],
+  "start_date": "2024-12-25"
+}
+```
+
+**Example (using existing start dates):**
+```json
+{
+  "task_ids": ["#1", "#2"]
+}
+```
 
 ### empty_trash
 Permanently deletes all trashed tasks.
 
 **Parameters:** None
 
-### add_project
+### Project Management
+
+#### add_project
 Creates a new project.
 
 **Parameters:**
 - `name` (required): Project name
 - `description` (optional): Project description
+- `context` (optional): Context name (must exist if specified)
 
-### list_projects
-Lists all projects.
+**Referential Integrity:** If a context is specified, the server validates that it exists before creating the project.
+
+#### list_projects
+Lists all projects with their status, description, and context information.
 
 **Parameters:** None
 
-### update_project
-Updates an existing project.
+**Output Format:** Each project is displayed with:
+- Project ID
+- Project name
+- Status (active, on_hold, completed)
+- Description (if set)
+- Context (if set)
+
+#### update_project
+Updates an existing project. All parameters are optional except the project_id. Only provided fields will be updated.
 
 **Parameters:**
 - `project_id` (required): Project ID to update
 - `name` (optional): New project name
 - `description` (optional): New description (empty string to remove)
 - `status` (optional): New status (active, on_hold, completed)
+- `context` (optional): New context name (empty string to remove)
 
-### add_context
+**Note:** Context references are validated to ensure referential integrity.
+
+### Context Management
+
+#### add_context
 Creates a new context.
 
 **Parameters:**
 - `name` (required): Context name
 - `description` (optional): Context description
 
-### list_contexts
+#### list_contexts
 Lists all contexts alphabetically.
 
 **Parameters:** None
 
-### update_context
+#### update_context
 Updates an existing context's description.
 
 **Parameters:**
 - `name` (required): Context name
 - `description` (optional): New description (empty string to remove)
 
-### delete_context
+#### delete_context
 Deletes a context from the system.
 
 **Parameters:**
 - `name` (required): Context name to delete
+
+## MCP Prompts
+
+The server provides several prompts to guide LLMs in using the GTD system effectively:
+
+### gtd_overview
+Comprehensive overview of the GTD system, including:
+- Core concepts (task statuses, projects, contexts)
+- Task ID format (#1, #2, project-1, project-2)
+- Common workflows (Capture, Process, Review, Do)
+- Available tools summary
+
+### process_inbox
+Step-by-step guide for processing inbox items following GTD methodology:
+- Is it actionable? (no → someday/trash)
+- Less than 2 minutes? (yes → do it now)
+- Can you do it yourself? (no → waiting_for)
+- Specific date? (yes → calendar)
+- Should this be done later? (yes → later)
+- Part of project? (assign project)
+- Add context and move to next_action
+
+Goal: Process inbox to zero with every item clarified and organized.
+
+### weekly_review
+Complete GTD weekly review process:
+- **Get Clear**: Process inbox, empty your head
+- **Get Current**: Review calendar, next actions, waiting for, later, someday tasks
+- **Review Projects**: Ensure each has next action, update status
+- **Get Creative**: Brainstorm new possibilities
+
+### next_actions
+Guide for identifying and managing next actions:
+- Characteristics of good next actions (specific, physical, doable, single-step)
+- Context-based work (@office, @computer, @phone, @home, @errands)
+- Choosing what to do (consider context, time, energy, priority)
+- Post-completion steps
+
+### add_task_guide
+Best practices for creating well-formed tasks:
+- Good vs. poor task title examples
+- When to use optional fields (project, context, notes, start_date)
+- Recommended workflow (quick capture → process → add details)
 
 ## Data Storage Format
 
@@ -168,6 +324,29 @@ description = "Work environment with desk and computer"
 task_counter = 2
 project_counter = 1
 ```
+
+### Line Ending Handling
+
+The server handles line endings in a cross-platform friendly manner:
+
+- **Serialization (saving to file)**: TOML files are written with OS-native line endings
+  - Windows: CRLF (`\r\n`)
+  - Linux/macOS: LF (`\n`)
+  - This ensures files are readable in standard text editors on each platform
+
+- **Deserialization (loading from file)**: Line endings are normalized to LF (`\n`) internally
+  - All line ending styles (CRLF, CR, LF) are accepted when reading files
+  - This ensures consistent behavior across platforms
+  - Allows files created on different platforms to be read correctly
+
+- **MCP Communication**: JSON-RPC protocol uses LF (`\n`) for newlines in string fields
+  - Task notes and other multi-line fields use `\n` in MCP tool calls
+  - The server automatically handles conversion to/from OS-native format
+
+This design ensures that:
+- Files are readable and Git-friendly on all platforms
+- Cross-platform collaboration works seamlessly
+- Multi-line content (like task notes) is handled consistently
 
 ## Building
 
