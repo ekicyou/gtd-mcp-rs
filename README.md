@@ -24,19 +24,37 @@ gtd-mcp is an MCP server that implements the Getting Things Done (GTD) workflow.
 
 ### Installation
 
-Build from source:
+Install from crates.io:
+```bash
+cargo install gtd-mcp
+```
+
+Or build from source:
 ```bash
 git clone https://github.com/ekicyou/gtd-mcp-rs.git
 cd gtd-mcp-rs
 cargo build --release
 ```
 
-The binary will be at `target/release/gtd-mcp`.
+The binary will be at `target/release/gtd-mcp` (source build) or `~/.cargo/bin/gtd-mcp` (cargo install).
 
 ### Configuration
 
 Add to your MCP client configuration (e.g., Claude Desktop's `claude_desktop_config.json`):
 
+If installed via `cargo install`:
+```json
+{
+  "mcpServers": {
+    "gtd": {
+      "command": "gtd-mcp",
+      "args": ["gtd.toml"]
+    }
+  }
+}
+```
+
+If built from source:
 ```json
 {
   "mcpServers": {
@@ -53,7 +71,7 @@ With Git synchronization:
 {
   "mcpServers": {
     "gtd": {
-      "command": "/path/to/gtd-mcp",
+      "command": "gtd-mcp",
       "args": ["gtd.toml", "--sync-git"]
     }
   }
