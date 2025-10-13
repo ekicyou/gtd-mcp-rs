@@ -194,8 +194,13 @@ Creates a new project.
 - `name` (required): Project name
 - `description` (optional): Project description
 - `context` (optional): Context name (must exist if specified)
+- `id` (optional): Custom project ID (auto-generated if not specified)
 
-**Referential Integrity:** If a context is specified, the server validates that it exists before creating the project.
+**Referential Integrity:** 
+- If a context is specified, the server validates that it exists before creating the project.
+- If a custom ID is specified, the server validates that it doesn't already exist.
+
+**Auto-generated IDs:** If no custom ID is provided, the server generates sequential IDs in the format `project-1`, `project-2`, etc.
 
 #### list_projects
 Lists all projects with their status, description, and context information.
@@ -214,12 +219,16 @@ Updates an existing project. All parameters are optional except the project_id. 
 
 **Parameters:**
 - `project_id` (required): Project ID to update
+- `id` (optional): New project ID
 - `name` (optional): New project name
 - `description` (optional): New description (empty string to remove)
 - `status` (optional): New status (active, on_hold, completed)
 - `context` (optional): New context name (empty string to remove)
 
-**Note:** Context references are validated to ensure referential integrity.
+**Note:** 
+- Context references are validated to ensure referential integrity.
+- If a new project ID is specified, the server validates that it doesn't conflict with existing projects.
+- When a project ID is changed, all task references to the old project ID are automatically updated to the new ID.
 
 ### Context Management
 

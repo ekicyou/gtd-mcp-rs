@@ -1066,11 +1066,25 @@ impl McpServer for GtdServerHandler {
         description: Option<String>,
         /// Optional context name (must exist if specified)
         context: Option<String>,
+        /// Optional custom project ID (auto-generated if not specified)
+        id: Option<String>,
     ) -> McpResult<String> {
         let mut data = self.data.lock().unwrap();
 
+        // Determine project ID: use provided or generate
+        let project_id = if let Some(custom_id) = id {
+            // Validate that custom ID doesn't already exist
+            if data.find_project_by_id(&custom_id).is_some() {
+                drop(data);
+                bail!("Project ID already exists: {}", custom_id);
+            }
+            custom_id
+        } else {
+            data.generate_project_id()
+        };
+
         let project = Project {
-            id: data.generate_project_id(),
+            id: project_id.clone(),
             name: name.clone(),
             description,
             status: ProjectStatus::active,
@@ -1083,7 +1097,6 @@ impl McpServer for GtdServerHandler {
             bail!("Invalid context reference: context does not exist");
         }
 
-        let project_id = project.id.clone();
         data.add_project(project);
         drop(data);
 
@@ -1224,6 +1237,8 @@ impl McpServer for GtdServerHandler {
         &self,
         /// Project ID to update
         project_id: String,
+        /// Optional new project ID
+        id: Option<String>,
         /// Optional new name
         name: Option<String>,
         /// Optional new description (use empty string to remove)
@@ -1235,13 +1250,29 @@ impl McpServer for GtdServerHandler {
     ) -> McpResult<String> {
         let mut data = self.data.lock().unwrap();
 
-        // Find the project
-        let project = match data.find_project_by_id_mut(&project_id) {
-            Some(p) => p,
-            None => {
-                drop(data);
-                bail!("Project not found: {}", project_id);
-            }
+        // Validate project exists
+        if data.find_project_by_id(&project_id).is_none() {
+            drop(data);
+            bail!("Project not found: {}", project_id);
+        }
+
+        // Validate new ID if provided
+        if let Some(ref new_id) = id
+            && new_id != &project_id && data.find_project_by_id(new_id).is_some()
+        {
+            drop(data);
+            bail!("Project ID already exists: {}", new_id);
+        }
+
+        // Now get mutable reference to the project
+        let project = data.find_project_by_id_mut(&project_id).unwrap();
+
+        // Determine the final project ID
+        let new_project_id = if let Some(new_id) = id {
+            project.id = new_id.clone();
+            new_id
+        } else {
+            project_id.clone()
         };
 
         // Update name if provided
@@ -1289,13 +1320,18 @@ impl McpServer for GtdServerHandler {
             bail!("Invalid context reference: context does not exist");
         }
 
+        // Update task references if project ID changed
+        if project_id != new_project_id {
+            data.update_project_id_in_tasks(&project_id, &new_project_id);
+        }
+
         drop(data);
 
-        if let Err(e) = self.save_data_with_message(&format!("Update project {}", project_id)) {
+        if let Err(e) = self.save_data_with_message(&format!("Update project {}", new_project_id)) {
             bail!("Failed to save: {}", e);
         }
 
-        Ok(format!("Project {} updated successfully", project_id))
+        Ok(format!("Project {} updated successfully", new_project_id))
     }
 
     /// Add a new context
@@ -1790,7 +1826,7 @@ mod tests {
 
         // Add a project and context first
         let project_result = handler
-            .add_project("Test Project".to_string(), None, None)
+            .add_project("Test Project".to_string(), None, None, None)
             .await;
         assert!(project_result.is_ok());
         let project_id = project_result
@@ -2050,7 +2086,7 @@ mod tests {
 
         // Add a project
         let result = handler
-            .add_project("Original Name".to_string(), None, None)
+            .add_project("Original Name".to_string(), None, None, None)
             .await;
         assert!(result.is_ok());
         let project_id = result
@@ -2064,6 +2100,7 @@ mod tests {
         let result = handler
             .update_project(
                 project_id.clone(),
+                None,
                 Some("Updated Name".to_string()),
                 None,
                 None,
@@ -2084,7 +2121,7 @@ mod tests {
 
         // Add a project
         let result = handler
-            .add_project("Test Project".to_string(), None, None)
+            .add_project("Test Project".to_string(), None, None, None)
             .await;
         assert!(result.is_ok());
         let project_id = result
@@ -2098,6 +2135,7 @@ mod tests {
         let result = handler
             .update_project(
                 project_id.clone(),
+                None,
                 None,
                 Some("New description".to_string()),
                 None,
@@ -2115,7 +2153,14 @@ mod tests {
 
         // Remove description
         let result = handler
-            .update_project(project_id.clone(), None, Some("".to_string()), None, None)
+            .update_project(
+                project_id.clone(),
+                None,
+                None,
+                Some("".to_string()),
+                None,
+                None,
+            )
             .await;
         assert!(result.is_ok());
 
@@ -2131,7 +2176,7 @@ mod tests {
 
         // Add a project
         let result = handler
-            .add_project("Test Project".to_string(), None, None)
+            .add_project("Test Project".to_string(), None, None, None)
             .await;
         assert!(result.is_ok());
         let project_id = result
@@ -2154,6 +2199,7 @@ mod tests {
                 project_id.clone(),
                 None,
                 None,
+                None,
                 Some("on_hold".to_string()),
                 None,
             )
@@ -2171,6 +2217,7 @@ mod tests {
         let result = handler
             .update_project(
                 project_id.clone(),
+                None,
                 None,
                 None,
                 Some("completed".to_string()),
@@ -2191,7 +2238,7 @@ mod tests {
 
         // Add a project
         let result = handler
-            .add_project("Test Project".to_string(), None, None)
+            .add_project("Test Project".to_string(), None, None, None)
             .await;
         assert!(result.is_ok());
         let project_id = result
@@ -2205,6 +2252,7 @@ mod tests {
         let result = handler
             .update_project(
                 project_id,
+                None,
                 None,
                 None,
                 Some("invalid_status".to_string()),
@@ -2222,6 +2270,7 @@ mod tests {
         let result = handler
             .update_project(
                 "non-existent-id".to_string(),
+                None,
                 Some("New Name".to_string()),
                 None,
                 None,
@@ -2237,7 +2286,7 @@ mod tests {
 
         // Add a project
         let project_result = handler
-            .add_project("Test Project".to_string(), None, None)
+            .add_project("Test Project".to_string(), None, None, None)
             .await;
         assert!(project_result.is_ok());
         let project_id = project_result
@@ -3087,6 +3136,7 @@ mod tests {
                 "Office Project".to_string(),
                 Some("Project description".to_string()),
                 Some("Office".to_string()),
+                None,
             )
             .await;
         assert!(result.is_ok());
@@ -3108,6 +3158,7 @@ mod tests {
                 "Test Project".to_string(),
                 None,
                 Some("NonExistent".to_string()),
+                None,
             )
             .await;
         assert!(result.is_err());
@@ -3124,7 +3175,7 @@ mod tests {
 
         // Add a project without context
         let result = handler
-            .add_project("Test Project".to_string(), None, None)
+            .add_project("Test Project".to_string(), None, None, None)
             .await;
         assert!(result.is_ok());
         let project_id = result
@@ -3138,6 +3189,7 @@ mod tests {
         let result = handler
             .update_project(
                 project_id.clone(),
+                None,
                 None,
                 None,
                 None,
@@ -3163,7 +3215,12 @@ mod tests {
 
         // Add a project with context
         let result = handler
-            .add_project("Test Project".to_string(), None, Some("Office".to_string()))
+            .add_project(
+                "Test Project".to_string(),
+                None,
+                Some("Office".to_string()),
+                None,
+            )
             .await;
         assert!(result.is_ok());
         let project_id = result
@@ -3175,7 +3232,14 @@ mod tests {
 
         // Remove context using empty string
         let result = handler
-            .update_project(project_id.clone(), None, None, None, Some("".to_string()))
+            .update_project(
+                project_id.clone(),
+                None,
+                None,
+                None,
+                None,
+                Some("".to_string()),
+            )
             .await;
         assert!(result.is_ok());
 
@@ -3191,7 +3255,7 @@ mod tests {
 
         // Add a project
         let result = handler
-            .add_project("Test Project".to_string(), None, None)
+            .add_project("Test Project".to_string(), None, None, None)
             .await;
         assert!(result.is_ok());
         let project_id = result
@@ -3208,10 +3272,200 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
                 Some("NonExistent".to_string()),
             )
             .await;
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_add_project_with_custom_id() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Add a project with custom ID
+        let result = handler
+            .add_project(
+                "Custom ID Project".to_string(),
+                Some("Project with custom ID".to_string()),
+                None,
+                Some("my-custom-id".to_string()),
+            )
+            .await;
+        assert!(result.is_ok());
+        assert!(result.unwrap().contains("my-custom-id"));
+
+        // Verify project was created with custom ID
+        let data = handler.data.lock().unwrap();
+        let project = data.find_project_by_id("my-custom-id").unwrap();
+        assert_eq!(project.id, "my-custom-id");
+        assert_eq!(project.name, "Custom ID Project");
+    }
+
+    #[tokio::test]
+    async fn test_add_project_with_duplicate_id() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Add first project with custom ID
+        let result = handler
+            .add_project(
+                "First Project".to_string(),
+                None,
+                None,
+                Some("duplicate-id".to_string()),
+            )
+            .await;
+        assert!(result.is_ok());
+
+        // Try to add second project with same ID
+        let result = handler
+            .add_project(
+                "Second Project".to_string(),
+                None,
+                None,
+                Some("duplicate-id".to_string()),
+            )
+            .await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_update_project_id() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Add a project
+        let result = handler
+            .add_project("Test Project".to_string(), None, None, None)
+            .await;
+        assert!(result.is_ok());
+        let project_id = result
+            .unwrap()
+            .split_whitespace()
+            .last()
+            .unwrap()
+            .to_string();
+
+        // Update project ID
+        let result = handler
+            .update_project(
+                project_id.clone(),
+                Some("new-project-id".to_string()),
+                None,
+                None,
+                None,
+                None,
+            )
+            .await;
+        assert!(result.is_ok());
+
+        // Verify old ID doesn't exist and new ID does
+        let data = handler.data.lock().unwrap();
+        assert!(data.find_project_by_id(&project_id).is_none());
+        let project = data.find_project_by_id("new-project-id").unwrap();
+        assert_eq!(project.id, "new-project-id");
+        assert_eq!(project.name, "Test Project");
+    }
+
+    #[tokio::test]
+    async fn test_update_project_id_duplicate() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Add two projects
+        let result1 = handler
+            .add_project("Project 1".to_string(), None, None, None)
+            .await;
+        assert!(result1.is_ok());
+        let project1_id = result1
+            .unwrap()
+            .split_whitespace()
+            .last()
+            .unwrap()
+            .to_string();
+
+        let result2 = handler
+            .add_project("Project 2".to_string(), None, None, None)
+            .await;
+        assert!(result2.is_ok());
+        let project2_id = result2
+            .unwrap()
+            .split_whitespace()
+            .last()
+            .unwrap()
+            .to_string();
+
+        // Try to update project2's ID to project1's ID
+        let result = handler
+            .update_project(
+                project2_id,
+                Some(project1_id.clone()),
+                None,
+                None,
+                None,
+                None,
+            )
+            .await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_update_project_id_updates_task_references() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Add a project
+        let result = handler
+            .add_project("Test Project".to_string(), None, None, None)
+            .await;
+        assert!(result.is_ok());
+        let project_id = result
+            .unwrap()
+            .split_whitespace()
+            .last()
+            .unwrap()
+            .to_string();
+
+        // Add a task referencing the project
+        let result = handler
+            .add_task(
+                "Task in project".to_string(),
+                Some(project_id.clone()),
+                None,
+                None,
+                None,
+            )
+            .await;
+        assert!(result.is_ok());
+        let task_id = result
+            .unwrap()
+            .split_whitespace()
+            .last()
+            .unwrap()
+            .to_string();
+
+        // Verify task references the original project ID
+        {
+            let data = handler.data.lock().unwrap();
+            let task = data.find_task_by_id(&task_id).unwrap();
+            assert_eq!(task.project, Some(project_id.clone()));
+        }
+
+        // Update project ID
+        let new_project_id = "updated-project-id".to_string();
+        let result = handler
+            .update_project(
+                project_id.clone(),
+                Some(new_project_id.clone()),
+                None,
+                None,
+                None,
+                None,
+            )
+            .await;
+        assert!(result.is_ok());
+
+        // Verify task now references the new project ID
+        let data = handler.data.lock().unwrap();
+        let task = data.find_task_by_id(&task_id).unwrap();
+        assert_eq!(task.project, Some(new_project_id));
     }
 
     // ==================== Prompt Tests ====================

@@ -552,6 +552,26 @@ impl GtdData {
             Some(context_name) => self.find_context_by_name(context_name).is_some(),
         }
     }
+
+    /// Update project ID references in all tasks
+    ///
+    /// When a project ID changes, this method updates all task references
+    /// from the old ID to the new ID.
+    ///
+    /// # Arguments
+    /// * `old_id` - The old project ID
+    /// * `new_id` - The new project ID
+    pub fn update_project_id_in_tasks(&mut self, old_id: &str, new_id: &str) {
+        for task_list in self.all_task_lists_mut() {
+            for task in task_list.iter_mut() {
+                if let Some(ref project_id) = task.project
+                    && project_id == old_id
+                {
+                    task.project = Some(new_id.to_string());
+                }
+            }
+        }
+    }
 }
 
 #[cfg(test)]
