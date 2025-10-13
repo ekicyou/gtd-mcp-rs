@@ -34,7 +34,7 @@ fn to_native_line_endings(content: &str) -> String {
 /// - Converts to OS-native format on write (CRLF on Windows, LF on Unix)
 pub struct Storage {
     /// Path to the GTD data file
-    pub file_path: PathBuf,
+    file_path: PathBuf,
     /// Git operations handler
     git_ops: GitOps,
     /// Whether to enable Git synchronization
@@ -55,6 +55,14 @@ impl Storage {
             git_ops,
             sync_git,
         }
+    }
+
+    /// Get the path to the GTD data file
+    ///
+    /// # Returns
+    /// Reference to the file path
+    pub fn file_path(&self) -> &Path {
+        &self.file_path
     }
 
     /// Load GTD data from the storage file
@@ -160,7 +168,7 @@ mod tests {
     fn test_storage_new() {
         let test_path = get_test_path("test_gtd.toml");
         let storage = Storage::new(&test_path, false);
-        assert_eq!(storage.file_path, test_path);
+        assert_eq!(storage.file_path(), test_path);
     }
 
     // 存在しないファイルの読み込みテスト

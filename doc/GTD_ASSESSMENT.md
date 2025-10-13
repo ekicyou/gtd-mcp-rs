@@ -199,4 +199,4 @@ The gtd-mcp implementation provides a **solid foundation** for LLM-assisted GTD 
 
 **Document Version**: 1.2  
 **Last Updated**: 2025-10-13  
-**Implementation Version**: 0.5.0  
+**Implementation Version**: 0.5.2  

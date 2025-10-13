@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/ekicyou/gtd-mcp-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/ekicyou/gtd-mcp-rs/actions/workflows/ci.yml)
 
-**Version 0.5.0 - Cross-Platform Compatible**
+**Version 0.5.2 - Cross-Platform Compatible**
 
 A Model Context Protocol (MCP) server for GTD (Getting Things Done) task management. This server enables LLM assistants like Claude to help you manage your tasks and projects using the proven GTD methodology.
 
