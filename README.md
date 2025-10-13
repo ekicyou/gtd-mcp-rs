@@ -207,10 +207,10 @@ git remote add origin https://github.com/yourusername/gtd-data.git
 
 ## Documentation
 
-- **[IMPLEMENTATION.md](IMPLEMENTATION.md)** - Technical implementation details and architecture
-- **[GTD_ASSESSMENT.md](GTD_ASSESSMENT.md)** - Feature assessment and enhancement roadmap
-- **[RELEASE_0.5.0.md](RELEASE_0.5.0.md)** - Version 0.5.0 release notes and breaking changes
-- **[RELEASE_0.4.0.md](RELEASE_0.4.0.md)** - Version 0.4.0 release notes and breaking changes
+- **[IMPLEMENTATION.md](doc/IMPLEMENTATION.md)** - Technical implementation details and architecture
+- **[GTD_ASSESSMENT.md](doc/GTD_ASSESSMENT.md)** - Feature assessment and enhancement roadmap
+- **[RELEASE_0.5.0.md](doc/RELEASE_0.5.0.md)** - Version 0.5.0 release notes and breaking changes
+- **[RELEASE_0.4.0.md](doc/RELEASE_0.4.0.md)** - Version 0.4.0 release notes and breaking changes
 
 ## Development
 
