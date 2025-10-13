@@ -13,6 +13,7 @@ A Model Context Protocol (MCP) server for GTD (Getting Things Done) task managem
 - ✅ **Cross-Platform**: Works on Windows, Linux, and macOS
 - ✅ **LLM-Friendly IDs**: Uses GitHub-style IDs (`#1`, `#2` for tasks, `project-1`, `project-2` for projects) for optimal readability and LLM interaction
 - ✅ **MCP Prompts**: Built-in workflow guidance (GTD overview, inbox processing, weekly review, next actions, task creation best practices)
+- ✅ **Batch Operations**: All status movement methods support moving multiple tasks at once
 - Task management (inbox, next actions, waiting for, someday/maybe, later, done, trash, calendar)
 - **Task and Project Updates**: Modify existing tasks and projects with full field update support
 - **Trash management**: Move tasks to trash and bulk delete
@@ -275,127 +276,127 @@ Update an existing task. All parameters are optional except the task_id. Only pr
 
 ### Status Movement Methods
 
-These methods provide explicit, intuitive ways to move tasks between different status states. All methods automatically update the `updated_at` timestamp.
+These methods provide explicit, intuitive ways to move tasks between different status states. All methods support batch operations (moving multiple tasks at once) and automatically update the `updated_at` timestamp. Provide task IDs as an array.
 
-#### inbox_task
-Move a task to inbox.
+#### inbox_tasks
+Move one or more tasks to inbox.
 
 **Parameters:**
-- `task_id` (string, required): Task ID to move to inbox
+- `task_ids` (array of strings, required): Task IDs to move to inbox
 
 **Example:**
 ```json
 {
-  "task_id": "#1"
+  "task_ids": ["#1", "#2", "#3"]
 }
 ```
 
-#### next_action_task
-Move a task to next action.
+#### next_action_tasks
+Move one or more tasks to next action.
 
 **Parameters:**
-- `task_id` (string, required): Task ID to move to next action
+- `task_ids` (array of strings, required): Task IDs to move to next action
 
 **Example:**
 ```json
 {
-  "task_id": "#1"
+  "task_ids": ["#1", "#2"]
 }
 ```
 
-#### waiting_for_task
-Move a task to waiting for.
+#### waiting_for_tasks
+Move one or more tasks to waiting for.
 
 **Parameters:**
-- `task_id` (string, required): Task ID to move to waiting for
+- `task_ids` (array of strings, required): Task IDs to move to waiting for
 
 **Example:**
 ```json
 {
-  "task_id": "#1"
+  "task_ids": ["#1"]
 }
 ```
 
-#### someday_task
-Move a task to someday.
+#### someday_tasks
+Move one or more tasks to someday.
 
 **Parameters:**
-- `task_id` (string, required): Task ID to move to someday
+- `task_ids` (array of strings, required): Task IDs to move to someday
 
 **Example:**
 ```json
 {
-  "task_id": "#1"
+  "task_ids": ["#5", "#7"]
 }
 ```
 
-#### later_task
-Move a task to later (deferred but not someday).
+#### later_tasks
+Move one or more tasks to later (deferred but not someday).
 
 **Parameters:**
-- `task_id` (string, required): Task ID to move to later
+- `task_ids` (array of strings, required): Task IDs to move to later
 
 **Example:**
 ```json
 {
-  "task_id": "#1"
+  "task_ids": ["#3"]
 }
 ```
 
-#### done_task
-Move a task to done.
+#### done_tasks
+Move one or more tasks to done.
 
 **Parameters:**
-- `task_id` (string, required): Task ID to move to done
+- `task_ids` (array of strings, required): Task IDs to move to done
 
 **Example:**
 ```json
 {
-  "task_id": "#1"
+  "task_ids": ["#1", "#2", "#4"]
 }
 ```
 
-#### calendar_task
-Move a task to calendar (GTD tickler file concept).
+#### calendar_tasks
+Move one or more tasks to calendar (GTD tickler file concept).
 
-In GTD, moving a task to the calendar means you're deferring it until a specific date - you "forget about it" until that date arrives. This tool requires that the task has a `start_date` set.
+In GTD, moving a task to the calendar means you're deferring it until a specific date - you "forget about it" until that date arrives. This tool requires that each task has a `start_date` set.
 
 **Parameters:**
-- `task_id` (string, required): Task ID to move to calendar
-- `start_date` (string, optional): Start date in YYYY-MM-DD format. If not provided, the task must already have a `start_date` set.
+- `task_ids` (array of strings, required): Task IDs to move to calendar
+- `start_date` (string, optional): Start date in YYYY-MM-DD format. If provided, all tasks will have their start_date set to this value. If not provided, each task must already have a `start_date`.
 
 **Validation:**
-- A task must have a `start_date` to be moved to calendar status
-- If the task doesn't have a `start_date` and you don't provide one, an error will be returned
-- If both the task has a `start_date` and you provide a new one, the new date will override the existing one
+- Each task must have a `start_date` to be moved to calendar status
+- If a task doesn't have a `start_date` and you don't provide one, that task will fail to move (but others may succeed)
+- If you provide a `start_date`, it will be applied to all tasks
 
-**Example (setting new start date):**
+**Example (setting new start date for all tasks):**
 ```json
 {
-  "task_id": "#1",
+  "task_ids": ["#1", "#2"],
   "start_date": "2024-12-25"
 }
 ```
 
-**Example (using existing start date):**
+**Example (using existing start dates):**
 ```json
 {
-  "task_id": "#1"
+  "task_ids": ["#1", "#2"]
 }
 ```
 
 **Note:** The calendar status represents tasks that are scheduled to start on a specific date. Setting `start_date` on a task doesn't automatically move it to calendar - you must explicitly use this tool. However, when a task has calendar status, it must have a valid `start_date`.
 
-### trash_task
-Move a task to trash.
+### trash_tasks
+Move one or more tasks to trash.
 
 **Parameters:**
-- `task_id` (string, required): Task ID to move to trash
+- `task_ids` (array of strings, required): Task IDs to move to trash
 
 **Example:**
 ```json
 {
-  "task_id": "#1"
+  "task_ids": ["#1", "#3", "#5"]
 }
 ```
 
