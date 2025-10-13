@@ -1410,7 +1410,7 @@ Projects use: project-1, project-2, project-3
 ## Key Tools
 
 - Task Management: add_task, update_task, list_tasks, delete_task
-- Status Movement: inbox_task, next_action_task, waiting_for_task, someday_task, later_task, calendar_task, done_task, trash_task
+- Status Movement: inbox_tasks, next_action_tasks, waiting_for_tasks, someday_tasks, later_tasks, calendar_tasks, done_tasks, trash_tasks
 - Projects: add_project, list_projects, update_project, delete_project
 - Contexts: add_context, list_contexts, update_context, delete_context
 
@@ -1428,23 +1428,23 @@ Use prompts like `process_inbox`, `weekly_review`, or `next_actions` for workflo
 
 2. **For each task, ask:**
    - Is it actionable?
-     - NO → Move to `someday_task` or `trash_task`
+     - NO → Move to `someday_tasks` or `trash_tasks`
      - YES → Continue to step 3
 
 3. **Will it take less than 2 minutes?**
-   - YES → Do it now, then `done_task`
+   - YES → Do it now, then `done_tasks`
    - NO → Continue to step 4
 
 4. **Can I do it myself?**
-   - NO → Use `waiting_for_task` and add notes about who/what you're waiting for
+   - NO → Use `waiting_for_tasks` and add notes about who/what you're waiting for
    - YES → Continue to step 5
 
 5. **Is there a specific date?**
-   - YES → Use `calendar_task` with start_date parameter
+   - YES → Use `calendar_tasks` with start_date parameter
    - NO → Continue to step 6
 
 6. **Should this be done later (deferred)?**
-   - YES → Use `later_task` for tasks deferred to a later time
+   - YES → Use `later_tasks` for tasks deferred to a later time
    - NO → Continue to step 7
 
 7. **Is it part of a larger project?**
@@ -1455,7 +1455,7 @@ Use prompts like `process_inbox`, `weekly_review`, or `next_actions` for workflo
    - Use `update_task` to set context
 
 9. **Move to next actions**
-   - Use `next_action_task`
+   - Use `next_action_tasks`
 
 ## Goal
 
@@ -1482,7 +1482,7 @@ The weekly review keeps your system current and complete.
      - Move completed calendar items to done
    
    - Review `next_action` tasks: `list_tasks` status "next_action"
-     - Mark completed ones as `done_task`
+     - Mark completed ones as `done_tasks`
      - Update stale tasks with `update_task`
      - Identify tasks that should move to waiting/someday/later
 
@@ -1553,7 +1553,7 @@ List next actions with `list_tasks` status "next_action"
 ## After Completion
 
 When done:
-- Use `done_task` to mark complete
+- Use `done_tasks` to mark complete
 - If it was part of a project, check if project needs a new next action"#
             .to_string())
     }
@@ -1587,10 +1587,11 @@ When done:
 - @office, @home, @computer, @phone, @errands
 - Helps filter when in specific contexts
 
-**notes**: Additional details
+**notes**: Additional details (Markdown format recommended)
 - Background information
 - URLs, reference numbers
 - Why this matters
+- Use Markdown for formatting: **bold**, *italic*, lists, links, etc.
 
 **start_date**: For calendar tasks only (YYYY-MM-DD)
 - Events with specific dates
