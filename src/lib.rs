@@ -1714,7 +1714,7 @@ mod tests {
         let handler = GtdServerHandler::new(custom_path, false).unwrap();
 
         // ストレージのファイルパスが正しく設定されていることを確認
-        assert_eq!(handler.storage.file_path.to_str().unwrap(), custom_path);
+        assert_eq!(handler.storage.file_path().to_str().unwrap(), custom_path);
 
         // データの保存と読み込みが正しく動作することを確認
         let mut data = handler.data.lock().unwrap();
