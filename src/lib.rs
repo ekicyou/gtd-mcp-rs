@@ -1111,7 +1111,7 @@ impl McpServer for GtdServerHandler {
     #[tool]
     async fn list_projects(&self) -> McpResult<String> {
         let data = self.data.lock().unwrap();
-        let projects: Vec<&Project> = data.projects.iter().collect();
+        let projects: Vec<&Project> = data.projects.values().collect();
 
         let mut result = String::new();
         for project in projects {
@@ -1265,16 +1265,23 @@ impl McpServer for GtdServerHandler {
             bail!("Project ID already exists: {}", new_id);
         }
 
-        // Now get mutable reference to the project
-        let project = data.find_project_by_id_mut(&project_id).unwrap();
+        // If ID is changing, we need to remove from old key and insert with new key
+        let new_project_id = id.clone().unwrap_or_else(|| project_id.clone());
+        let id_changed = new_project_id != project_id;
 
-        // Determine the final project ID
-        let new_project_id = if let Some(new_id) = id {
-            project.id = new_id.clone();
-            new_id
+        // Get the project and update fields
+        let mut project = if id_changed {
+            // Remove from old key
+            data.projects.remove(&project_id).unwrap()
         } else {
-            project_id.clone()
+            // Just get mutable reference
+            data.find_project_by_id_mut(&project_id).unwrap().clone()
         };
+
+        // Update ID if changed
+        if id_changed {
+            project.id = new_project_id.clone();
+        }
 
         // Update name if provided
         if let Some(new_name) = name {
@@ -1312,18 +1319,22 @@ impl McpServer for GtdServerHandler {
             };
         }
 
-        // Clone project for validation
-        let project_clone = project.clone();
-
         // Validate context reference
-        if !data.validate_project_context(&project_clone) {
+        if !data.validate_project_context(&project) {
             drop(data);
             bail!("Invalid context reference: context does not exist");
         }
 
         // Update task references if project ID changed
-        if project_id != new_project_id {
+        if id_changed {
             data.update_project_id_in_tasks(&project_id, &new_project_id);
+        }
+
+        // Insert project back (either with new key if ID changed, or update existing)
+        if id_changed {
+            data.projects.insert(new_project_id.clone(), project);
+        } else {
+            *data.find_project_by_id_mut(&project_id).unwrap() = project;
         }
 
         drop(data);
@@ -3144,7 +3155,7 @@ mod tests {
 
         // Verify project has context
         let data = handler.data.lock().unwrap();
-        let project = data.projects.first().unwrap();
+        let project = data.projects.values().next().unwrap();
         assert_eq!(project.context, Some("Office".to_string()));
         assert_eq!(project.name, "Office Project");
     }

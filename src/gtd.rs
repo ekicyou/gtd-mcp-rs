@@ -72,6 +72,8 @@ pub enum TaskStatus {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Project {
     /// Unique project identifier (e.g., "project-1", "project-2")
+    /// Not serialized to TOML (used as HashMap key)
+    #[serde(skip_serializing, default)]
     pub id: String,
     /// Project name
     pub name: String,
@@ -120,8 +122,18 @@ pub struct Context {
 /// efficient serialization to TOML with a clear, human-readable structure.
 ///
 /// The data is designed to be serialized to/from TOML format for persistent storage.
-#[derive(Debug, Serialize, Default)]
+///
+/// ## Format Versions
+///
+/// - Version 1 (default for old files): Projects stored as `Vec<Project>` (TOML: `[[projects]]`)
+/// - Version 2 (current): Projects stored as `HashMap<String, Project>` (TOML: `[projects.id]`)
+///
+/// The deserializer automatically migrates from version 1 to version 2 on load.
+#[derive(Debug, Serialize)]
 pub struct GtdData {
+    /// Format version for the TOML file (current: 2)
+    #[serde(default = "default_format_version")]
+    pub format_version: u32,
     /// Tasks in the inbox (not yet processed)
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub inbox: Vec<Task>,
@@ -146,8 +158,8 @@ pub struct GtdData {
     /// Deleted tasks
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub trash: Vec<Task>,
-    /// All projects
-    pub projects: Vec<Project>,
+    /// All projects (keyed by ID)
+    pub projects: HashMap<String, Project>,
     /// All contexts (keyed by name)
     pub contexts: HashMap<String, Context>,
     /// Counter for generating unique task IDs
@@ -156,6 +168,32 @@ pub struct GtdData {
     /// Counter for generating unique project IDs
     #[serde(default, skip_serializing_if = "is_zero")]
     pub project_counter: u32,
+}
+
+impl Default for GtdData {
+    fn default() -> Self {
+        Self {
+            format_version: 2,
+            inbox: Vec::new(),
+            next_action: Vec::new(),
+            waiting_for: Vec::new(),
+            later: Vec::new(),
+            calendar: Vec::new(),
+            someday: Vec::new(),
+            done: Vec::new(),
+            trash: Vec::new(),
+            projects: HashMap::new(),
+            contexts: HashMap::new(),
+            task_counter: 0,
+            project_counter: 0,
+        }
+    }
+}
+
+/// Default format version for new files
+#[allow(dead_code)] // Used by serde
+fn default_format_version() -> u32 {
+    2
 }
 
 /// Check if a counter value is zero (used for skipping serialization)
@@ -177,7 +215,17 @@ impl<'de> Deserialize<'de> for GtdData {
         D: Deserializer<'de>,
     {
         #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum ProjectsFormat {
+            Map(HashMap<String, Project>),
+            Vec(Vec<Project>),
+        }
+
+        #[derive(Deserialize)]
         struct GtdDataHelper {
+            #[serde(default)]
+            #[allow(dead_code)] // Used for format detection
+            format_version: u32,
             #[serde(default)]
             inbox: Vec<Task>,
             #[serde(default)]
@@ -195,7 +243,7 @@ impl<'de> Deserialize<'de> for GtdData {
             #[serde(default)]
             trash: Vec<Task>,
             #[serde(default)]
-            projects: Vec<Project>,
+            projects: Option<ProjectsFormat>,
             #[serde(default)]
             contexts: HashMap<String, Context>,
             #[serde(default)]
@@ -206,9 +254,28 @@ impl<'de> Deserialize<'de> for GtdData {
 
         let mut helper = GtdDataHelper::deserialize(deserializer)?;
 
+        // Convert projects to HashMap based on format
+        let projects = match helper.projects {
+            Some(ProjectsFormat::Map(map)) => map,
+            Some(ProjectsFormat::Vec(vec)) => {
+                let mut map = HashMap::new();
+                for project in vec {
+                    map.insert(project.id.clone(), project);
+                }
+                map
+            }
+            None => HashMap::new(),
+        };
+
         // Populate the name field in each Context from the HashMap key
         for (key, context) in helper.contexts.iter_mut() {
             context.name = key.clone();
+        }
+
+        // Populate the id field in each Project from the HashMap key
+        let mut projects = projects;
+        for (key, project) in projects.iter_mut() {
+            project.id = key.clone();
         }
 
         // Normalize line endings in all string fields that might contain newlines
@@ -229,7 +296,7 @@ impl<'de> Deserialize<'de> for GtdData {
             }
         }
 
-        for project in &mut helper.projects {
+        for project in projects.values_mut() {
             if let Some(description) = &project.description {
                 project.description = Some(normalize_string_line_endings(description));
             }
@@ -268,6 +335,7 @@ impl<'de> Deserialize<'de> for GtdData {
         }
 
         Ok(GtdData {
+            format_version: 2, // Always use version 2 for in-memory representation
             inbox: helper.inbox,
             next_action: helper.next_action,
             waiting_for: helper.waiting_for,
@@ -276,7 +344,7 @@ impl<'de> Deserialize<'de> for GtdData {
             someday: helper.someday,
             done: helper.done,
             trash: helper.trash,
-            projects: helper.projects,
+            projects,
             contexts: helper.contexts,
             task_counter: helper.task_counter,
             project_counter: helper.project_counter,
@@ -476,7 +544,7 @@ impl GtdData {
     /// An optional reference to the project if found
     #[allow(dead_code)]
     pub fn find_project_by_id(&self, id: &str) -> Option<&Project> {
-        self.projects.iter().find(|p| p.id == id)
+        self.projects.get(id)
     }
 
     /// Find a project by its ID and return a mutable reference
@@ -488,15 +556,15 @@ impl GtdData {
     /// An optional mutable reference to the project if found
     #[allow(dead_code)]
     pub fn find_project_by_id_mut(&mut self, id: &str) -> Option<&mut Project> {
-        self.projects.iter_mut().find(|p| p.id == id)
+        self.projects.get_mut(id)
     }
 
-    /// Add a project to the projects list
+    /// Add a project to the projects map
     ///
     /// # Arguments
-    /// * `project` - The project to add
+    /// * `project` - The project to add (will be keyed by its ID)
     pub fn add_project(&mut self, project: Project) {
-        self.projects.push(project);
+        self.projects.insert(project.id.clone(), project);
     }
 
     /// Find a context by its name
@@ -1216,9 +1284,11 @@ mod tests {
     }
 
     // プロジェクトのシリアライゼーションテスト
-    // プロジェクトをTOML形式にシリアライズし、デシリアライズして元のデータと一致することを確認
+    // プロジェクトをGtdData経由でTOML形式にシリアライズし、デシリアライズして元のデータと一致することを確認
+    // プロジェクトは現在HashMapとして保存されるため、GtdData全体でのテストが必要
     #[test]
     fn test_project_serialization() {
+        let mut data = GtdData::new();
         let project = Project {
             id: "project-1".to_string(),
             name: "Test Project".to_string(),
@@ -1227,12 +1297,16 @@ mod tests {
             context: None,
         };
 
-        let serialized = toml::to_string(&project).unwrap();
-        let deserialized: Project = toml::from_str(&serialized).unwrap();
+        data.add_project(project.clone());
 
-        assert_eq!(project.id, deserialized.id);
-        assert_eq!(project.name, deserialized.name);
-        assert_eq!(project.description, deserialized.description);
+        let serialized = toml::to_string(&data).unwrap();
+        let deserialized: GtdData = toml::from_str(&serialized).unwrap();
+
+        let deserialized_project = deserialized.projects.get("project-1").unwrap();
+        assert_eq!(project.id, deserialized_project.id);
+        assert_eq!(project.name, deserialized_project.name);
+        assert_eq!(project.description, deserialized_project.description);
+        assert_eq!(project.status, deserialized_project.status);
     }
 
     // コンテキストのシリアライゼーションテスト
@@ -1557,16 +1631,16 @@ mod tests {
         let toml_str = toml::to_string(&data).unwrap();
         let deserialized: GtdData = toml::from_str(&toml_str).unwrap();
 
-        // Verify deserialized data maintains insertion order
+        // Verify deserialized data maintains insertion order for tasks
         assert_eq!(deserialized.inbox.len(), 3);
         for (i, task) in deserialized.inbox.iter().enumerate() {
             assert_eq!(task.id, format!("task-{}", i + 1));
         }
 
+        // Verify all projects are present (HashMap doesn't guarantee order)
         assert_eq!(deserialized.projects.len(), 2);
-        for (i, project) in deserialized.projects.iter().enumerate() {
-            assert_eq!(project.id, format!("project-{}", i + 1));
-        }
+        assert!(deserialized.projects.contains_key("project-1"));
+        assert!(deserialized.projects.contains_key("project-2"));
     }
 
     // 完全なTOML出力テスト（全フィールド設定）
@@ -1627,7 +1701,9 @@ mod tests {
         );
 
         // 期待されるTOML構造（テキスト完全一致）
-        let expected_toml = r#"[[inbox]]
+        let expected_toml = r#"format_version = 2
+
+[[inbox]]
 id = "task-002"
 title = "Quick task"
 created_at = "2024-01-01"
@@ -1643,8 +1719,7 @@ start_date = "2024-03-15"
 created_at = "2024-01-01"
 updated_at = "2024-01-01"
 
-[[projects]]
-id = "project-001"
+[projects.project-001]
 name = "Documentation Project"
 description = "Comprehensive project documentation update"
 status = "active"
@@ -1685,7 +1760,7 @@ description = "Work environment with desk and computer"
 
         // プロジェクトフィールドを検証
         assert_eq!(deserialized.projects.len(), 1);
-        let project1 = &deserialized.projects[0];
+        let project1 = deserialized.projects.get("project-001").unwrap();
         assert_eq!(project1.id, "project-001");
         assert_eq!(project1.name, "Documentation Project");
         assert_eq!(
@@ -2320,10 +2395,73 @@ status = "active"
         let data: GtdData = toml::from_str(toml_str).unwrap();
         assert_eq!(data.projects.len(), 1);
 
-        let project = &data.projects[0];
+        let project = data.projects.get("project-1").unwrap();
         assert_eq!(project.id, "project-1");
         assert_eq!(project.name, "Old Project");
         assert_eq!(project.context, None);
+    }
+
+    // フォーマットバージョン1からバージョン2への自動マイグレーションテスト
+    // 旧形式（Vec<Project>）のTOMLを読み込み、新形式（HashMap）に自動変換されることを確認
+    #[test]
+    fn test_format_migration_v1_to_v2() {
+        // Format version 1: projects as array ([[projects]])
+        let old_format_toml = r#"
+[[projects]]
+id = "project-1"
+name = "First Project"
+description = "Original format"
+status = "active"
+
+[[projects]]
+id = "project-2"
+name = "Second Project"
+status = "on_hold"
+
+[[inbox]]
+id = "task-1"
+title = "Test task"
+project = "project-1"
+created_at = "2024-01-01"
+updated_at = "2024-01-01"
+"#;
+
+        // Load old format
+        let data: GtdData = toml::from_str(old_format_toml).unwrap();
+
+        // Verify it's automatically migrated to version 2
+        assert_eq!(data.format_version, 2);
+        assert_eq!(data.projects.len(), 2);
+
+        // Verify projects are in HashMap
+        let project1 = data.projects.get("project-1").unwrap();
+        assert_eq!(project1.id, "project-1");
+        assert_eq!(project1.name, "First Project");
+        assert_eq!(project1.description, Some("Original format".to_string()));
+
+        let project2 = data.projects.get("project-2").unwrap();
+        assert_eq!(project2.id, "project-2");
+        assert_eq!(project2.name, "Second Project");
+
+        // Verify task references still work
+        assert_eq!(data.inbox.len(), 1);
+        assert_eq!(data.inbox[0].project, Some("project-1".to_string()));
+
+        // Save to new format
+        let new_format_toml = toml::to_string_pretty(&data).unwrap();
+
+        // Verify new format has HashMap syntax
+        assert!(new_format_toml.contains("format_version = 2"));
+        assert!(new_format_toml.contains("[projects.project-1]"));
+        assert!(new_format_toml.contains("[projects.project-2]"));
+        assert!(!new_format_toml.contains("[[projects]]"));
+
+        // Verify round-trip works
+        let reloaded: GtdData = toml::from_str(&new_format_toml).unwrap();
+        assert_eq!(reloaded.format_version, 2);
+        assert_eq!(reloaded.projects.len(), 2);
+        assert!(reloaded.projects.contains_key("project-1"));
+        assert!(reloaded.projects.contains_key("project-2"));
     }
 
     // タスクステータスの順序がTOMLシリアライズに反映されることを確認

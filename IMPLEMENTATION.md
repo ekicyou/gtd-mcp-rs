@@ -28,6 +28,7 @@ This version uses `mcp-attr` v0.0.7 for declarative server building:
    - Saves data to `gtd.toml` file
    - Git-friendly format for version control
    - Integrates with git operations for automatic synchronization
+   - **Format Versioning**: Automatic migration from old formats
 
 3. **Git Operations** (`src/git_ops.rs`)
    - Automatic git repository detection
@@ -40,6 +41,27 @@ This version uses `mcp-attr` v0.0.7 for declarative server building:
    - Implements `McpServer` trait using `#[mcp_server]` macro
    - Provides stdio transport for MCP communication
    - Uses `#[tool]` attributes for tool registration
+
+### TOML Format Versions
+
+The server uses a format version system to enable backwards-compatible changes to the data structure:
+
+- **Version 1** (Legacy): Projects stored as array `[[projects]]`
+  ```toml
+  [[projects]]
+  id = "project-1"
+  name = "My Project"
+  ```
+
+- **Version 2** (Current): Projects stored as HashMap `[projects.id]`
+  ```toml
+  format_version = 2
+  
+  [projects.project-1]
+  name = "My Project"
+  ```
+
+**Automatic Migration**: When loading a version 1 file, the server automatically migrates it to version 2 format. On the next save, the file will be written in version 2 format. This ensures backwards compatibility while allowing the data structure to evolve.
 
 ## MCP Tools
 
