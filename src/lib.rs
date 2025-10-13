@@ -1258,7 +1258,8 @@ impl McpServer for GtdServerHandler {
 
         // Validate new ID if provided
         if let Some(ref new_id) = id
-            && new_id != &project_id && data.find_project_by_id(new_id).is_some()
+            && new_id != &project_id
+            && data.find_project_by_id(new_id).is_some()
         {
             drop(data);
             bail!("Project ID already exists: {}", new_id);
