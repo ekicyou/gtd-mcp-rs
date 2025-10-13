@@ -26,13 +26,27 @@ fn to_native_line_endings(content: &str) -> String {
     normalize_line_endings(content)
 }
 
+/// Storage handler for GTD data persistence
+///
+/// Handles reading and writing GTD data to TOML files with optional Git synchronization.
+/// Automatically manages line endings for cross-platform compatibility:
+/// - Normalizes to LF on read for consistent parsing
+/// - Converts to OS-native format on write (CRLF on Windows, LF on Unix)
 pub struct Storage {
+    /// Path to the GTD data file
     pub file_path: PathBuf,
+    /// Git operations handler
     git_ops: GitOps,
+    /// Whether to enable Git synchronization
     sync_git: bool,
 }
 
 impl Storage {
+    /// Create a new Storage instance
+    ///
+    /// # Arguments
+    /// * `file_path` - Path to the GTD data file
+    /// * `sync_git` - Whether to enable automatic Git synchronization
     pub fn new(file_path: impl AsRef<Path>, sync_git: bool) -> Self {
         let file_path = file_path.as_ref().to_path_buf();
         let git_ops = GitOps::new(&file_path);
@@ -43,6 +57,13 @@ impl Storage {
         }
     }
 
+    /// Load GTD data from the storage file
+    ///
+    /// If Git sync is enabled, pulls changes from remote before loading.
+    /// Returns an empty GtdData instance if the file doesn't exist.
+    ///
+    /// # Returns
+    /// Result containing the loaded GtdData or an error
     pub fn load(&self) -> Result<GtdData> {
         // Pull from git before loading if sync is enabled
         if self.sync_git && self.git_ops.is_git_managed() {
@@ -60,11 +81,30 @@ impl Storage {
         Ok(data)
     }
 
+    /// Save GTD data to the storage file with a default commit message
+    ///
+    /// # Arguments
+    /// * `data` - The GtdData to save
+    ///
+    /// # Returns
+    /// Result indicating success or an error
     #[allow(dead_code)]
     pub fn save(&self, data: &GtdData) -> Result<()> {
         self.save_with_message(data, "Update GTD data")
     }
 
+    /// Save GTD data to the storage file with a custom commit message
+    ///
+    /// Serializes the data to TOML format with OS-native line endings.
+    /// If Git sync is enabled and the file is in a Git repository,
+    /// automatically commits and syncs changes.
+    ///
+    /// # Arguments
+    /// * `data` - The GtdData to save
+    /// * `commit_message` - Git commit message to use
+    ///
+    /// # Returns
+    /// Result indicating success or an error
     pub fn save_with_message(&self, data: &GtdData, commit_message: &str) -> Result<()> {
         let content = toml::to_string_pretty(data)?;
 
@@ -87,7 +127,13 @@ impl Storage {
         Ok(())
     }
 
-    /// Push changes to git on shutdown
+    /// Push changes to Git on shutdown
+    ///
+    /// Called when the server is shutting down to ensure all local commits
+    /// are pushed to the remote repository.
+    ///
+    /// # Returns
+    /// Result indicating success or an error
     pub fn shutdown(&self) -> Result<()> {
         if self.sync_git && self.git_ops.is_git_managed() {
             self.git_ops.push()?;
