@@ -4,12 +4,23 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 /// Git operations handler for automatic version control
+///
+/// Handles Git operations like commit, pull, and push for automatic versioning
+/// of GTD data files. Detects if a file is in a Git repository and provides
+/// operations to synchronize changes with a remote repository.
 pub struct GitOps {
+    /// Optional Git repository (None if file is not in a Git repository)
     repo_path: Option<Arc<Mutex<Repository>>>,
 }
 
 impl GitOps {
-    /// Create a new GitOps instance by detecting if the path is in a git repository
+    /// Create a new GitOps instance by detecting if the path is in a Git repository
+    ///
+    /// # Arguments
+    /// * `file_path` - Path to the file to check for Git management
+    ///
+    /// # Returns
+    /// A new GitOps instance
     pub fn new(file_path: &Path) -> Self {
         // Always use the parent directory for discovery, whether the file exists or not
         let file_dir = if file_path.is_file() {
@@ -23,17 +34,32 @@ impl GitOps {
         Self { repo_path }
     }
 
-    /// Check if the file is under git version control
+    /// Check if the file is under Git version control
+    ///
+    /// # Returns
+    /// `true` if the file is in a Git repository, `false` otherwise
     pub fn is_git_managed(&self) -> bool {
         self.repo_path.is_some()
     }
 
-    /// Find the git repository containing the given path
+    /// Find the Git repository containing the given path
+    ///
+    /// # Arguments
+    /// * `dir` - Directory to search for a Git repository
+    ///
+    /// # Returns
+    /// Optional Repository if found
     fn find_repository(dir: &Path) -> Option<Repository> {
         Repository::discover(dir).ok()
     }
 
     /// Pull changes from remote repository
+    ///
+    /// Fetches changes from the origin remote and performs a fast-forward merge
+    /// if possible. Returns an error if a normal merge is required.
+    ///
+    /// # Returns
+    /// Result indicating success or an error
     pub fn pull(&self) -> Result<()> {
         let repo = match &self.repo_path {
             Some(r) => r.lock().unwrap(),
@@ -87,6 +113,15 @@ impl GitOps {
     }
 
     /// Commit changes to the repository
+    ///
+    /// Stages the specified file and creates a commit with the given message.
+    ///
+    /// # Arguments
+    /// * `file_path` - Path to the file to commit
+    /// * `message` - Commit message
+    ///
+    /// # Returns
+    /// Result indicating success or an error
     pub fn commit(&self, file_path: &Path, message: &str) -> Result<()> {
         let repo = match &self.repo_path {
             Some(r) => r.lock().unwrap(),
@@ -145,6 +180,11 @@ impl GitOps {
     }
 
     /// Push changes to remote repository
+    ///
+    /// Pushes the current branch to the origin remote.
+    ///
+    /// # Returns
+    /// Result indicating success or an error
     pub fn push(&self) -> Result<()> {
         let repo = match &self.repo_path {
             Some(r) => r.lock().unwrap(),
@@ -170,7 +210,16 @@ impl GitOps {
         Ok(())
     }
 
-    /// Get or create a git signature for commits
+    /// Get or create a Git signature for commits
+    ///
+    /// Uses the configured user.name and user.email from Git config,
+    /// or falls back to default values if not configured.
+    ///
+    /// # Arguments
+    /// * `repo` - The Git repository
+    ///
+    /// # Returns
+    /// Result containing a Signature or an error
     fn get_signature(repo: &Repository) -> Result<Signature<'_>> {
         // Try to use the configured user name and email
         let config = repo.config()?;
@@ -195,7 +244,17 @@ impl GitOps {
         }
     }
 
-    /// Perform full git sync: pull, commit, and push
+    /// Perform full Git synchronization: pull, commit, and push
+    ///
+    /// This is the main sync operation that ensures the file is up to date,
+    /// commits changes, and pushes them to the remote repository.
+    ///
+    /// # Arguments
+    /// * `file_path` - Path to the file to commit
+    /// * `commit_message` - Commit message to use
+    ///
+    /// # Returns
+    /// Result indicating success or an error
     pub fn sync(&self, file_path: &Path, commit_message: &str) -> Result<()> {
         if !self.is_git_managed() {
             return Ok(());

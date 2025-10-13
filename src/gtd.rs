@@ -2,20 +2,35 @@ use chrono::{Local, NaiveDate};
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::HashMap;
 
+/// A GTD (Getting Things Done) task
+///
+/// Tasks represent individual actionable items in the GTD system.
+/// Each task has a unique ID, title, status (inbox, next_action, etc.),
+/// and optional metadata like project association, context, notes, and start date.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Task {
+    /// Unique task identifier (e.g., "#1", "#2")
     pub id: String,
+    /// Task title describing the action
     pub title: String,
+    /// Current status of the task (inbox, next_action, waiting_for, etc.)
     #[serde(skip, default = "default_task_status")]
     pub status: TaskStatus,
+    /// Optional project ID this task belongs to
     pub project: Option<String>,
+    /// Optional context where this task can be performed (e.g., "@office", "@home")
     pub context: Option<String>,
+    /// Optional additional notes in Markdown format
     pub notes: Option<String>,
+    /// Optional start date for the task (format: YYYY-MM-DD)
     pub start_date: Option<NaiveDate>,
+    /// Date when the task was created
     pub created_at: NaiveDate,
+    /// Date when the task was last updated
     pub updated_at: NaiveDate,
 }
 
+/// Default task status for deserialization
 fn default_task_status() -> TaskStatus {
     TaskStatus::inbox
 }
@@ -25,72 +40,125 @@ pub fn local_date_today() -> NaiveDate {
     Local::now().date_naive()
 }
 
+/// Task status in the GTD workflow
+///
+/// Represents the different states a task can be in according to GTD methodology.
+/// Uses snake_case naming to match TOML serialization format.
 #[allow(non_camel_case_types)]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TaskStatus {
+    /// Tasks that have not been processed yet
     inbox,
+    /// Tasks that are ready to be done immediately
     next_action,
+    /// Tasks waiting for someone else or an external event
     waiting_for,
+    /// Tasks to be done later (not immediately actionable)
     later,
+    /// Tasks scheduled for a specific date
     calendar,
+    /// Tasks that might be done someday but not now
     someday,
+    /// Completed tasks
     done,
+    /// Deleted or discarded tasks
     trash,
 }
 
+/// A GTD project
+///
+/// Projects represent multi-step outcomes that require more than one action.
+/// Each project has a unique ID, name, status, and optional description and context.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Project {
+    /// Unique project identifier (e.g., "project-1", "project-2")
     pub id: String,
+    /// Project name
     pub name: String,
+    /// Optional project description
     pub description: Option<String>,
+    /// Current status of the project
     pub status: ProjectStatus,
+    /// Optional context where this project can be worked on
     pub context: Option<String>,
 }
 
+/// Project status
+///
+/// Represents the current state of a project.
+/// Uses snake_case naming to match TOML serialization format.
 #[allow(non_camel_case_types)]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ProjectStatus {
+    /// Project is currently being worked on
     active,
+    /// Project is paused or waiting
     on_hold,
+    /// Project has been finished
     completed,
 }
 
-/// Context represents a GTD context (e.g., @office, @home)
+/// A GTD context
+///
+/// Contexts represent locations, tools, or situations where tasks can be performed
+/// (e.g., "@office", "@home", "@computer", "@phone", "@errands").
 /// The name field is maintained internally but not serialized to TOML
-/// to avoid redundancy with the HashMap key
+/// to avoid redundancy with the HashMap key in GtdData.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Context {
+    /// Context name (e.g., "Office", "Home") - not serialized to TOML
     #[serde(skip_serializing, default)]
     pub name: String,
+    /// Optional description of the context
     pub description: Option<String>,
 }
 
+/// The main GTD data structure
+///
+/// This struct holds all tasks organized by status, along with projects and contexts.
+/// Tasks are stored in separate vectors based on their status to facilitate
+/// efficient serialization to TOML with a clear, human-readable structure.
+/// 
+/// The data is designed to be serialized to/from TOML format for persistent storage.
 #[derive(Debug, Serialize, Default)]
 pub struct GtdData {
+    /// Tasks in the inbox (not yet processed)
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub inbox: Vec<Task>,
+    /// Tasks marked as next actions (ready to do)
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub next_action: Vec<Task>,
+    /// Tasks waiting for external input
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub waiting_for: Vec<Task>,
+    /// Tasks to be done later
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub later: Vec<Task>,
+    /// Tasks scheduled for specific dates
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub calendar: Vec<Task>,
+    /// Tasks that might be done someday
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub someday: Vec<Task>,
+    /// Completed tasks
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub done: Vec<Task>,
+    /// Deleted tasks
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub trash: Vec<Task>,
+    /// All projects
     pub projects: Vec<Project>,
+    /// All contexts (keyed by name)
     pub contexts: HashMap<String, Context>,
+    /// Counter for generating unique task IDs
     #[serde(default, skip_serializing_if = "is_zero")]
     pub task_counter: u32,
+    /// Counter for generating unique project IDs
     #[serde(default, skip_serializing_if = "is_zero")]
     pub project_counter: u32,
 }
 
+/// Check if a counter value is zero (used for skipping serialization)
 fn is_zero(n: &u32) -> bool {
     *n == 0
 }
@@ -217,6 +285,7 @@ impl<'de> Deserialize<'de> for GtdData {
 }
 
 impl GtdData {
+    /// Create a new empty GtdData instance
     pub fn new() -> Self {
         Self::default()
     }
@@ -313,7 +382,13 @@ impl GtdData {
             + self.calendar.len()
     }
 
-    // Helper methods for task operations
+    /// Find a task by its ID across all status containers
+    ///
+    /// # Arguments
+    /// * `id` - The task ID to search for (e.g., "#1")
+    ///
+    /// # Returns
+    /// An optional reference to the task if found
     #[allow(dead_code)]
     pub fn find_task_by_id(&self, id: &str) -> Option<&Task> {
         for list in self.all_task_lists() {
@@ -324,6 +399,13 @@ impl GtdData {
         None
     }
 
+    /// Find a task by its ID and return a mutable reference
+    ///
+    /// # Arguments
+    /// * `id` - The task ID to search for (e.g., "#1")
+    ///
+    /// # Returns
+    /// An optional mutable reference to the task if found
     pub fn find_task_by_id_mut(&mut self, id: &str) -> Option<&mut Task> {
         for list in self.all_task_lists_mut() {
             if let Some(task) = list.iter_mut().find(|t| t.id == id) {
@@ -333,11 +415,24 @@ impl GtdData {
         None
     }
 
+    /// Add a task to the appropriate status container
+    ///
+    /// The task will be added to the container matching its status field.
+    ///
+    /// # Arguments
+    /// * `task` - The task to add
     pub fn add_task(&mut self, task: Task) {
         let status = task.status.clone();
         self.get_task_list_mut(&status).push(task);
     }
 
+    /// Remove a task from its container and return it
+    ///
+    /// # Arguments
+    /// * `id` - The task ID to remove (e.g., "#1")
+    ///
+    /// # Returns
+    /// The removed task if found
     #[allow(dead_code)]
     pub fn remove_task(&mut self, id: &str) -> Option<Task> {
         for list in self.all_task_lists_mut() {
@@ -349,7 +444,16 @@ impl GtdData {
     }
 
     /// Move a task to a different status container
-    /// This method removes the task from its current container, updates its status, and adds it to the new container
+    ///
+    /// This method removes the task from its current container, updates its status,
+    /// and adds it to the new container.
+    ///
+    /// # Arguments
+    /// * `id` - The task ID to move (e.g., "#1")
+    /// * `new_status` - The target status
+    ///
+    /// # Returns
+    /// `Some(())` if the task was found and moved, `None` otherwise
     pub fn move_status(&mut self, id: &str, new_status: TaskStatus) -> Option<()> {
         // Remove task from its current container
         let mut task = self.remove_task(id)?;
@@ -363,27 +467,54 @@ impl GtdData {
         Some(())
     }
 
-    // Helper methods for project operations
+    /// Find a project by its ID
+    ///
+    /// # Arguments
+    /// * `id` - The project ID to search for (e.g., "project-1")
+    ///
+    /// # Returns
+    /// An optional reference to the project if found
     #[allow(dead_code)]
     pub fn find_project_by_id(&self, id: &str) -> Option<&Project> {
         self.projects.iter().find(|p| p.id == id)
     }
 
+    /// Find a project by its ID and return a mutable reference
+    ///
+    /// # Arguments
+    /// * `id` - The project ID to search for (e.g., "project-1")
+    ///
+    /// # Returns
+    /// An optional mutable reference to the project if found
     #[allow(dead_code)]
     pub fn find_project_by_id_mut(&mut self, id: &str) -> Option<&mut Project> {
         self.projects.iter_mut().find(|p| p.id == id)
     }
 
+    /// Add a project to the projects list
+    ///
+    /// # Arguments
+    /// * `project` - The project to add
     pub fn add_project(&mut self, project: Project) {
         self.projects.push(project);
     }
 
-    // Helper methods for context operations
+    /// Find a context by its name
+    ///
+    /// # Arguments
+    /// * `name` - The context name to search for (e.g., "Office")
+    ///
+    /// # Returns
+    /// An optional reference to the context if found
     #[allow(dead_code)]
     pub fn find_context_by_name(&self, name: &str) -> Option<&Context> {
         self.contexts.get(name)
     }
 
+    /// Add a context to the contexts map
+    ///
+    /// # Arguments
+    /// * `context` - The context to add (will be keyed by its name)
     #[allow(dead_code)]
     pub fn add_context(&mut self, context: Context) {
         self.contexts.insert(context.name.clone(), context);
