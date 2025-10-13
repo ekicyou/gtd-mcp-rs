@@ -32,18 +32,14 @@ mod storage;
 
 use anyhow::Result;
 use chrono::NaiveDate;
-use gtd::{GtdData, Project, ProjectStatus, Task, TaskStatus, local_date_today};
+use gtd::local_date_today;
 use mcp_attr::server::{McpServer, mcp_server};
 use mcp_attr::{Result as McpResult, bail};
 use std::sync::Mutex;
-use storage::Storage;
 
 // Re-export commonly used types
-pub use gtd::{
-    Context, GtdData as GtdDataExport, Project as ProjectExport,
-    ProjectStatus as ProjectStatusExport, Task as TaskExport, TaskStatus as TaskStatusExport,
-};
-pub use storage::Storage as StorageExport;
+pub use gtd::{Context, GtdData, Project, ProjectStatus, Task, TaskStatus};
+pub use storage::Storage;
 
 /// MCP Server handler for GTD task management
 ///
