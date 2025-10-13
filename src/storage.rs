@@ -5,7 +5,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 /// Normalize line endings to LF (\n) for internal use
-/// This ensures consistent behavior across platforms when deserializing
+/// This ensures consistent behavior when deserializing
 fn normalize_line_endings(content: &str) -> String {
     content.replace("\r\n", "\n").replace('\r', "\n")
 }
@@ -29,7 +29,7 @@ fn to_native_line_endings(content: &str) -> String {
 /// Storage handler for GTD data persistence
 ///
 /// Handles reading and writing GTD data to TOML files with optional Git synchronization.
-/// Automatically manages line endings for cross-platform compatibility:
+/// Automatically manages line endings:
 /// - Normalizes to LF on read for consistent parsing
 /// - Converts to OS-native format on write (CRLF on Windows, LF on Unix)
 pub struct Storage {
@@ -83,7 +83,7 @@ impl Storage {
         }
 
         let content = fs::read_to_string(&self.file_path)?;
-        // Normalize line endings to LF for consistent parsing across platforms
+        // Normalize line endings to LF for consistent parsing
         let normalized_content = normalize_line_endings(&content);
         let data: GtdData = toml::from_str(&normalized_content)?;
         Ok(data)
