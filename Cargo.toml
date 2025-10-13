@@ -8,6 +8,14 @@ repository = "https://github.com/ekicyou/gtd-mcp-rs"
 keywords = ["mcp", "gtd", "task-management", "productivity"]
 categories = ["command-line-utilities", "development-tools"]
 
+[lib]
+name = "gtd_mcp"
+path = "src/lib.rs"
+
+[[bin]]
+name = "gtd-mcp"
+path = "src/main.rs"
+
 [dependencies]
 mcp-attr = "~0.0.7"
 tokio = { version = "~1", features = ["full"] }

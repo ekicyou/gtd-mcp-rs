@@ -118,7 +118,7 @@ pub struct Context {
 /// This struct holds all tasks organized by status, along with projects and contexts.
 /// Tasks are stored in separate vectors based on their status to facilitate
 /// efficient serialization to TOML with a clear, human-readable structure.
-/// 
+///
 /// The data is designed to be serialized to/from TOML format for persistent storage.
 #[derive(Debug, Serialize, Default)]
 pub struct GtdData {
