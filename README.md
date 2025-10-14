@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/ekicyou/gtd-mcp-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/ekicyou/gtd-mcp-rs/actions/workflows/ci.yml)
 
-**Version 0.5.2 - Cross-Platform Compatible**
+**Version 0.5.3**
 
 A Model Context Protocol (MCP) server for GTD (Getting Things Done) task management. This server enables LLM assistants like Claude to help you manage your tasks and projects using the proven GTD methodology.
 
@@ -18,7 +18,6 @@ gtd-mcp is an MCP server that implements the Getting Things Done (GTD) workflow.
 - ✅ TOML-based storage (human-readable, Git-friendly)
 - ✅ Optional Git synchronization
 - ✅ Built-in workflow prompts for LLM guidance
-- ✅ Cross-platform (Windows, Linux, macOS)
 
 ## Quick Start
 

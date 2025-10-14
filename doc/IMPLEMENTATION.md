@@ -4,11 +4,10 @@
 
 This is a basic implementation of a GTD (Getting Things Done) MCP (Model Context Protocol) server in Rust. The server provides task and project management capabilities through MCP tools.
 
-**Version 0.5.2 - Cross-Platform Compatible**
+**Version 0.5.3**
 
 This version uses `mcp-attr` v0.0.7 for declarative server building:
 
-- ✅ Works on Windows, Linux, and macOS
 - ✅ Uses declarative server building with `#[mcp_server]` and `#[tool]` macros
 - ✅ Automatic JSON Schema generation from function signatures
 - ✅ Full MCP 2025-03-26 protocol support
@@ -358,7 +357,7 @@ project_counter = 1
 
 ### Line Ending Handling
 
-The server handles line endings in a cross-platform friendly manner:
+The server handles line endings consistently:
 
 - **Serialization (saving to file)**: TOML files are written with OS-native line endings
   - Windows: CRLF (`\r\n`)
@@ -367,16 +366,15 @@ The server handles line endings in a cross-platform friendly manner:
 
 - **Deserialization (loading from file)**: Line endings are normalized to LF (`\n`) internally
   - All line ending styles (CRLF, CR, LF) are accepted when reading files
-  - This ensures consistent behavior across platforms
-  - Allows files created on different platforms to be read correctly
+  - This ensures consistent behavior
+  - Allows files created with different line endings to be read correctly
 
 - **MCP Communication**: JSON-RPC protocol uses LF (`\n`) for newlines in string fields
   - Task notes and other multi-line fields use `\n` in MCP tool calls
   - The server automatically handles conversion to/from OS-native format
 
 This design ensures that:
-- Files are readable and Git-friendly on all platforms
-- Cross-platform collaboration works seamlessly
+- Files are readable and Git-friendly
 - Multi-line content (like task notes) is handled consistently
 
 ## Building
