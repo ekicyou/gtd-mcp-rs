@@ -90,6 +90,34 @@ impl GtdServerHandler {
         self.storage.save_with_message(&data, message)?;
         Ok(())
     }
+
+    /// Normalize task ID by ensuring it starts with '#'
+    ///
+    /// This helper function allows LLMs to omit the '#' prefix when specifying task IDs.
+    /// If the input is a plain number (e.g., "1", "2"), it prepends '#'.
+    /// If the input already starts with '#', it returns it unchanged.
+    ///
+    /// # Arguments
+    /// * `task_id` - The task ID to normalize (e.g., "1" or "#1")
+    ///
+    /// # Returns
+    /// The normalized task ID with '#' prefix (e.g., "#1")
+    ///
+    /// # Examples
+    /// ```
+    /// # use gtd_mcp::GtdServerHandler;
+    /// // normalize_task_id("1") -> "#1"
+    /// // normalize_task_id("#1") -> "#1"
+    /// // normalize_task_id("42") -> "#42"
+    /// ```
+    fn normalize_task_id(task_id: &str) -> String {
+        let trimmed = task_id.trim();
+        if trimmed.starts_with('#') {
+            trimmed.to_string()
+        } else {
+            format!("#{}", trimmed)
+        }
+    }
 }
 
 impl Drop for GtdServerHandler {
@@ -290,17 +318,17 @@ impl McpServer for GtdServerHandler {
 
         // Process each task ID
         for task_id in &task_ids {
-            let task_id = task_id.trim();
+            let task_id = Self::normalize_task_id(task_id.trim());
 
             // Check if task exists
-            if data.find_task_by_id(task_id).is_none() {
+            if data.find_task_by_id(&task_id).is_none() {
                 eprintln!("Error: Task not found: {}", task_id);
                 failed.push((task_id.to_string(), "Task not found".to_string()));
                 continue;
             }
 
             let original_status = data
-                .find_task_by_id(task_id)
+                .find_task_by_id(&task_id)
                 .map(|t| format!("{:?}", t.status));
             eprintln!(
                 "Moving task {} from {:?} to trash",
@@ -308,9 +336,9 @@ impl McpServer for GtdServerHandler {
             );
 
             // Move task to trash
-            if data.move_status(task_id, TaskStatus::trash).is_some() {
+            if data.move_status(&task_id, TaskStatus::trash).is_some() {
                 // Update the timestamp after the move
-                if let Some(task) = data.find_task_by_id_mut(task_id) {
+                if let Some(task) = data.find_task_by_id_mut(&task_id) {
                     task.updated_at = local_date_today();
                 }
                 successful.push(task_id.to_string());
@@ -382,17 +410,17 @@ impl McpServer for GtdServerHandler {
 
         // Process each task ID
         for task_id in &task_ids {
-            let task_id = task_id.trim();
+            let task_id = Self::normalize_task_id(task_id.trim());
 
             // Check if task exists
-            if data.find_task_by_id(task_id).is_none() {
+            if data.find_task_by_id(&task_id).is_none() {
                 eprintln!("Error: Task not found: {}", task_id);
                 failed.push((task_id.to_string(), "Task not found".to_string()));
                 continue;
             }
 
             let original_status = data
-                .find_task_by_id(task_id)
+                .find_task_by_id(&task_id)
                 .map(|t| format!("{:?}", t.status));
             eprintln!(
                 "Moving task {} from {:?} to inbox",
@@ -400,9 +428,9 @@ impl McpServer for GtdServerHandler {
             );
 
             // Move task to inbox
-            if data.move_status(task_id, TaskStatus::inbox).is_some() {
+            if data.move_status(&task_id, TaskStatus::inbox).is_some() {
                 // Update the timestamp after the move
-                if let Some(task) = data.find_task_by_id_mut(task_id) {
+                if let Some(task) = data.find_task_by_id_mut(&task_id) {
                     task.updated_at = local_date_today();
                 }
                 successful.push(task_id.to_string());
@@ -474,17 +502,17 @@ impl McpServer for GtdServerHandler {
 
         // Process each task ID
         for task_id in &task_ids {
-            let task_id = task_id.trim();
+            let task_id = Self::normalize_task_id(task_id.trim());
 
             // Check if task exists
-            if data.find_task_by_id(task_id).is_none() {
+            if data.find_task_by_id(&task_id).is_none() {
                 eprintln!("Error: Task not found: {}", task_id);
                 failed.push((task_id.to_string(), "Task not found".to_string()));
                 continue;
             }
 
             let original_status = data
-                .find_task_by_id(task_id)
+                .find_task_by_id(&task_id)
                 .map(|t| format!("{:?}", t.status));
             eprintln!(
                 "Moving task {} from {:?} to next_action",
@@ -492,9 +520,12 @@ impl McpServer for GtdServerHandler {
             );
 
             // Move task to next_action
-            if data.move_status(task_id, TaskStatus::next_action).is_some() {
+            if data
+                .move_status(&task_id, TaskStatus::next_action)
+                .is_some()
+            {
                 // Update the timestamp after the move
-                if let Some(task) = data.find_task_by_id_mut(task_id) {
+                if let Some(task) = data.find_task_by_id_mut(&task_id) {
                     task.updated_at = local_date_today();
                 }
                 successful.push(task_id.to_string());
@@ -566,17 +597,17 @@ impl McpServer for GtdServerHandler {
 
         // Process each task ID
         for task_id in &task_ids {
-            let task_id = task_id.trim();
+            let task_id = Self::normalize_task_id(task_id.trim());
 
             // Check if task exists
-            if data.find_task_by_id(task_id).is_none() {
+            if data.find_task_by_id(&task_id).is_none() {
                 eprintln!("Error: Task not found: {}", task_id);
                 failed.push((task_id.to_string(), "Task not found".to_string()));
                 continue;
             }
 
             let original_status = data
-                .find_task_by_id(task_id)
+                .find_task_by_id(&task_id)
                 .map(|t| format!("{:?}", t.status));
             eprintln!(
                 "Moving task {} from {:?} to waiting_for",
@@ -584,9 +615,12 @@ impl McpServer for GtdServerHandler {
             );
 
             // Move task to waiting_for
-            if data.move_status(task_id, TaskStatus::waiting_for).is_some() {
+            if data
+                .move_status(&task_id, TaskStatus::waiting_for)
+                .is_some()
+            {
                 // Update the timestamp after the move
-                if let Some(task) = data.find_task_by_id_mut(task_id) {
+                if let Some(task) = data.find_task_by_id_mut(&task_id) {
                     task.updated_at = local_date_today();
                 }
                 successful.push(task_id.to_string());
@@ -658,17 +692,17 @@ impl McpServer for GtdServerHandler {
 
         // Process each task ID
         for task_id in &task_ids {
-            let task_id = task_id.trim();
+            let task_id = Self::normalize_task_id(task_id.trim());
 
             // Check if task exists
-            if data.find_task_by_id(task_id).is_none() {
+            if data.find_task_by_id(&task_id).is_none() {
                 eprintln!("Error: Task not found: {}", task_id);
                 failed.push((task_id.to_string(), "Task not found".to_string()));
                 continue;
             }
 
             let original_status = data
-                .find_task_by_id(task_id)
+                .find_task_by_id(&task_id)
                 .map(|t| format!("{:?}", t.status));
             eprintln!(
                 "Moving task {} from {:?} to someday",
@@ -676,9 +710,9 @@ impl McpServer for GtdServerHandler {
             );
 
             // Move task to someday
-            if data.move_status(task_id, TaskStatus::someday).is_some() {
+            if data.move_status(&task_id, TaskStatus::someday).is_some() {
                 // Update the timestamp after the move
-                if let Some(task) = data.find_task_by_id_mut(task_id) {
+                if let Some(task) = data.find_task_by_id_mut(&task_id) {
                     task.updated_at = local_date_today();
                 }
                 successful.push(task_id.to_string());
@@ -750,17 +784,17 @@ impl McpServer for GtdServerHandler {
 
         // Process each task ID
         for task_id in &task_ids {
-            let task_id = task_id.trim();
+            let task_id = Self::normalize_task_id(task_id.trim());
 
             // Check if task exists
-            if data.find_task_by_id(task_id).is_none() {
+            if data.find_task_by_id(&task_id).is_none() {
                 eprintln!("Error: Task not found: {}", task_id);
                 failed.push((task_id.to_string(), "Task not found".to_string()));
                 continue;
             }
 
             let original_status = data
-                .find_task_by_id(task_id)
+                .find_task_by_id(&task_id)
                 .map(|t| format!("{:?}", t.status));
             eprintln!(
                 "Moving task {} from {:?} to later",
@@ -768,9 +802,9 @@ impl McpServer for GtdServerHandler {
             );
 
             // Move task to later
-            if data.move_status(task_id, TaskStatus::later).is_some() {
+            if data.move_status(&task_id, TaskStatus::later).is_some() {
                 // Update the timestamp after the move
-                if let Some(task) = data.find_task_by_id_mut(task_id) {
+                if let Some(task) = data.find_task_by_id_mut(&task_id) {
                     task.updated_at = local_date_today();
                 }
                 successful.push(task_id.to_string());
@@ -842,24 +876,24 @@ impl McpServer for GtdServerHandler {
 
         // Process each task ID
         for task_id in &task_ids {
-            let task_id = task_id.trim();
+            let task_id = Self::normalize_task_id(task_id.trim());
 
             // Check if task exists
-            if data.find_task_by_id(task_id).is_none() {
+            if data.find_task_by_id(&task_id).is_none() {
                 eprintln!("Error: Task not found: {}", task_id);
                 failed.push((task_id.to_string(), "Task not found".to_string()));
                 continue;
             }
 
             let original_status = data
-                .find_task_by_id(task_id)
+                .find_task_by_id(&task_id)
                 .map(|t| format!("{:?}", t.status));
             eprintln!("Moving task {} from {:?} to done", task_id, original_status);
 
             // Move task to done
-            if data.move_status(task_id, TaskStatus::done).is_some() {
+            if data.move_status(&task_id, TaskStatus::done).is_some() {
                 // Update the timestamp after the move
-                if let Some(task) = data.find_task_by_id_mut(task_id) {
+                if let Some(task) = data.find_task_by_id_mut(&task_id) {
                     task.updated_at = local_date_today();
                 }
                 successful.push(task_id.to_string());
@@ -942,17 +976,17 @@ impl McpServer for GtdServerHandler {
 
         // Process each task ID
         for task_id in &task_ids {
-            let task_id = task_id.trim();
+            let task_id = Self::normalize_task_id(task_id.trim());
 
             // Check if task exists
-            if data.find_task_by_id(task_id).is_none() {
+            if data.find_task_by_id(&task_id).is_none() {
                 eprintln!("Error: Task not found: {}", task_id);
                 failed.push((task_id.to_string(), "Task not found".to_string()));
                 continue;
             }
 
             // Check if task will have a start_date after the operation
-            let current_start_date = data.find_task_by_id(task_id).unwrap().start_date;
+            let current_start_date = data.find_task_by_id(&task_id).unwrap().start_date;
             let final_start_date = parsed_start_date.or(current_start_date);
 
             if final_start_date.is_none() {
@@ -965,7 +999,7 @@ impl McpServer for GtdServerHandler {
             }
 
             let original_status = data
-                .find_task_by_id(task_id)
+                .find_task_by_id(&task_id)
                 .map(|t| format!("{:?}", t.status));
             eprintln!(
                 "Moving task {} from {:?} to calendar",
@@ -973,9 +1007,9 @@ impl McpServer for GtdServerHandler {
             );
 
             // Move task to calendar
-            if data.move_status(task_id, TaskStatus::calendar).is_some() {
+            if data.move_status(&task_id, TaskStatus::calendar).is_some() {
                 // Update the start_date if provided, and update timestamp
-                if let Some(task) = data.find_task_by_id_mut(task_id) {
+                if let Some(task) = data.find_task_by_id_mut(&task_id) {
                     if let Some(date) = parsed_start_date {
                         task.start_date = Some(date);
                     }
@@ -1142,6 +1176,9 @@ impl McpServer for GtdServerHandler {
         /// Optional new start date (format: YYYY-MM-DD, use empty string to remove)
         start_date: Option<String>,
     ) -> McpResult<String> {
+        // Normalize task ID to ensure # prefix
+        let task_id = Self::normalize_task_id(&task_id);
+
         // Parse date first if provided
         let new_start_date = if let Some(new_date_str) = start_date {
             if new_date_str.is_empty() {
@@ -1485,6 +1522,11 @@ This MCP server implements the Getting Things Done (GTD) methodology by David Al
 Tasks use GitHub-style IDs: #1, #2, #3 (efficient for LLM token usage)
 Projects use: project-1, project-2, project-3
 
+**IMPORTANT:** When referencing tasks, ALWAYS include the '#' prefix (e.g., #1, #2, #3).
+- Correct: Specify task IDs with # prefix like #1, #2, #3
+- Also accepted: Plain numbers like 1, 2, 3 (system auto-corrects to #1, #2, #3)
+- The '#' prefix identifies tasks and improves clarity
+
 ## Common Workflows
 
 1. **Capture**: Use `add_task` to capture items to inbox
@@ -1689,7 +1731,10 @@ When done:
 2. Later process inbox to clarify and organize
 3. Use `update_task` to add details as needed
 
-Remember: Task IDs are #1, #2, #3, etc. (LLM-friendly short format)"#
+**IMPORTANT:** Task IDs use the '#' prefix: #1, #2, #3, etc.
+- Preferred: Use the '#' prefix (e.g., #1 for task 1)
+- Also works: Plain numbers (e.g., 1) are auto-corrected to #1
+- Date format: YYYY-MM-DD (e.g., 2024-03-15)"#
             .to_string())
     }
 }
@@ -1745,6 +1790,73 @@ mod tests {
         assert_eq!(loaded_data.task_count(), 1);
         let loaded_task = loaded_data.find_task_by_id("test-task").unwrap();
         assert_eq!(loaded_task.title, "Test Task");
+    }
+
+    #[test]
+    fn test_normalize_task_id() {
+        // Test with plain numbers
+        assert_eq!(GtdServerHandler::normalize_task_id("1"), "#1");
+        assert_eq!(GtdServerHandler::normalize_task_id("42"), "#42");
+        assert_eq!(GtdServerHandler::normalize_task_id("123"), "#123");
+
+        // Test with # prefix already present
+        assert_eq!(GtdServerHandler::normalize_task_id("#1"), "#1");
+        assert_eq!(GtdServerHandler::normalize_task_id("#42"), "#42");
+        assert_eq!(GtdServerHandler::normalize_task_id("#123"), "#123");
+
+        // Test with whitespace
+        assert_eq!(GtdServerHandler::normalize_task_id(" 1 "), "#1");
+        assert_eq!(GtdServerHandler::normalize_task_id(" #1 "), "#1");
+        assert_eq!(GtdServerHandler::normalize_task_id("  42  "), "#42");
+    }
+
+    #[tokio::test]
+    async fn test_update_task_with_plain_number_id() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Add a task
+        let result = handler
+            .add_task("Test Task".to_string(), None, None, None, None)
+            .await;
+        assert!(result.is_ok());
+
+        // Update task using plain number (without #)
+        let result = handler
+            .update_task(
+                "1".to_string(), // Using "1" instead of "#1"
+                Some("Updated Title".to_string()),
+                None,
+                None,
+                None,
+                None,
+            )
+            .await;
+        assert!(result.is_ok());
+
+        // Verify the update worked
+        let data = handler.data.lock().unwrap();
+        let task = data.find_task_by_id("#1").unwrap();
+        assert_eq!(task.title, "Updated Title");
+    }
+
+    #[tokio::test]
+    async fn test_status_movement_with_plain_number_id() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Add a task
+        let result = handler
+            .add_task("Test Task".to_string(), None, None, None, None)
+            .await;
+        assert!(result.is_ok());
+
+        // Move to next_action using plain number
+        let result = handler.next_action_tasks(vec!["1".to_string()]).await;
+        assert!(result.is_ok());
+
+        // Verify the task moved
+        let data = handler.data.lock().unwrap();
+        let task = data.find_task_by_id("#1").unwrap();
+        assert_eq!(task.status, TaskStatus::next_action);
     }
 
     #[tokio::test]
