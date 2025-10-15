@@ -62,6 +62,31 @@ async fn add_task(&self, title: String, ...) -> McpResult<String> {
 }
 ```
 
+### MCPツールのdoc comment規約
+**重要**: `#[tool]`と`#[mcp_server]`のdoc commentはMCPクライアントに直接公開されるため、以下のルールに従ってください：
+
+1. **関数の説明は関数名に沿った動詞を使用**
+   - 例：`delete_context`関数には「Delete a context」（"Remove"ではなく"Delete"を使用）
+   - 関数名と説明の動詞を一致させることで、MCPクライアントの理解を容易にします
+
+2. **`Option<T>`引数には必ず"Optional"を明記**
+   - 悪い例：`/// New title for the task`
+   - 良い例：`/// Optional new title for the task`
+   - MCPクライアントがオプショナルであることを理解できるようにします
+
+3. **task_ids引数の形式は`["#1", "#2", "#3"]`のみを記載**
+   - プレーン数字（`["1", "2", "3"]`）については記載しない
+   - システムが内部で自動修正しますが、MCPクライアントには`#`付き形式のみを推奨します
+
+4. **project_id引数には意味のある略称を推奨**
+   - 悪い例：`/// Project ID (e.g., "project-1", "project-2")`
+   - 良い例：`/// Project ID - use meaningful abbreviation (e.g., "website-redesign", "q1-budget")`
+   - 単純な連番ではなく、プロジェクトを表す説明的なIDを使用するよう誘導します
+
+5. **GTDワークフローのコンテキストを含める**
+   - 単なる機能説明だけでなく、GTD手法の中でいつ、なぜこのツールを使うべきかを説明します
+   - 例：「Use this as the first step in GTD workflow - quickly capture anything that needs attention.」
+
 ### 日付の扱い
 - 日付には`chrono::NaiveDate`を使用（時刻コンポーネントなし）
 - パース形式：`YYYY-MM-DD`（`NaiveDate::parse_from_str(&date_str, "%Y-%m-%d")`経由）
