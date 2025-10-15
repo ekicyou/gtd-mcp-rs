@@ -1,6 +1,6 @@
 [package]
 name = "gtd-mcp"
-version = "0.5.5"
+version = "0.5.6"
 edition = "2024"
 description = "A Model Context Protocol (MCP) server for GTD (Getting Things Done) task management"
 license = "MIT"
