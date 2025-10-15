@@ -129,22 +129,42 @@ impl Drop for GtdServerHandler {
     }
 }
 
-/// GTD MCP Server providing task and project management
+/// GTD (Getting Things Done) task management server implementing David Allen's productivity methodology.
+///
+/// This server helps you capture, organize, and track tasks through a proven workflow system.
+/// GTD organizes tasks into different status categories (inbox, next_action, waiting_for, someday, later, calendar, done, trash)
+/// and supports projects (multi-step endeavors) and contexts (environments/tools like @office, @home).
+///
+/// Key concepts:
+/// - **inbox**: Unprocessed items (start here)
+/// - **next_action**: Ready-to-execute tasks (focus here)
+/// - **waiting_for**: Blocked tasks awaiting someone/something
+/// - **someday**: Potential future actions
+/// - **later**: Deferred but planned tasks
+/// - **calendar**: Date-specific tasks
+/// - **done**: Completed tasks
+/// - **trash**: Deleted tasks
+///
+/// Task IDs use format: #1, #2, #3 (you can also use plain numbers like 1, 2, 3 - the system auto-corrects)
+/// Project IDs use format: project-1, project-2, project-3
 #[mcp_server]
 impl McpServer for GtdServerHandler {
-    /// Add a new task to the inbox
+    /// Capture a new task into the GTD inbox for later processing.
+    ///
+    /// Use this as the first step in GTD workflow - quickly capture anything that needs attention.
+    /// The task starts in 'inbox' status and should be processed later to determine next actions.
     #[tool]
     async fn add_task(
         &self,
-        /// Task title
+        /// Task title describing the action (e.g., "Call Sarah about meeting")
         title: String,
-        /// Optional project ID
+        /// Optional project ID (e.g., "project-1") to link this task to a project
         project: Option<String>,
-        /// Optional context ID
+        /// Optional context (e.g., "@office", "@phone") indicating where/how this can be done
         context: Option<String>,
-        /// Optional notes
+        /// Optional notes for additional details (supports Markdown)
         notes: Option<String>,
-        /// Optional start date (format: YYYY-MM-DD)
+        /// Optional start date in YYYY-MM-DD format (e.g., "2024-03-15")
         start_date: Option<String>,
     ) -> McpResult<String> {
         let parsed_start_date = if let Some(date_str) = start_date {
@@ -195,15 +215,18 @@ impl McpServer for GtdServerHandler {
         Ok(format!("Task created with ID: {}", task_id))
     }
 
-    /// List all tasks with optional status filter
+    /// View all tasks with optional filtering by status or date.
+    ///
+    /// Use this to review tasks in different stages of your GTD workflow. Filter by status
+    /// to focus on specific lists (e.g., "next_action" to see what you should work on).
     #[tool]
     async fn list_tasks(
         &self,
-        /// Optional status filter (inbox, next_action, waiting_for, someday, later, done, trash, calendar)
+        /// Filter by status: "inbox", "next_action", "waiting_for", "someday", "later", "done", "trash", or "calendar"
         status: Option<String>,
-        /// Optional date filter (format: YYYY-MM-DD). Tasks with start_date in the future are excluded
+        /// Filter by date in YYYY-MM-DD format - excludes tasks with future start_date
         date: Option<String>,
-        /// Exclude notes from output to reduce token usage (default: false)
+        /// Set to true to exclude notes and reduce token usage (default: false)
         exclude_notes: Option<bool>,
     ) -> McpResult<String> {
         // Parse the date filter if provided
@@ -304,11 +327,15 @@ impl McpServer for GtdServerHandler {
         Ok(result)
     }
 
-    /// Move multiple tasks to trash
+    /// Move one or more tasks to trash (soft delete - can be emptied later).
+    ///
+    /// Use this to remove tasks you no longer need. Tasks remain in trash until emptied.
+    /// Supports batch operations for efficient task management.
     #[tool]
     async fn trash_tasks(
         &self,
-        /// Task IDs to move to trash (comma-separated or array)
+        /// Array of task IDs to trash. Format: ["#1", "#2", "#3"] or ["1", "2", "3"]
+        /// IMPORTANT: Include '#' prefix (e.g., #1, #2) for clarity, though plain numbers (1, 2) also work
         task_ids: Vec<String>,
     ) -> McpResult<String> {
         let mut data = self.data.lock().unwrap();
@@ -396,11 +423,15 @@ impl McpServer for GtdServerHandler {
         Ok(result)
     }
 
-    /// Move multiple tasks to inbox
+    /// Move one or more tasks back to inbox for reprocessing.
+    ///
+    /// Use this when tasks need to be reconsidered or were incorrectly categorized.
+    /// Returns tasks to the unprocessed state.
     #[tool]
     async fn inbox_tasks(
         &self,
-        /// Task IDs to move to inbox (comma-separated or array)
+        /// Array of task IDs to move to inbox. Format: ["#1", "#2", "#3"] or ["1", "2", "3"]
+        /// IMPORTANT: Include '#' prefix (e.g., #1, #2) for clarity, though plain numbers (1, 2) also work
         task_ids: Vec<String>,
     ) -> McpResult<String> {
         let mut data = self.data.lock().unwrap();
@@ -488,11 +519,15 @@ impl McpServer for GtdServerHandler {
         Ok(result)
     }
 
-    /// Move multiple tasks to next action
+    /// Move one or more tasks to next_action status - ready to work on now.
+    ///
+    /// Use this for tasks that are clear, actionable, and ready for execution.
+    /// This is your primary "to-do" list - the tasks you should focus on.
     #[tool]
     async fn next_action_tasks(
         &self,
-        /// Task IDs to move to next action (comma-separated or array)
+        /// Array of task IDs to move to next_action. Format: ["#1", "#2", "#3"] or ["1", "2", "3"]
+        /// IMPORTANT: Include '#' prefix (e.g., #1, #2) for clarity, though plain numbers (1, 2) also work
         task_ids: Vec<String>,
     ) -> McpResult<String> {
         let mut data = self.data.lock().unwrap();
@@ -583,11 +618,15 @@ impl McpServer for GtdServerHandler {
         Ok(result)
     }
 
-    /// Move multiple tasks to waiting for
+    /// Move one or more tasks to waiting_for status - blocked pending someone/something.
+    ///
+    /// Use this for tasks you can't complete yet because you're waiting for input, approval,
+    /// or action from others. Add notes about what/who you're waiting for.
     #[tool]
     async fn waiting_for_tasks(
         &self,
-        /// Task IDs to move to waiting for (comma-separated or array)
+        /// Array of task IDs to move to waiting_for. Format: ["#1", "#2", "#3"] or ["1", "2", "3"]
+        /// IMPORTANT: Include '#' prefix (e.g., #1, #2) for clarity, though plain numbers (1, 2) also work
         task_ids: Vec<String>,
     ) -> McpResult<String> {
         let mut data = self.data.lock().unwrap();
@@ -678,11 +717,15 @@ impl McpServer for GtdServerHandler {
         Ok(result)
     }
 
-    /// Move multiple tasks to someday
+    /// Move one or more tasks to someday status - ideas for potential future action.
+    ///
+    /// Use this for tasks you might want to do someday but not now. Review during weekly reviews
+    /// to see if any should become active. This is your "someday/maybe" list.
     #[tool]
     async fn someday_tasks(
         &self,
-        /// Task IDs to move to someday (comma-separated or array)
+        /// Array of task IDs to move to someday. Format: ["#1", "#2", "#3"] or ["1", "2", "3"]
+        /// IMPORTANT: Include '#' prefix (e.g., #1, #2) for clarity, though plain numbers (1, 2) also work
         task_ids: Vec<String>,
     ) -> McpResult<String> {
         let mut data = self.data.lock().unwrap();
@@ -770,11 +813,15 @@ impl McpServer for GtdServerHandler {
         Ok(result)
     }
 
-    /// Move multiple tasks to later
+    /// Move one or more tasks to later status - deferred but still planned.
+    ///
+    /// Use this for tasks you've decided to defer but still intend to do (unlike someday which is uncertain).
+    /// These are committed tasks that are just not priorities right now.
     #[tool]
     async fn later_tasks(
         &self,
-        /// Task IDs to move to later (comma-separated or array)
+        /// Array of task IDs to move to later. Format: ["#1", "#2", "#3"] or ["1", "2", "3"]
+        /// IMPORTANT: Include '#' prefix (e.g., #1, #2) for clarity, though plain numbers (1, 2) also work
         task_ids: Vec<String>,
     ) -> McpResult<String> {
         let mut data = self.data.lock().unwrap();
@@ -862,11 +909,15 @@ impl McpServer for GtdServerHandler {
         Ok(result)
     }
 
-    /// Move multiple tasks to done
+    /// Move one or more tasks to done status - mark as completed.
+    ///
+    /// Use this when tasks are finished. Completed tasks remain in the system for reference
+    /// and can be reviewed later. This is your accomplishment record.
     #[tool]
     async fn done_tasks(
         &self,
-        /// Task IDs to move to done (comma-separated or array)
+        /// Array of task IDs to mark as done. Format: ["#1", "#2", "#3"] or ["1", "2", "3"]
+        /// IMPORTANT: Include '#' prefix (e.g., #1, #2) for clarity, though plain numbers (1, 2) also work
         task_ids: Vec<String>,
     ) -> McpResult<String> {
         let mut data = self.data.lock().unwrap();
@@ -951,11 +1002,15 @@ impl McpServer for GtdServerHandler {
         Ok(result)
     }
 
-    /// Move multiple tasks to calendar
+    /// Move one or more tasks to calendar status - for date-specific actions.
+    ///
+    /// Use this for tasks that must be done on a specific date (appointments, deadlines).
+    /// These tasks should have a start_date set. Review calendar tasks daily.
     #[tool]
     async fn calendar_tasks(
         &self,
-        /// Task IDs to move to calendar (comma-separated or array)
+        /// Array of task IDs to move to calendar. Format: ["#1", "#2", "#3"] or ["1", "2", "3"]
+        /// IMPORTANT: Include '#' prefix (e.g., #1, #2) for clarity, though plain numbers (1, 2) also work
         task_ids: Vec<String>,
         /// Optional start date (format: YYYY-MM-DD). If not provided, each task must already have a start_date
         start_date: Option<String>,
@@ -1070,7 +1125,10 @@ impl McpServer for GtdServerHandler {
         Ok(result)
     }
 
-    /// Empty trash - permanently delete all trashed tasks
+    /// Permanently delete all trashed tasks (irreversible).
+    ///
+    /// Use this to clean up trash when you're certain you don't need those tasks anymore.
+    /// This operation cannot be undone - tasks are completely removed from the system.
     #[tool]
     async fn empty_trash(&self) -> McpResult<String> {
         let mut data = self.data.lock().unwrap();
@@ -1087,17 +1145,20 @@ impl McpServer for GtdServerHandler {
         Ok(format!("Deleted {} task(s) from trash", count))
     }
 
-    /// Add a new project
+    /// Create a new project to organize related tasks.
+    ///
+    /// Projects represent multi-step endeavors (e.g., "Launch website", "Plan conference").
+    /// Use projects to group related tasks and track progress on larger goals.
     #[tool]
     async fn add_project(
         &self,
-        /// Project name
+        /// Project name (e.g., "Website Redesign")
         name: String,
-        /// Project ID (must be unique)
+        /// Project ID - must be unique (e.g., "project-1", "project-2")
         id: String,
-        /// Optional project description
+        /// Optional description of the project's goal
         description: Option<String>,
-        /// Optional context name (must exist if specified)
+        /// Optional context where project work happens (e.g., "@office")
         context: Option<String>,
     ) -> McpResult<String> {
         let mut data = self.data.lock().unwrap();
@@ -1132,7 +1193,10 @@ impl McpServer for GtdServerHandler {
         Ok(format!("Project created with ID: {}", id))
     }
 
-    /// List all projects
+    /// View all projects with their current status.
+    ///
+    /// Lists all projects showing their status (active, on_hold, completed), descriptions,
+    /// and associated contexts. Review regularly to ensure projects are progressing.
     #[tool]
     async fn list_projects(&self) -> McpResult<String> {
         let data = self.data.lock().unwrap();
@@ -1159,21 +1223,24 @@ impl McpServer for GtdServerHandler {
         Ok(result)
     }
 
-    /// Update an existing task
+    /// Modify an existing task's properties.
+    ///
+    /// Use this to update task details, reassign to projects, change contexts, add notes,
+    /// or set/update start dates. Pass empty string to remove optional fields.
     #[tool]
     async fn update_task(
         &self,
-        /// Task ID to update
+        /// Task ID to update (e.g., "#1" or "1")
         task_id: String,
-        /// Optional new title
+        /// New title for the task (leave empty to keep current)
         title: Option<String>,
-        /// Optional new project ID (use empty string to remove)
+        /// New project ID to link task to, or empty string "" to unlink
         project: Option<String>,
-        /// Optional new context ID (use empty string to remove)
+        /// New context, or empty string "" to remove
         context: Option<String>,
-        /// Optional new notes (use empty string to remove)
+        /// New notes content, or empty string "" to remove
         notes: Option<String>,
-        /// Optional new start date (format: YYYY-MM-DD, use empty string to remove)
+        /// New start date in YYYY-MM-DD format, or empty string "" to remove
         start_date: Option<String>,
     ) -> McpResult<String> {
         // Normalize task ID to ensure # prefix
@@ -1259,21 +1326,24 @@ impl McpServer for GtdServerHandler {
         Ok(format!("Task {} updated successfully", task_id))
     }
 
-    /// Update an existing project
+    /// Modify an existing project's properties.
+    ///
+    /// Use this to update project details, change status (active/on_hold/completed),
+    /// or reassign to different contexts. Use empty string to remove optional fields.
     #[tool]
     async fn update_project(
         &self,
-        /// Project ID to update
+        /// Project ID to update (e.g., "project-1")
         project_id: String,
-        /// Optional new project ID
+        /// New project ID if renaming
         id: Option<String>,
-        /// Optional new name
+        /// New project name
         name: Option<String>,
-        /// Optional new description (use empty string to remove)
+        /// New description, or empty string "" to remove
         description: Option<String>,
-        /// Optional new status (active, on_hold, completed)
+        /// New status: "active", "on_hold", or "completed"
         status: Option<String>,
-        /// Optional new context name (use empty string to remove)
+        /// New context, or empty string "" to remove
         context: Option<String>,
     ) -> McpResult<String> {
         let mut data = self.data.lock().unwrap();
@@ -1374,13 +1444,16 @@ impl McpServer for GtdServerHandler {
         Ok(format!("Project {} updated successfully", new_project_id))
     }
 
-    /// Add a new context
+    /// Create a new context to categorize where/how tasks can be done.
+    ///
+    /// Contexts represent locations, tools, or situations (e.g., "@office", "@home", "@phone", "@computer").
+    /// Use contexts to filter tasks based on your current situation or available resources.
     #[tool]
     async fn add_context(
         &self,
-        /// Context name
+        /// Context name (e.g., "@office", "@home", "@phone")
         name: String,
-        /// Optional context description
+        /// Optional description of what this context represents
         description: Option<String>,
     ) -> McpResult<String> {
         let mut data = self.data.lock().unwrap();
@@ -1406,7 +1479,10 @@ impl McpServer for GtdServerHandler {
         Ok(format!("Context created: {}", name))
     }
 
-    /// List all contexts
+    /// View all available contexts.
+    ///
+    /// Lists all defined contexts with their descriptions. Use this to see what contexts
+    /// are available when categorizing tasks or projects.
     #[tool]
     async fn list_contexts(&self) -> McpResult<String> {
         let data = self.data.lock().unwrap();
@@ -1431,13 +1507,15 @@ impl McpServer for GtdServerHandler {
         Ok(result)
     }
 
-    /// Update an existing context
+    /// Modify an existing context's description.
+    ///
+    /// Use this to update the description of a context. Pass empty string to remove the description.
     #[tool]
     async fn update_context(
         &self,
-        /// Context name
+        /// Context name to update (e.g., "@office")
         name: String,
-        /// Optional new description (use empty string to remove)
+        /// New description, or empty string "" to remove
         description: Option<String>,
     ) -> McpResult<String> {
         let mut data = self.data.lock().unwrap();
@@ -1468,11 +1546,14 @@ impl McpServer for GtdServerHandler {
         Ok(format!("Context {} updated successfully", name))
     }
 
-    /// Delete a context
+    /// Remove a context from the system.
+    ///
+    /// Deletes a context. Note that tasks/projects using this context will keep their context references,
+    /// so ensure the context is no longer in use before deleting.
     #[tool]
     async fn delete_context(
         &self,
-        /// Context name to delete
+        /// Context name to delete (e.g., "@office")
         name: String,
     ) -> McpResult<String> {
         let mut data = self.data.lock().unwrap();
