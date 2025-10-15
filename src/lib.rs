@@ -146,7 +146,7 @@ impl Drop for GtdServerHandler {
 /// - **trash**: Deleted tasks
 ///
 /// Task IDs use format: #1, #2, #3
-/// Project IDs use format: project-1, project-2, project-3
+/// Project IDs: Use meaningful abbreviations (e.g., "website-redesign", "q1-budget")
 #[mcp_server]
 impl McpServer for GtdServerHandler {
     /// Capture a new task into the GTD inbox for later processing.
