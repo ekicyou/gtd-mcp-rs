@@ -172,6 +172,8 @@ The server includes built-in prompts to guide LLM assistants through GTD workflo
 Tasks are stored in TOML format (default: `gtd.toml`). The format is human-readable and Git-friendly:
 
 ```toml
+format_version = 2
+
 [[inbox]]
 id = "#1"
 title = "Review project proposal"
@@ -180,8 +182,7 @@ context = "Office"
 created_at = "2024-01-01"
 updated_at = "2024-01-01"
 
-[[projects]]
-id = "project-1"
+[projects.project-1]
 name = "Q1 Marketing Campaign"
 status = "active"
 

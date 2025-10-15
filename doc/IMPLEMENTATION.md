@@ -326,6 +326,8 @@ Best practices for creating well-formed tasks:
 Data is stored in TOML format in `gtd.toml`:
 
 ```toml
+format_version = 2
+
 [[inbox]]
 id = "#1"
 title = "Review project proposal"
@@ -342,8 +344,7 @@ notes = "Review all sections and update examples"
 created_at = "2024-01-01"
 updated_at = "2024-01-01"
 
-[[projects]]
-id = "project-1"
+[projects.project-1]
 name = "Q1 Marketing Campaign"
 description = "Launch new product marketing campaign"
 status = "active"
