@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/ekicyou/gtd-mcp-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/ekicyou/gtd-mcp-rs/actions/workflows/ci.yml)
 
-**Version 0.5.3**
+**Version 0.5.5**
 
 A Model Context Protocol (MCP) server for GTD (Getting Things Done) task management. This server enables LLM assistants like Claude to help you manage your tasks and projects using the proven GTD methodology.
 
@@ -13,7 +13,7 @@ gtd-mcp is an MCP server that implements the Getting Things Done (GTD) workflow.
 **Key Features:**
 - ✅ Complete GTD workflow support (inbox, next actions, waiting for, someday/maybe, calendar, done, trash)
 - ✅ Project and context management
-- ✅ Human-readable IDs (`#1`, `#2` for tasks, `project-1` for projects)
+- ✅ Human-readable IDs (`#1`, `#2` for tasks, meaningful project IDs like `website-redesign`)
 - ✅ Batch operations for efficient task management
 - ✅ TOML-based storage (human-readable, Git-friendly)
 - ✅ Optional Git synchronization
@@ -177,12 +177,12 @@ format_version = 2
 [[inbox]]
 id = "#1"
 title = "Review project proposal"
-project = "project-1"
+project = "q1-marketing"
 context = "Office"
 created_at = "2024-01-01"
 updated_at = "2024-01-01"
 
-[projects.project-1]
+[projects.q1-marketing]
 name = "Q1 Marketing Campaign"
 status = "active"
 
