@@ -4,6 +4,154 @@ This file contains release notes for all versions of gtd-mcp, with the newest re
 
 ---
 
+## Version 0.6.0
+
+### Summary
+
+This release updates gtd-mcp to version 0.6.0 with significantly improved MCP tool documentation. All MCP tools now have comprehensive, client-friendly descriptions that help LLM clients (like Claude Desktop) understand when and how to use each tool effectively. The documentation improvements focus on GTD workflow context, proper usage examples, and clear parameter descriptions.
+
+### Changes
+
+#### Version Update
+- **Version**: Updated from 0.5.7 to 0.6.0
+- **Crate name**: gtd-mcp (unchanged)
+- **Binary name**: gtd-mcp (unchanged)
+
+#### Documentation Improvements - MCP Client-Friendly Tool Descriptions
+
+All MCP tools now include enhanced documentation with:
+
+##### Server-Level Documentation
+- Comprehensive overview of GTD methodology in the `#[mcp_server]` doc comment
+- Clear explanation of all task statuses and their purposes
+- Guidelines for task ID format (`#1`, `#2`, `#3`)
+- Best practices for project ID naming (meaningful abbreviations vs. sequential numbers)
+
+##### Tool-Level Improvements
+Each MCP tool now includes:
+
+1. **Clear Purpose Statement**: What the tool does in GTD workflow context
+2. **Usage Guidance**: When and why to use this tool
+3. **Parameter Documentation**: Detailed descriptions for all parameters with examples
+
+##### Key Documentation Enhancements
+
+**Task Management Tools:**
+- `add_task`: Emphasizes capturing workflow and inbox processing
+- `list_tasks`: Explains how to review tasks at different workflow stages
+- `update_task`: Documents how to modify task properties with examples
+
+**Status Movement Tools** (batch operations):
+- `inbox_tasks`: Explains reprocessing workflow
+- `next_action_tasks`: Describes actionable task criteria
+- `waiting_for_tasks`: Clarifies blocking scenarios
+- `someday_tasks`: Distinguishes from committed tasks
+- `later_tasks`: Differentiates from someday/maybe
+- `done_tasks`: Documents completion tracking
+- `calendar_tasks`: Explains date-specific task handling
+- `trash_tasks`: Describes soft delete behavior
+
+**Project Management Tools:**
+- `add_project`: Emphasizes meaningful ID naming over sequential numbers
+- `list_projects`: Explains project review workflow
+- `update_project`: Documents status changes and property updates
+
+**Context Management Tools:**
+- `add_context`: Explains location/tool-based filtering
+- `list_contexts`: Documents context discovery
+- `update_context`: Describes modification workflow
+- `delete_context`: Warns about reference implications
+
+**Maintenance Tools:**
+- `empty_trash`: Clearly marks as irreversible operation
+
+##### Parameter Documentation Improvements
+
+**Consistent Format Guidelines:**
+- Task IDs: Always show format as `["#1", "#2", "#3"]`
+- Project IDs: Recommend meaningful abbreviations (e.g., "website-redesign", "q1-budget")
+- Optional parameters: Explicitly marked as "Optional" in descriptions
+- Date format: Consistently documented as `YYYY-MM-DD` with examples
+
+**Enhanced Parameter Descriptions:**
+- Context clues: Examples like `"@office"`, `"@phone"`, `"@computer"`
+- Project references: "use meaningful abbreviation like 'website-redesign', not just 'project-1'"
+- Notes: "supports Markdown" indication
+- Status filters: Enumerated list of valid values
+
+#### Code Quality
+All existing functionality remains unchanged:
+- No breaking changes to API
+- No changes to data format or storage
+- Full backward compatibility maintained
+
+### Testing Performed
+
+- ✅ All 179 unit tests pass
+- ✅ All 3 doc tests pass
+- ✅ Code formatting check passes (`cargo fmt --check`)
+- ✅ Clippy linting passes with no warnings (`cargo clippy -- -D warnings`)
+- ✅ Debug build compiles successfully
+- ✅ Release build compiles successfully
+- ✅ Binary functionality verified
+
+### Breaking Changes
+
+**None**. This is a documentation-only release with no changes to functionality or API.
+
+### Benefits of This Release
+
+1. **Improved LLM Understanding**: Claude Desktop and other MCP clients can better understand when and how to use each tool
+2. **Better User Experience**: Users receive more helpful guidance through their MCP clients
+3. **Clearer GTD Workflow**: Documentation explains GTD methodology context for each operation
+4. **Reduced Errors**: Parameter documentation includes format examples and validation guidance
+5. **Easier Integration**: New users can understand the system faster through comprehensive tool descriptions
+
+### Use Cases Improved by Better Documentation
+
+1. **Task Capture**: Users understand the inbox workflow better
+2. **Task Processing**: Clear guidance on moving tasks through GTD stages
+3. **Project Organization**: Better understanding of project vs. task relationships
+4. **Context Usage**: Clearer examples of when and how to use contexts
+5. **Batch Operations**: Understanding that status movement tools support multiple tasks
+
+### Documentation Philosophy
+
+The documentation improvements follow these principles:
+
+1. **Client-Centric**: Written for MCP clients (LLMs) to understand, not just humans
+2. **Workflow Context**: Each tool explains its role in GTD methodology
+3. **Actionable Examples**: Concrete examples rather than abstract descriptions
+4. **Format Consistency**: Standardized format examples across all tools
+5. **Best Practices**: Guidance on proper usage patterns (e.g., meaningful IDs)
+
+### How to Create a Release
+
+1. Ensure all tests pass: `cargo test`
+2. Create and push a git tag:
+   ```bash
+   git tag v0.6.0
+   git push origin v0.6.0
+   ```
+3. GitHub Actions will automatically:
+   - Create a GitHub release
+   - Build binaries for all supported platforms
+   - Upload binaries to the release
+
+### Distribution Binaries
+
+The following binaries are automatically built for this release:
+
+- **Linux**: x86_64-unknown-linux-gnu (glibc-based)
+- **Linux**: x86_64-unknown-linux-musl (static, portable)
+- **Windows**: x86_64-pc-windows-msvc
+- **macOS**: x86_64-apple-darwin (Intel Macs)
+- **macOS**: aarch64-apple-darwin (Apple Silicon)
+
+All binaries are available from the GitHub release page.
+
+---
+
 ## Version 0.5.0
 
 ### Summary
