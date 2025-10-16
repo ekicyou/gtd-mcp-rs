@@ -1565,6 +1565,29 @@ impl McpServer for GtdServerHandler {
         Ok(format!("Context {} deleted successfully", name))
     }
 
+    /// GTD (Getting Things Done) task management server implementing David Allen's productivity methodology.
+    ///
+    /// This server helps you capture, organize, and track tasks through a proven workflow system.
+    /// GTD organizes tasks into different status categories (inbox, next_action, waiting_for, someday, later, calendar, done, trash)
+    /// and supports projects (multi-step endeavors) and contexts (environments/tools like @office, @home).
+    ///
+    /// Key concepts:
+    /// - **inbox**: Unprocessed items (start here)
+    /// - **next_action**: Ready-to-execute tasks (focus here)
+    /// - **waiting_for**: Blocked tasks awaiting someone/something
+    /// - **someday**: Potential future actions
+    /// - **later**: Deferred but planned tasks
+    /// - **calendar**: Date-specific tasks
+    /// - **done**: Completed tasks
+    /// - **trash**: Deleted tasks
+    ///
+    /// Task IDs use format: #1, #2, #3
+    /// Project IDs: Use meaningful abbreviations (e.g., "website-redesign", "q1-budget")
+    #[tool]
+    async fn overview(&self) -> McpResult<String> {
+        Ok(String::new())
+    }
+
     // ==================== Prompts ====================
 
     /// GTD system overview and available tools
@@ -3336,6 +3359,17 @@ mod tests {
 
         let result = handler.delete_context("NonExistent".to_string()).await;
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_overview() {
+        let (handler, _temp_file) = get_test_handler();
+
+        let result = handler.overview().await;
+        assert!(result.is_ok());
+        // overviewツールは空文字列を返す
+        let content = result.unwrap();
+        assert_eq!(content, "");
     }
 
     #[tokio::test]
