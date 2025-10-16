@@ -1,0 +1,491 @@
+# Release Notes
+
+This file contains release notes for all versions of gtd-mcp, with the newest releases at the top.
+
+---
+
+## Version 0.5.0
+
+### Summary
+
+This release updates gtd-mcp to version 0.5.0 with an important API change. The `add_project` method now requires an explicit project ID instead of auto-generating one. This is a breaking change from version 0.4.0, but existing `gtd.toml` files are automatically migrated on load.
+
+### Changes
+
+#### Version Update
+- **Version**: Updated from 0.4.0 to 0.5.0
+- **Crate name**: gtd-mcp (unchanged)
+- **Binary name**: gtd-mcp (unchanged)
+
+#### API Changes - Required Project ID
+
+The `add_project` method now requires a project ID to be explicitly provided:
+
+##### Breaking Change
+- `add_project` now requires an `id` parameter
+- Project IDs are no longer auto-generated
+
+**Old API (v0.4.0):**
+```json
+{
+  "name": "My Project",
+  "description": "Project description"
+}
+```
+
+**New API (v0.5.0):**
+```json
+{
+  "name": "My Project",
+  "id": "my-project-1",
+  "description": "Project description"
+}
+```
+
+#### Data Format Migration
+
+The underlying data format remains compatible:
+- **Format Version**: 2 (unchanged)
+- **Projects Storage**: HashMap with project ID as key (unchanged)
+- **Automatic Migration**: Old TOML files from version 1 are still automatically migrated on load
+
+#### Documentation Updates
+
+All documentation has been updated to reflect the new version:
+- Cargo.toml
+- README.md
+- RELEASE.md
+
+### Testing Performed
+
+- ✅ All 175 unit tests pass
+- ✅ Code formatting check passes (`cargo fmt --check`)
+- ✅ Clippy linting passes with no warnings (`cargo clippy -- -D warnings`)
+- ✅ Debug build compiles successfully
+- ✅ Release build compiles successfully
+- ✅ Binary version output shows 0.5.0
+
+### Breaking Changes
+
+**Important**: This release contains a breaking change to the `add_project` API.
+
+#### Project Creation
+
+The `add_project` method signature has changed:
+
+**Old signature (v0.4.0):**
+- Project ID was auto-generated based on a counter
+- Users only needed to provide name and optional fields
+
+**New signature (v0.5.0):**
+- Project ID must be explicitly provided
+- Provides better control over project identifiers
+- Prevents confusion about auto-generated IDs
+
+#### Migration Guide
+
+If you have scripts or integrations that create projects:
+
+1. **Update project creation calls:**
+   - Add an `id` parameter to all `add_project` calls
+   - Choose meaningful IDs for your projects (e.g., "website-redesign", "client-project-1")
+
+2. **Example migration:**
+   ```javascript
+   // Old (v0.4.0)
+   await addProject({
+     name: "Website Redesign",
+     description: "Redesign company website"
+   });
+   
+   // New (v0.5.0)
+   await addProject({
+     name: "Website Redesign",
+     id: "website-redesign",
+     description: "Redesign company website"
+   });
+   ```
+
+3. **Data migration:**
+   - Existing `gtd.toml` files work without modification
+   - Projects already stored in the file retain their IDs
+   - Only new project creation requires the ID parameter
+
+### Benefits of This Release
+
+1. **Better Control**: Users have explicit control over project identifiers
+2. **Predictable IDs**: No confusion about auto-generated ID patterns
+3. **Easier Integration**: Scripts and integrations can use known project IDs
+4. **Backward Compatible Data**: Existing `gtd.toml` files work without modification
+5. **Format Migration**: Old format (Vec) is still automatically converted to new format (HashMap)
+
+### How to Create a Release
+
+1. Ensure all tests pass: `cargo test`
+2. Create and push a git tag:
+   ```bash
+   git tag v0.5.0
+   git push origin v0.5.0
+   ```
+3. GitHub Actions will automatically:
+   - Create a GitHub release
+   - Build binaries for all supported platforms
+   - Upload binaries to the release
+
+### Distribution Binaries
+
+The following binaries are automatically built for this release:
+
+- **Linux**: x86_64-unknown-linux-gnu (glibc-based)
+- **Linux**: x86_64-unknown-linux-musl (static, portable)
+- **Windows**: x86_64-pc-windows-msvc
+- **macOS**: x86_64-apple-darwin (Intel Macs)
+- **macOS**: aarch64-apple-darwin (Apple Silicon)
+
+All binaries are available from the GitHub release page.
+
+---
+
+## Version 0.4.0
+
+### Summary
+
+This release updates gtd-mcp to version 0.4.0 with significant API improvements. All status movement methods now support batch operations, allowing multiple tasks to be moved at once. This is a breaking change from version 0.3.2.
+
+### Changes
+
+#### Version Update
+- **Version**: Updated from 0.3.2 to 0.4.0
+- **Crate name**: gtd-mcp (unchanged)
+- **Binary name**: gtd-mcp (unchanged)
+
+#### API Changes - Batch Operations
+
+All status movement methods now support moving multiple tasks at once. This is a **breaking change** - the method names and signatures have changed:
+
+##### Method Renames (Breaking Changes)
+- `inbox_task` → `inbox_tasks` (now accepts `task_ids: Vec<String>`)
+- `next_action_task` → `next_action_tasks` (now accepts `task_ids: Vec<String>`)
+- `waiting_for_task` → `waiting_for_tasks` (now accepts `task_ids: Vec<String>`)
+- `someday_task` → `someday_tasks` (now accepts `task_ids: Vec<String>`)
+- `later_task` → `later_tasks` (now accepts `task_ids: Vec<String>`)
+- `done_task` → `done_tasks` (now accepts `task_ids: Vec<String>`)
+
+##### Enhanced Methods
+- `trash_tasks` - Already supported batch operations, unchanged
+- `calendar_tasks` - Already supported batch operations, unchanged
+
+#### Documentation Updates
+
+All documentation has been updated to reflect the new version and API changes:
+- Cargo.toml
+- README.md - Simplified and reorganized for better clarity
+- IMPLEMENTATION.md
+- GTD_ASSESSMENT.md
+
+The README.md has been significantly simplified to focus on:
+- What the application is
+- How to use it
+- Available MCP tools and prompts
+
+Technical implementation details remain in IMPLEMENTATION.md.
+
+### Testing Performed
+
+- ✅ All 168 unit tests pass
+- ✅ Code formatting check passes (`cargo fmt --check`)
+- ✅ Clippy linting passes with no warnings (`cargo clippy -- -D warnings`)
+- ✅ Debug build compiles successfully
+- ✅ Release build compiles successfully
+- ✅ Binary version output shows 0.4.0
+
+### Breaking Changes
+
+**Important**: This release contains breaking changes to the API.
+
+#### Status Movement Methods
+
+All status movement methods have been renamed and now accept arrays of task IDs:
+
+**Old API (v0.3.2):**
+```json
+{
+  "task_id": "#1"
+}
+```
+
+**New API (v0.4.0):**
+```json
+{
+  "task_ids": ["#1", "#2", "#3"]
+}
+```
+
+#### Migration Guide
+
+If you have any scripts or integrations that use the old method names, update them as follows:
+
+1. Rename method calls:
+   - `inbox_task` → `inbox_tasks`
+   - `next_action_task` → `next_action_tasks`
+   - `waiting_for_task` → `waiting_for_tasks`
+   - `someday_task` → `someday_tasks`
+   - `later_task` → `later_tasks`
+   - `done_task` → `done_tasks`
+
+2. Change parameter format:
+   - From: `"task_id": "#1"`
+   - To: `"task_ids": ["#1"]`
+
+3. Batch operations are now possible:
+   - Move multiple tasks at once: `"task_ids": ["#1", "#2", "#3"]`
+
+### Benefits of This Release
+
+1. **Improved Efficiency**: Move multiple tasks with a single operation
+2. **Better LLM Interaction**: Language models can now process multiple tasks more efficiently
+3. **Consistent API**: All status movement methods now follow the same pattern
+4. **Backward Compatible Data**: Existing `gtd.toml` files work without modification
+
+### How to Create a Release
+
+1. Ensure all tests pass: `cargo test`
+2. Create and push a git tag:
+   ```bash
+   git tag v0.4.0
+   git push origin v0.4.0
+   ```
+3. GitHub Actions will automatically:
+   - Create a GitHub release
+   - Build binaries for all supported platforms
+   - Upload binaries to the release
+
+### Distribution Binaries
+
+The following binaries are automatically built for this release:
+
+- **Linux**: x86_64-unknown-linux-gnu (glibc-based)
+- **Linux**: x86_64-unknown-linux-musl (static, portable)
+- **Windows**: x86_64-pc-windows-msvc
+- **macOS**: x86_64-apple-darwin (Intel Macs)
+- **macOS**: aarch64-apple-darwin (Apple Silicon)
+
+All binaries are available from the GitHub release page.
+
+---
+
+## Version 0.3.2
+
+### Summary
+
+This release updates gtd-mcp to version 0.3.2 with a routine version increment.
+
+### Changes
+
+#### Version Update
+- **Version**: Updated from 0.3.1 to 0.3.2
+- **Crate name**: gtd-mcp (unchanged)
+- **Binary name**: gtd-mcp (unchanged)
+
+#### Documentation Updates
+All documentation has been updated to reflect the new version:
+- Cargo.toml
+- README.md
+- IMPLEMENTATION.md
+
+### Testing Performed
+
+- ✅ All 154 unit tests pass
+- ✅ Code formatting check passes (`cargo fmt --check`)
+- ✅ Clippy linting passes with no warnings (`cargo clippy -- -D warnings`)
+- ✅ Debug build compiles successfully
+- ✅ Release build compiles successfully
+- ✅ Binary version output shows 0.3.2
+
+### Breaking Changes
+
+None. This is a routine version update with no changes to functionality.
+
+### How to Create a Release
+
+1. Ensure all tests pass: `cargo test`
+2. Create and push a git tag:
+   ```bash
+   git tag v0.3.2
+   git push origin v0.3.2
+   ```
+3. GitHub Actions will automatically:
+   - Create a GitHub release
+   - Build binaries for all supported platforms
+   - Upload binaries to the release
+
+### Distribution Binaries
+
+When the v0.3.2 tag is pushed, GitHub Actions will build and publish binaries for:
+- **Linux**: x86_64-unknown-linux-gnu (glibc-based)
+- **Linux**: x86_64-unknown-linux-musl (static, portable)
+- **Windows**: x86_64-pc-windows-msvc
+- **macOS**: x86_64-apple-darwin (Intel Macs)
+- **macOS**: aarch64-apple-darwin (Apple Silicon)
+
+---
+
+## Version 0.3.0
+
+### Summary
+
+This release renames the crate from `gtd-mcp-rs` to `gtd-mcp` for better naming consistency and removes the redundant `-rs` suffix. The version is also bumped to 0.3.0 to reflect this significant change.
+
+### Changes
+
+#### Crate Rename
+- **Crate name**: Changed from `gtd-mcp-rs` to `gtd-mcp`
+- **Binary name**: Changed from `gtd-mcp-rs` to `gtd-mcp`
+- **Version**: Updated from 0.2.0 to 0.3.0
+
+#### Rationale
+The `-rs` suffix is often redundant in the Rust ecosystem, especially when the context is clear. Many popular Rust projects (e.g., `tokio`, `serde`, `clap`) don't use language-specific suffixes. The name `gtd-mcp` is more concise and clearer as it describes what the project is: a GTD (Getting Things Done) implementation of the Model Context Protocol.
+
+#### Documentation Updates
+All documentation has been updated to reflect the new crate name:
+- README.md
+- IMPLEMENTATION.md
+- GTD_ASSESSMENT.md
+- .github/copilot-instructions.md
+- .github/workflows/release.yml
+
+#### Integration Changes
+
+**For Claude Desktop users**, update your `claude_desktop_config.json`:
+
+**Before:**
+```json
+{
+  "mcpServers": {
+    "gtd": {
+      "command": "/path/to/gtd-mcp-rs/target/release/gtd-mcp-rs",
+      "args": ["gtd.toml"]
+    }
+  }
+}
+```
+
+**After:**
+```json
+{
+  "mcpServers": {
+    "gtd": {
+      "command": "/path/to/gtd-mcp/target/release/gtd-mcp",
+      "args": ["gtd.toml"]
+    }
+  }
+}
+```
+
+#### Build Changes
+The release binaries will now be named with the `gtd-mcp` prefix:
+- `gtd-mcp-x86_64-unknown-linux-gnu.tar.gz` (Linux glibc)
+- `gtd-mcp-x86_64-unknown-linux-musl.tar.gz` (Linux static)
+- `gtd-mcp-x86_64-pc-windows-msvc.zip` (Windows)
+- `gtd-mcp-x86_64-apple-darwin.tar.gz` (macOS Intel)
+- `gtd-mcp-aarch64-apple-darwin.tar.gz` (macOS Apple Silicon)
+
+### Testing Performed
+
+- ✅ All 142 unit tests pass
+- ✅ Code formatting check passes (`cargo fmt --check`)
+- ✅ Clippy linting passes with no warnings (`cargo clippy -- -D warnings`)
+- ✅ Debug build compiles successfully
+- ✅ Release build compiles successfully
+- ✅ Binary version output shows 0.3.0
+
+### Breaking Changes
+
+**Binary name change**: Users must update their MCP client configurations to use the new binary name `gtd-mcp` instead of `gtd-mcp-rs`. The functionality remains unchanged.
+
+### How to Create a Release
+
+1. Ensure all tests pass: `cargo test`
+2. Create and push a git tag:
+   ```bash
+   git tag v0.3.0
+   git push origin v0.3.0
+   ```
+3. GitHub Actions will automatically:
+   - Create a GitHub release
+   - Build binaries for all supported platforms
+   - Upload binaries to the release
+
+### Distribution Binaries
+
+When the v0.3.0 tag is pushed, GitHub Actions will build and publish binaries for:
+- **Linux**: x86_64-unknown-linux-gnu (glibc-based)
+- **Linux**: x86_64-unknown-linux-musl (static, portable)
+- **Windows**: x86_64-pc-windows-msvc
+- **macOS**: x86_64-apple-darwin (Intel Macs)
+- **macOS**: aarch64-apple-darwin (Apple Silicon)
+
+---
+
+## Version 0.2.0
+
+### Summary
+
+This release updates gtd-mcp-rs to version 0.2.0 with streamlined documentation and automated binary distribution for all major platforms.
+
+### Changes
+
+#### Version Update
+- Updated version from 0.1.0 to 0.2.0 in `Cargo.toml`
+- All documentation files now reflect version 0.2.0
+
+#### Documentation Improvements
+- **README.md**: Removed redundant historical note about migration from `rust-mcp-sdk`. The current cross-platform compatibility status is clear without historical context.
+- **IMPLEMENTATION.md**: Streamlined version description, removed redundant explanations about being simpler/more maintainable (implementation speaks for itself)
+- **GTD_ASSESSMENT.md**: Updated implementation version reference
+
+#### Release Automation
+- Added GitHub Actions release workflow (`.github/workflows/release.yml`)
+- Automatically builds and publishes binaries for:
+  - **Linux**: x86_64-unknown-linux-gnu (glibc-based)
+  - **Linux**: x86_64-unknown-linux-musl (static, portable)
+  - **Windows**: x86_64-pc-windows-msvc
+  - **macOS**: x86_64-apple-darwin (Intel Macs)
+  - **macOS**: aarch64-apple-darwin (Apple Silicon)
+- Release workflow triggers on git tags matching `v*` (e.g., `v0.2.0`)
+
+### How to Create a Release
+
+1. Ensure all tests pass: `cargo test`
+2. Create and push a git tag:
+   ```bash
+   git tag v0.2.0
+   git push origin v0.2.0
+   ```
+3. GitHub Actions will automatically:
+   - Create a GitHub release
+   - Build binaries for all supported platforms
+   - Upload binaries to the release
+
+### Distribution Binaries
+
+When a release tag is created, the following binary archives will be automatically built and attached:
+
+- `gtd-mcp-rs-x86_64-unknown-linux-gnu.tar.gz` - Linux (standard glibc)
+- `gtd-mcp-rs-x86_64-unknown-linux-musl.tar.gz` - Linux (static binary, no dependencies)
+- `gtd-mcp-rs-x86_64-pc-windows-msvc.zip` - Windows
+- `gtd-mcp-rs-x86_64-apple-darwin.tar.gz` - macOS Intel
+- `gtd-mcp-rs-aarch64-apple-darwin.tar.gz` - macOS Apple Silicon
+
+### Testing Performed
+
+- ✅ All 142 unit tests pass
+- ✅ Code formatting check passes (`cargo fmt --check`)
+- ✅ Clippy linting passes with no warnings (`cargo clippy -- -D warnings`)
+- ✅ Debug build compiles successfully
+- ✅ Release build compiles successfully
+- ✅ Binary version output shows 0.2.0
+
+### Breaking Changes
+
+None. This is a documentation and tooling release with no changes to functionality.
