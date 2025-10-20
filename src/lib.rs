@@ -1395,30 +1395,33 @@ mod tests {
             .change_task_status(vec![task_id.clone()], "next_action".to_string(), None)
             .await;
         assert!(result.is_ok());
-        let data = handler.data.lock().unwrap();
-        let task = data.find_task_by_id(&task_id).unwrap();
-        assert_eq!(task.status, TaskStatus::next_action);
-        drop(data);
+        {
+            let data = handler.data.lock().unwrap();
+            let task = data.find_task_by_id(&task_id).unwrap();
+            assert_eq!(task.status, TaskStatus::next_action);
+        }
 
         // Test moving to done
         let result = handler
             .change_task_status(vec![task_id.clone()], "done".to_string(), None)
             .await;
         assert!(result.is_ok());
-        let data = handler.data.lock().unwrap();
-        let task = data.find_task_by_id(&task_id).unwrap();
-        assert_eq!(task.status, TaskStatus::done);
-        drop(data);
+        {
+            let data = handler.data.lock().unwrap();
+            let task = data.find_task_by_id(&task_id).unwrap();
+            assert_eq!(task.status, TaskStatus::done);
+        }
 
         // Test moving to trash
         let result = handler
             .change_task_status(vec![task_id.clone()], "trash".to_string(), None)
             .await;
         assert!(result.is_ok());
-        let data = handler.data.lock().unwrap();
-        let task = data.find_task_by_id(&task_id).unwrap();
-        assert_eq!(task.status, TaskStatus::trash);
-        drop(data);
+        {
+            let data = handler.data.lock().unwrap();
+            let task = data.find_task_by_id(&task_id).unwrap();
+            assert_eq!(task.status, TaskStatus::trash);
+        }
 
         // Test invalid status
         let result = handler
