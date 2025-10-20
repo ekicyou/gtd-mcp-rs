@@ -327,6 +327,97 @@ impl McpServer for GtdServerHandler {
         Ok(result)
     }
 
+    /// Change the status of one or more tasks in the GTD workflow.
+    ///
+    /// This unified tool replaces individual status-change operations, allowing you to move tasks
+    /// between different GTD workflow stages. Understanding when to use each status is key to
+    /// effective GTD practice.
+    ///
+    /// ## GTD Status Transitions Guide
+    ///
+    /// **inbox** - Unprocessed items (capture everything here first)
+    /// - Use when: Initially capturing tasks during collection phase
+    /// - Review regularly: During inbox processing sessions
+    /// - Next step: Process each item to determine if actionable
+    ///
+    /// **next_action** - Ready-to-execute tasks (your primary to-do list)
+    /// - Use when: Task is clear, actionable, and ready to work on now
+    /// - Review regularly: Daily, when choosing what to work on
+    /// - Characteristics: Specific, physical, visible action; can be done immediately
+    /// - Example: "Call John about meeting agenda" not "Think about meeting"
+    ///
+    /// **waiting_for** - Blocked pending someone/something
+    /// - Use when: You've delegated or waiting for external input/approval
+    /// - Review regularly: During weekly review to follow up
+    /// - Best practice: Add notes about who/what you're waiting for and date delegated
+    /// - Example: "Waiting for Sarah's budget approval (requested 2024-03-15)"
+    ///
+    /// **someday** - Potential future actions (someday/maybe list)
+    /// - Use when: Interesting ideas but no commitment to do them now
+    /// - Review regularly: During weekly/monthly review to see if timing is right
+    /// - Characteristics: Uncertain commitment, might never happen
+    /// - Example: "Learn to play guitar", "Visit Japan"
+    ///
+    /// **later** - Deferred but planned tasks
+    /// - Use when: Committed to doing it, just not now (unlike someday which is uncertain)
+    /// - Review regularly: During weekly review to see if timing has arrived
+    /// - Characteristics: Definite commitment, waiting for right time/season
+    /// - Example: "File taxes" (when it's only February), "Plant spring garden" (when it's winter)
+    ///
+    /// **calendar** - Date-specific tasks (time-specific actions)
+    /// - Use when: Must be done on a specific date/time (appointments, deadlines)
+    /// - Review regularly: Daily, morning planning
+    /// - Important: Requires start_date to be set (can be set during status change)
+    /// - Example: "Dentist appointment 2024-03-20", "Submit report by 2024-03-25"
+    ///
+    /// **done** - Completed tasks (accomplishment record)
+    /// - Use when: Task is finished and complete
+    /// - Review regularly: During weekly review for sense of accomplishment
+    /// - Characteristics: Permanent record of what you've achieved
+    /// - Note: Tasks remain in system for reference
+    ///
+    /// **trash** - Deleted tasks (soft delete)
+    /// - Use when: Task is no longer relevant or was entered by mistake
+    /// - Review regularly: Periodically empty trash to clean up
+    /// - Note: Tasks remain in trash until permanently deleted with empty_trash
+    /// - Can be recovered by moving back to another status
+    ///
+    /// ## Status Change Best Practices
+    ///
+    /// 1. **Process inbox regularly**: Don't let items accumulate
+    /// 2. **Be specific with next_action**: "Call" not "Contact", "Draft" not "Work on"
+    /// 3. **Review waiting_for weekly**: Follow up on delegated items
+    /// 4. **Keep someday/maybe fresh**: Review monthly, delete stale ideas
+    /// 5. **Reserve calendar for time-specific**: Don't clutter with flexible tasks
+    /// 6. **Celebrate done**: Review accomplishments for motivation
+    /// 7. **Clean trash periodically**: Use empty_trash when certain
+    #[tool]
+    async fn change_task_status(
+        &self,
+        /// Task IDs to change status. Format: ["#1", "#2", "#3"]
+        task_ids: Vec<String>,
+        /// Target status: "inbox", "next_action", "waiting_for", "someday", "later", "calendar", "done", or "trash"
+        status: String,
+        /// Optional start date (format: YYYY-MM-DD) - required when status is "calendar", can be set for any status
+        start_date: Option<String>,
+    ) -> McpResult<String> {
+        // Delegate to the appropriate existing method based on status
+        match status.as_str() {
+            "inbox" => self.inbox_tasks(task_ids).await,
+            "next_action" => self.next_action_tasks(task_ids).await,
+            "waiting_for" => self.waiting_for_tasks(task_ids).await,
+            "someday" => self.someday_tasks(task_ids).await,
+            "later" => self.later_tasks(task_ids).await,
+            "calendar" => self.calendar_tasks(task_ids, start_date).await,
+            "done" => self.done_tasks(task_ids).await,
+            "trash" => self.trash_tasks(task_ids).await,
+            _ => bail!(
+                "Invalid status '{}'. Use: inbox, next_action, waiting_for, someday, later, calendar, done, or trash",
+                status
+            ),
+        }
+    }
+
     /// Move one or more tasks to trash (soft delete - can be emptied later).
     ///
     /// Use this to remove tasks you no longer need. Tasks remain in trash until emptied.
@@ -1904,6 +1995,128 @@ mod tests {
         assert_eq!(GtdServerHandler::normalize_task_id(" 1 "), "#1");
         assert_eq!(GtdServerHandler::normalize_task_id(" #1 "), "#1");
         assert_eq!(GtdServerHandler::normalize_task_id("  42  "), "#42");
+    }
+
+    #[tokio::test]
+    async fn test_change_task_status_unified_api() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Create a task in inbox
+        let result = handler
+            .add_task("Test Task".to_string(), None, None, None, None)
+            .await;
+        assert!(result.is_ok());
+        let task_id = result
+            .unwrap()
+            .split_whitespace()
+            .last()
+            .unwrap()
+            .to_string();
+
+        // Test moving to next_action
+        let result = handler
+            .change_task_status(vec![task_id.clone()], "next_action".to_string(), None)
+            .await;
+        assert!(result.is_ok());
+        let data = handler.data.lock().unwrap();
+        let task = data.find_task_by_id(&task_id).unwrap();
+        assert_eq!(task.status, TaskStatus::next_action);
+        drop(data);
+
+        // Test moving to done
+        let result = handler
+            .change_task_status(vec![task_id.clone()], "done".to_string(), None)
+            .await;
+        assert!(result.is_ok());
+        let data = handler.data.lock().unwrap();
+        let task = data.find_task_by_id(&task_id).unwrap();
+        assert_eq!(task.status, TaskStatus::done);
+        drop(data);
+
+        // Test moving to trash
+        let result = handler
+            .change_task_status(vec![task_id.clone()], "trash".to_string(), None)
+            .await;
+        assert!(result.is_ok());
+        let data = handler.data.lock().unwrap();
+        let task = data.find_task_by_id(&task_id).unwrap();
+        assert_eq!(task.status, TaskStatus::trash);
+        drop(data);
+
+        // Test invalid status
+        let result = handler
+            .change_task_status(vec![task_id.clone()], "invalid_status".to_string(), None)
+            .await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_change_task_status_calendar_with_date() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Create a task
+        let result = handler
+            .add_task("Test Task".to_string(), None, None, None, None)
+            .await;
+        assert!(result.is_ok());
+        let task_id = result
+            .unwrap()
+            .split_whitespace()
+            .last()
+            .unwrap()
+            .to_string();
+
+        // Test moving to calendar with date
+        let result = handler
+            .change_task_status(
+                vec![task_id.clone()],
+                "calendar".to_string(),
+                Some("2024-12-25".to_string()),
+            )
+            .await;
+        assert!(result.is_ok());
+        let data = handler.data.lock().unwrap();
+        let task = data.find_task_by_id(&task_id).unwrap();
+        assert_eq!(task.status, TaskStatus::calendar);
+        assert_eq!(
+            task.start_date.unwrap(),
+            NaiveDate::from_ymd_opt(2024, 12, 25).unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_change_task_status_batch_operation() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Create multiple tasks
+        let mut task_ids = Vec::new();
+        for i in 1..=3 {
+            let result = handler
+                .add_task(format!("Test Task {}", i), None, None, None, None)
+                .await;
+            assert!(result.is_ok());
+            let task_id = result
+                .unwrap()
+                .split_whitespace()
+                .last()
+                .unwrap()
+                .to_string();
+            task_ids.push(task_id);
+        }
+
+        // Test batch move to next_action
+        let result = handler
+            .change_task_status(task_ids.clone(), "next_action".to_string(), None)
+            .await;
+        assert!(result.is_ok());
+
+        // Verify all tasks moved
+        let data = handler.data.lock().unwrap();
+        assert_eq!(data.next_action.len(), 3);
+        for task_id in &task_ids {
+            let task = data.find_task_by_id(task_id).unwrap();
+            assert_eq!(task.status, TaskStatus::next_action);
+        }
     }
 
     #[tokio::test]
