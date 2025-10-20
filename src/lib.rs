@@ -868,6 +868,64 @@ impl McpServer for GtdServerHandler {
         Ok(format!("Project {} updated successfully", new_project_id))
     }
 
+    /// Delete a project from the system.
+    ///
+    /// Deletes a project if it is not referenced by any tasks. This ensures data integrity
+    /// by preventing deletion of projects that are still in use.
+    #[tool]
+    async fn delete_project(
+        &self,
+        /// Project ID to delete (e.g., "website-redesign")
+        project_id: String,
+    ) -> McpResult<String> {
+        let mut data = self.data.lock().unwrap();
+
+        // Check if project exists
+        if data.find_project_by_id(&project_id).is_none() {
+            drop(data);
+            bail!("Project not found: {}", project_id);
+        }
+
+        // Check if any tasks reference this project
+        let task_lists = [
+            &data.inbox,
+            &data.next_action,
+            &data.waiting_for,
+            &data.later,
+            &data.calendar,
+            &data.someday,
+            &data.done,
+            &data.trash,
+        ];
+
+        for task_list in &task_lists {
+            for task in *task_list {
+                if let Some(ref task_project) = task.project
+                    && task_project == &project_id
+                {
+                    let task_id = task.id.clone();
+                    drop(data);
+                    bail!(
+                        "Cannot delete project '{}': task {} still references it",
+                        project_id,
+                        task_id
+                    );
+                }
+            }
+        }
+
+        // Remove the project
+        data.projects.remove(&project_id);
+
+        drop(data);
+
+        if let Err(e) = self.save_data_with_message(&format!("Delete project {}", project_id)) {
+            bail!("Failed to save: {}", e);
+        }
+
+        Ok(format!("Project {} deleted successfully", project_id))
+    }
+
     /// Create a new context to categorize where/how tasks can be done.
     ///
     /// Contexts represent locations, tools, or situations (e.g., "@office", "@home", "@phone", "@computer").
@@ -2050,6 +2108,125 @@ mod tests {
             )
             .await;
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_delete_project_success() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Add a project
+        let result = handler
+            .add_project(
+                "Test Project".to_string(),
+                "test-project-1".to_string(),
+                None,
+                None,
+            )
+            .await;
+        assert!(result.is_ok());
+
+        // Delete the project
+        let result = handler.delete_project("test-project-1".to_string()).await;
+        assert!(result.is_ok());
+        assert!(result.unwrap().contains("deleted successfully"));
+
+        // Verify the project was deleted
+        let data = handler.data.lock().unwrap();
+        assert!(data.find_project_by_id("test-project-1").is_none());
+    }
+
+    #[tokio::test]
+    async fn test_delete_project_not_found() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Try to delete non-existent project
+        let result = handler.delete_project("non-existent-id".to_string()).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_delete_project_with_task_reference() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Add a project
+        let result = handler
+            .add_project(
+                "Test Project".to_string(),
+                "test-project-1".to_string(),
+                None,
+                None,
+            )
+            .await;
+        assert!(result.is_ok());
+
+        // Add a task that references the project
+        let result = handler
+            .add_task(
+                "Test Task".to_string(),
+                Some("test-project-1".to_string()),
+                None,
+                None,
+                None,
+            )
+            .await;
+        assert!(result.is_ok());
+
+        // Try to delete the project (should fail)
+        let result = handler.delete_project("test-project-1".to_string()).await;
+        assert!(result.is_err());
+
+        // Verify the project was NOT deleted
+        let data = handler.data.lock().unwrap();
+        assert!(data.find_project_by_id("test-project-1").is_some());
+    }
+
+    #[tokio::test]
+    async fn test_delete_project_after_unlinking_tasks() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Add a project
+        let result = handler
+            .add_project(
+                "Test Project".to_string(),
+                "test-project-1".to_string(),
+                None,
+                None,
+            )
+            .await;
+        assert!(result.is_ok());
+
+        // Add a task that references the project
+        let result = handler
+            .add_task(
+                "Test Task".to_string(),
+                Some("test-project-1".to_string()),
+                None,
+                None,
+                None,
+            )
+            .await;
+        assert!(result.is_ok());
+
+        // Unlink the task from the project
+        let result = handler
+            .update_task(
+                "#1".to_string(),
+                None,
+                Some("".to_string()), // Empty string removes project
+                None,
+                None,
+                None,
+            )
+            .await;
+        assert!(result.is_ok());
+
+        // Now delete the project (should succeed)
+        let result = handler.delete_project("test-project-1".to_string()).await;
+        assert!(result.is_ok());
+
+        // Verify the project was deleted
+        let data = handler.data.lock().unwrap();
+        assert!(data.find_project_by_id("test-project-1").is_none());
     }
 
     #[tokio::test]
