@@ -149,20 +149,17 @@ impl Drop for GtdServerHandler {
 /// Project IDs: Use meaningful abbreviations (e.g., "website-redesign", "q1-budget")
 #[mcp_server]
 impl McpServer for GtdServerHandler {
-    /// Capture a new task into the GTD inbox for later processing.
-    ///
-    /// Use this as the first step in GTD workflow - quickly capture anything that needs attention.
-    /// The task starts in 'inbox' status and should be processed later to determine next actions.
+    /// Capture new task into GTD inbox for later processing. First step in GTD workflow - quickly capture anything needing attention. Task starts in 'inbox' status.
     #[tool]
     async fn add_task(
         &self,
-        /// Task title describing the action (e.g., "Call Sarah about meeting")
+        /// Task title describing action (e.g., "Call Sarah about meeting")
         title: String,
-        /// Optional project ID - use meaningful abbreviation like "website-redesign", not just "project-1"
+        /// Optional project ID - use meaningful abbreviation like "website-redesign"
         project: Option<String>,
-        /// Optional context (e.g., "@office", "@phone") indicating where/how this can be done
+        /// Optional context (e.g., "@office", "@phone") for where/how task can be done
         context: Option<String>,
-        /// Optional notes for additional details (supports Markdown)
+        /// Optional notes for details (Markdown supported)
         notes: Option<String>,
         /// Optional start date in YYYY-MM-DD format (e.g., "2024-03-15")
         start_date: Option<String>,
@@ -215,18 +212,15 @@ impl McpServer for GtdServerHandler {
         Ok(format!("Task created with ID: {}", task_id))
     }
 
-    /// View all tasks with optional filtering by status or date.
-    ///
-    /// Use this to review tasks in different stages of your GTD workflow. Filter by status
-    /// to focus on specific lists (e.g., "next_action" to see what you should work on).
+    /// View tasks with optional status or date filtering. Filter by status to focus on specific GTD workflow stage.
     #[tool]
     async fn list_tasks(
         &self,
-        /// Optional filter by status: "inbox", "next_action", "waiting_for", "someday", "later", "done", "trash", or "calendar"
+        /// Optional status filter: "inbox", "next_action", "waiting_for", "someday", "later", "done", "trash", "calendar"
         status: Option<String>,
-        /// Optional filter by date in YYYY-MM-DD format - excludes tasks with future start_date
+        /// Optional date filter (YYYY-MM-DD) - excludes tasks with future start_date
         date: Option<String>,
-        /// Optional - set to true to exclude notes and reduce token usage (default: false)
+        /// Optional - exclude notes to reduce tokens (default: false)
         exclude_notes: Option<bool>,
     ) -> McpResult<String> {
         // Parse the date filter if provided
@@ -327,78 +321,15 @@ impl McpServer for GtdServerHandler {
         Ok(result)
     }
 
-    /// Change the status of one or more tasks in the GTD workflow.
-    ///
-    /// This unified tool replaces individual status-change operations, allowing you to move tasks
-    /// between different GTD workflow stages. Understanding when to use each status is key to
-    /// effective GTD practice.
-    ///
-    /// ## GTD Status Transitions Guide
-    ///
-    /// **inbox** - Unprocessed items (capture everything here first)
-    /// - Use when: Initially capturing tasks during collection phase
-    /// - Review regularly: During inbox processing sessions
-    /// - Next step: Process each item to determine if actionable
-    ///
-    /// **next_action** - Ready-to-execute tasks (your primary to-do list)
-    /// - Use when: Task is clear, actionable, and ready to work on now
-    /// - Review regularly: Daily, when choosing what to work on
-    /// - Characteristics: Specific, physical, visible action; can be done immediately
-    /// - Example: "Call John about meeting agenda" not "Think about meeting"
-    ///
-    /// **waiting_for** - Blocked pending someone/something
-    /// - Use when: You've delegated or waiting for external input/approval
-    /// - Review regularly: During weekly review to follow up
-    /// - Best practice: Add notes about who/what you're waiting for and date delegated
-    /// - Example: "Waiting for Sarah's budget approval (requested 2024-03-15)"
-    ///
-    /// **someday** - Potential future actions (someday/maybe list)
-    /// - Use when: Interesting ideas but no commitment to do them now
-    /// - Review regularly: During weekly/monthly review to see if timing is right
-    /// - Characteristics: Uncertain commitment, might never happen
-    /// - Example: "Learn to play guitar", "Visit Japan"
-    ///
-    /// **later** - Deferred but planned tasks
-    /// - Use when: Committed to doing it, just not now (unlike someday which is uncertain)
-    /// - Review regularly: During weekly review to see if timing has arrived
-    /// - Characteristics: Definite commitment, waiting for right time/season
-    /// - Example: "File taxes" (when it's only February), "Plant spring garden" (when it's winter)
-    ///
-    /// **calendar** - Date-specific tasks (time-specific actions)
-    /// - Use when: Must be done on a specific date/time (appointments, deadlines)
-    /// - Review regularly: Daily, morning planning
-    /// - Important: Requires start_date to be set (can be set during status change)
-    /// - Example: "Dentist appointment 2024-03-20", "Submit report by 2024-03-25"
-    ///
-    /// **done** - Completed tasks (accomplishment record)
-    /// - Use when: Task is finished and complete
-    /// - Review regularly: During weekly review for sense of accomplishment
-    /// - Characteristics: Permanent record of what you've achieved
-    /// - Note: Tasks remain in system for reference
-    ///
-    /// **trash** - Deleted tasks (soft delete)
-    /// - Use when: Task is no longer relevant or was entered by mistake
-    /// - Review regularly: Periodically empty trash to clean up
-    /// - Note: Tasks remain in trash until permanently deleted with empty_trash
-    /// - Can be recovered by moving back to another status
-    ///
-    /// ## Status Change Best Practices
-    ///
-    /// 1. **Process inbox regularly**: Don't let items accumulate
-    /// 2. **Be specific with next_action**: "Call" not "Contact", "Draft" not "Work on"
-    /// 3. **Review waiting_for weekly**: Follow up on delegated items
-    /// 4. **Keep someday/maybe fresh**: Review monthly, delete stale ideas
-    /// 5. **Reserve calendar for time-specific**: Don't clutter with flexible tasks
-    /// 6. **Celebrate done**: Review accomplishments for motivation
-    /// 7. **Clean trash periodically**: Use empty_trash when certain
+    /// Move tasks between GTD workflow statuses. Key GTD statuses: **inbox** (unprocessed), **next_action** (ready to execute), **waiting_for** (blocked/delegated), **someday** (maybe later), **later** (deferred), **calendar** (date-specific, needs start_date), **done** (completed), **trash** (deleted). Process inbox regularly. Be specific with next_action. Review waiting_for weekly. Calendar requires start_date.
     #[tool]
     async fn change_task_status(
         &self,
-        /// Task IDs to change status. Format: ["#1", "#2", "#3"]
+        /// Task IDs to change. Format: ["#1", "#2", "#3"]
         task_ids: Vec<String>,
-        /// Target status: "inbox", "next_action", "waiting_for", "someday", "later", "calendar", "done", or "trash"
+        /// Target status: "inbox", "next_action", "waiting_for", "someday", "later", "calendar", "done", "trash"
         status: String,
-        /// Optional start date (format: YYYY-MM-DD) - required when status is "calendar", can be set for any status
+        /// Optional start date (YYYY-MM-DD) - required for "calendar", optional for others
         start_date: Option<String>,
     ) -> McpResult<String> {
         // Parse the target status
@@ -549,10 +480,7 @@ impl McpServer for GtdServerHandler {
         Ok(result)
     }
 
-    /// Permanently delete all trashed tasks (irreversible).
-    ///
-    /// Use this to clean up trash when you're certain you don't need those tasks anymore.
-    /// This operation cannot be undone - tasks are completely removed from the system.
+    /// Permanently delete all trashed tasks (irreversible). Use when certain you don't need those tasks.
     #[tool]
     async fn empty_trash(&self) -> McpResult<String> {
         let mut data = self.data.lock().unwrap();
@@ -569,18 +497,15 @@ impl McpServer for GtdServerHandler {
         Ok(format!("Deleted {} task(s) from trash", count))
     }
 
-    /// Create a new project to organize related tasks.
-    ///
-    /// Projects represent multi-step endeavors (e.g., "Launch website", "Plan conference").
-    /// Use projects to group related tasks and track progress on larger goals.
+    /// Create project to organize related tasks. Projects are multi-step endeavors (e.g., "Launch website"). Use to group related tasks and track larger goals.
     #[tool]
     async fn add_project(
         &self,
         /// Project name (e.g., "Website Redesign")
         name: String,
-        /// Project ID - use meaningful abbreviation (e.g., "website-redesign", "q1-budget"), not just sequential numbers
+        /// Project ID - use meaningful abbreviation (e.g., "website-redesign", "q1-budget")
         id: String,
-        /// Optional description of the project's goal
+        /// Optional project goal description
         description: Option<String>,
         /// Optional context where project work happens (e.g., "@office")
         context: Option<String>,
@@ -617,10 +542,7 @@ impl McpServer for GtdServerHandler {
         Ok(format!("Project created with ID: {}", id))
     }
 
-    /// View all projects with their current status.
-    ///
-    /// Lists all projects showing their status (active, on_hold, completed), descriptions,
-    /// and associated contexts. Review regularly to ensure projects are progressing.
+    /// View all projects with status (active/on_hold/completed), descriptions, and contexts. Review regularly for progress tracking.
     #[tool]
     async fn list_projects(&self) -> McpResult<String> {
         let data = self.data.lock().unwrap();
@@ -647,24 +569,21 @@ impl McpServer for GtdServerHandler {
         Ok(result)
     }
 
-    /// Modify an existing task's properties.
-    ///
-    /// Use this to update task details, reassign to projects, change contexts, add notes,
-    /// or set/update start dates. Pass empty string to remove optional fields.
+    /// Modify task properties. Update details, reassign projects, change contexts, add notes, or set/update start dates. Use empty string "" to remove optional fields.
     #[tool]
     async fn update_task(
         &self,
-        /// Task ID to update (e.g., "#1")
+        /// Task ID (e.g., "#1")
         task_id: String,
-        /// Optional new title for the task
+        /// Optional new title
         title: Option<String>,
-        /// Optional new project ID to link task to, or empty string "" to unlink
+        /// Optional new project ID, or "" to unlink
         project: Option<String>,
-        /// Optional new context, or empty string "" to remove
+        /// Optional new context, or "" to remove
         context: Option<String>,
-        /// Optional new notes content, or empty string "" to remove
+        /// Optional new notes, or "" to remove
         notes: Option<String>,
-        /// Optional new start date in YYYY-MM-DD format, or empty string "" to remove
+        /// Optional new start date (YYYY-MM-DD), or "" to remove
         start_date: Option<String>,
     ) -> McpResult<String> {
         // Normalize task ID to ensure # prefix
@@ -750,24 +669,21 @@ impl McpServer for GtdServerHandler {
         Ok(format!("Task {} updated successfully", task_id))
     }
 
-    /// Modify an existing project's properties.
-    ///
-    /// Use this to update project details, change status (active/on_hold/completed),
-    /// or reassign to different contexts. Use empty string to remove optional fields.
+    /// Modify project properties. Update details, change status (active/on_hold/completed), or reassign contexts. Use "" to remove optional fields.
     #[tool]
     async fn update_project(
         &self,
-        /// Project ID to update (e.g., "website-redesign")
+        /// Project ID (e.g., "website-redesign")
         project_id: String,
         /// Optional new project ID if renaming
         id: Option<String>,
-        /// Optional new project name
+        /// Optional new name
         name: Option<String>,
-        /// Optional new description, or empty string "" to remove
+        /// Optional new description, or "" to remove
         description: Option<String>,
-        /// Optional new status: "active", "on_hold", or "completed"
+        /// Optional new status: "active", "on_hold", "completed"
         status: Option<String>,
-        /// Optional new context, or empty string "" to remove
+        /// Optional new context, or "" to remove
         context: Option<String>,
     ) -> McpResult<String> {
         let mut data = self.data.lock().unwrap();
@@ -868,14 +784,11 @@ impl McpServer for GtdServerHandler {
         Ok(format!("Project {} updated successfully", new_project_id))
     }
 
-    /// Delete a project from the system.
-    ///
-    /// Deletes a project if it is not referenced by any tasks. This ensures data integrity
-    /// by preventing deletion of projects that are still in use.
+    /// Delete project if not referenced by any tasks. Ensures data integrity by preventing deletion of projects in use.
     #[tool]
     async fn delete_project(
         &self,
-        /// Project ID to delete (e.g., "website-redesign")
+        /// Project ID (e.g., "website-redesign")
         project_id: String,
     ) -> McpResult<String> {
         let mut data = self.data.lock().unwrap();
@@ -926,16 +839,13 @@ impl McpServer for GtdServerHandler {
         Ok(format!("Project {} deleted successfully", project_id))
     }
 
-    /// Create a new context to categorize where/how tasks can be done.
-    ///
-    /// Contexts represent locations, tools, or situations (e.g., "@office", "@home", "@phone", "@computer").
-    /// Use contexts to filter tasks based on your current situation or available resources.
+    /// Create context to categorize where/how tasks can be done. Contexts are locations, tools, or situations (e.g., "@office", "@home", "@phone"). Use to filter tasks by current situation.
     #[tool]
     async fn add_context(
         &self,
         /// Context name (e.g., "@office", "@home", "@phone")
         name: String,
-        /// Optional description of what this context represents
+        /// Optional description
         description: Option<String>,
     ) -> McpResult<String> {
         let mut data = self.data.lock().unwrap();
@@ -961,10 +871,7 @@ impl McpServer for GtdServerHandler {
         Ok(format!("Context created: {}", name))
     }
 
-    /// View all available contexts.
-    ///
-    /// Lists all defined contexts with their descriptions. Use this to see what contexts
-    /// are available when categorizing tasks or projects.
+    /// View all contexts with descriptions. See available contexts for categorizing tasks/projects.
     #[tool]
     async fn list_contexts(&self) -> McpResult<String> {
         let data = self.data.lock().unwrap();
@@ -989,15 +896,13 @@ impl McpServer for GtdServerHandler {
         Ok(result)
     }
 
-    /// Modify an existing context's description.
-    ///
-    /// Use this to update the description of a context. Pass empty string to remove the description.
+    /// Modify context description. Use "" to remove description.
     #[tool]
     async fn update_context(
         &self,
-        /// Context name to update (e.g., "@office")
+        /// Context name (e.g., "@office")
         name: String,
-        /// Optional new description, or empty string "" to remove
+        /// Optional new description, or "" to remove
         description: Option<String>,
     ) -> McpResult<String> {
         let mut data = self.data.lock().unwrap();
@@ -1028,14 +933,11 @@ impl McpServer for GtdServerHandler {
         Ok(format!("Context {} updated successfully", name))
     }
 
-    /// Delete a context from the system.
-    ///
-    /// Deletes a context. Note that tasks/projects using this context will keep their context references,
-    /// so ensure the context is no longer in use before deleting.
+    /// Delete context. Note: tasks/projects using this context will keep their references.
     #[tool]
     async fn delete_context(
         &self,
-        /// Context name to delete (e.g., "@office")
+        /// Context name (e.g., "@office")
         name: String,
     ) -> McpResult<String> {
         let mut data = self.data.lock().unwrap();
