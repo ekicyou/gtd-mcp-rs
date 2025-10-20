@@ -327,686 +327,97 @@ impl McpServer for GtdServerHandler {
         Ok(result)
     }
 
-    /// Move one or more tasks to trash (soft delete - can be emptied later).
+    /// Change the status of one or more tasks in the GTD workflow.
     ///
-    /// Use this to remove tasks you no longer need. Tasks remain in trash until emptied.
-    /// Supports batch operations for efficient task management.
-    #[tool]
-    async fn trash_tasks(
-        &self,
-        /// Task IDs to trash. Format: ["#1", "#2", "#3"]
-        task_ids: Vec<String>,
-    ) -> McpResult<String> {
-        let mut data = self.data.lock().unwrap();
-
-        let mut successful: Vec<String> = Vec::new();
-        let mut failed: Vec<(String, String)> = Vec::new();
-
-        // Process each task ID
-        for task_id in &task_ids {
-            let task_id = Self::normalize_task_id(task_id.trim());
-
-            // Check if task exists
-            if data.find_task_by_id(&task_id).is_none() {
-                eprintln!("Error: Task not found: {}", task_id);
-                failed.push((task_id.to_string(), "Task not found".to_string()));
-                continue;
-            }
-
-            let original_status = data
-                .find_task_by_id(&task_id)
-                .map(|t| format!("{:?}", t.status));
-            eprintln!(
-                "Moving task {} from {:?} to trash",
-                task_id, original_status
-            );
-
-            // Move task to trash
-            if data.move_status(&task_id, TaskStatus::trash).is_some() {
-                // Update the timestamp after the move
-                if let Some(task) = data.find_task_by_id_mut(&task_id) {
-                    task.updated_at = local_date_today();
-                }
-                successful.push(task_id.to_string());
-                eprintln!("Successfully moved task {} to trash", task_id);
-            } else {
-                eprintln!("Error: Failed to move task {} to trash", task_id);
-                failed.push((task_id.to_string(), "Failed to move task".to_string()));
-            }
-        }
-
-        drop(data);
-
-        // Save data if any tasks were successfully moved
-        if !successful.is_empty() {
-            let task_list = successful.join(", ");
-            if let Err(e) =
-                self.save_data_with_message(&format!("Move tasks to trash: {}", task_list))
-            {
-                eprintln!(
-                    "Error: Failed to save data after moving tasks to trash: {}",
-                    e
-                );
-                bail!(
-                    "Failed to save tasks to trash: {}. Some tasks may not have been moved.",
-                    e
-                );
-            }
-        }
-
-        // Build result message
-        let mut result = String::new();
-        if !successful.is_empty() {
-            result.push_str(&format!(
-                "Successfully moved {} task(s) to trash: {}",
-                successful.len(),
-                successful.join(", ")
-            ));
-        }
-        if !failed.is_empty() {
-            if !result.is_empty() {
-                result.push('\n');
-            }
-            result.push_str(&format!("Failed to move {} task(s): ", failed.len()));
-            let failures: Vec<String> = failed
-                .iter()
-                .map(|(id, reason)| format!("{} ({})", id, reason))
-                .collect();
-            result.push_str(&failures.join(", "));
-        }
-
-        if successful.is_empty() && !failed.is_empty() {
-            bail!("{}", result);
-        }
-
-        Ok(result)
-    }
-
-    /// Move one or more tasks back to inbox for reprocessing.
+    /// This unified tool replaces individual status-change operations, allowing you to move tasks
+    /// between different GTD workflow stages. Understanding when to use each status is key to
+    /// effective GTD practice.
     ///
-    /// Use this when tasks need to be reconsidered or were incorrectly categorized.
-    /// Returns tasks to the unprocessed state.
-    #[tool]
-    async fn inbox_tasks(
-        &self,
-        /// Task IDs to move to inbox. Format: ["#1", "#2", "#3"]
-        task_ids: Vec<String>,
-    ) -> McpResult<String> {
-        let mut data = self.data.lock().unwrap();
-
-        let mut successful: Vec<String> = Vec::new();
-        let mut failed: Vec<(String, String)> = Vec::new();
-
-        // Process each task ID
-        for task_id in &task_ids {
-            let task_id = Self::normalize_task_id(task_id.trim());
-
-            // Check if task exists
-            if data.find_task_by_id(&task_id).is_none() {
-                eprintln!("Error: Task not found: {}", task_id);
-                failed.push((task_id.to_string(), "Task not found".to_string()));
-                continue;
-            }
-
-            let original_status = data
-                .find_task_by_id(&task_id)
-                .map(|t| format!("{:?}", t.status));
-            eprintln!(
-                "Moving task {} from {:?} to inbox",
-                task_id, original_status
-            );
-
-            // Move task to inbox
-            if data.move_status(&task_id, TaskStatus::inbox).is_some() {
-                // Update the timestamp after the move
-                if let Some(task) = data.find_task_by_id_mut(&task_id) {
-                    task.updated_at = local_date_today();
-                }
-                successful.push(task_id.to_string());
-                eprintln!("Successfully moved task {} to inbox", task_id);
-            } else {
-                eprintln!("Error: Failed to move task {} to inbox", task_id);
-                failed.push((task_id.to_string(), "Failed to move task".to_string()));
-            }
-        }
-
-        drop(data);
-
-        // Save data if any tasks were successfully moved
-        if !successful.is_empty() {
-            let task_list = successful.join(", ");
-            if let Err(e) =
-                self.save_data_with_message(&format!("Move tasks to inbox: {}", task_list))
-            {
-                eprintln!(
-                    "Error: Failed to save data after moving tasks to inbox: {}",
-                    e
-                );
-                bail!(
-                    "Failed to save tasks to inbox: {}. Some tasks may not have been moved.",
-                    e
-                );
-            }
-        }
-
-        // Build result message
-        let mut result = String::new();
-        if !successful.is_empty() {
-            result.push_str(&format!(
-                "Successfully moved {} task(s) to inbox: {}",
-                successful.len(),
-                successful.join(", ")
-            ));
-        }
-        if !failed.is_empty() {
-            if !result.is_empty() {
-                result.push('\n');
-            }
-            result.push_str(&format!("Failed to move {} task(s): ", failed.len()));
-            let failures: Vec<String> = failed
-                .iter()
-                .map(|(id, reason)| format!("{} ({})", id, reason))
-                .collect();
-            result.push_str(&failures.join(", "));
-        }
-
-        if successful.is_empty() && !failed.is_empty() {
-            bail!("{}", result);
-        }
-
-        Ok(result)
-    }
-
-    /// Move one or more tasks to next_action status - ready to work on now.
+    /// ## GTD Status Transitions Guide
     ///
-    /// Use this for tasks that are clear, actionable, and ready for execution.
-    /// This is your primary "to-do" list - the tasks you should focus on.
-    #[tool]
-    async fn next_action_tasks(
-        &self,
-        /// Task IDs to move to next_action. Format: ["#1", "#2", "#3"]
-        task_ids: Vec<String>,
-    ) -> McpResult<String> {
-        let mut data = self.data.lock().unwrap();
-
-        let mut successful: Vec<String> = Vec::new();
-        let mut failed: Vec<(String, String)> = Vec::new();
-
-        // Process each task ID
-        for task_id in &task_ids {
-            let task_id = Self::normalize_task_id(task_id.trim());
-
-            // Check if task exists
-            if data.find_task_by_id(&task_id).is_none() {
-                eprintln!("Error: Task not found: {}", task_id);
-                failed.push((task_id.to_string(), "Task not found".to_string()));
-                continue;
-            }
-
-            let original_status = data
-                .find_task_by_id(&task_id)
-                .map(|t| format!("{:?}", t.status));
-            eprintln!(
-                "Moving task {} from {:?} to next_action",
-                task_id, original_status
-            );
-
-            // Move task to next_action
-            if data
-                .move_status(&task_id, TaskStatus::next_action)
-                .is_some()
-            {
-                // Update the timestamp after the move
-                if let Some(task) = data.find_task_by_id_mut(&task_id) {
-                    task.updated_at = local_date_today();
-                }
-                successful.push(task_id.to_string());
-                eprintln!("Successfully moved task {} to next_action", task_id);
-            } else {
-                eprintln!("Error: Failed to move task {} to next_action", task_id);
-                failed.push((task_id.to_string(), "Failed to move task".to_string()));
-            }
-        }
-
-        drop(data);
-
-        // Save data if any tasks were successfully moved
-        if !successful.is_empty() {
-            let task_list = successful.join(", ");
-            if let Err(e) =
-                self.save_data_with_message(&format!("Move tasks to next_action: {}", task_list))
-            {
-                eprintln!(
-                    "Error: Failed to save data after moving tasks to next_action: {}",
-                    e
-                );
-                bail!(
-                    "Failed to save tasks to next_action: {}. Some tasks may not have been moved.",
-                    e
-                );
-            }
-        }
-
-        // Build result message
-        let mut result = String::new();
-        if !successful.is_empty() {
-            result.push_str(&format!(
-                "Successfully moved {} task(s) to next action: {}",
-                successful.len(),
-                successful.join(", ")
-            ));
-        }
-        if !failed.is_empty() {
-            if !result.is_empty() {
-                result.push('\n');
-            }
-            result.push_str(&format!("Failed to move {} task(s): ", failed.len()));
-            let failures: Vec<String> = failed
-                .iter()
-                .map(|(id, reason)| format!("{} ({})", id, reason))
-                .collect();
-            result.push_str(&failures.join(", "));
-        }
-
-        if successful.is_empty() && !failed.is_empty() {
-            bail!("{}", result);
-        }
-
-        Ok(result)
-    }
-
-    /// Move one or more tasks to waiting_for status - blocked pending someone/something.
+    /// **inbox** - Unprocessed items (capture everything here first)
+    /// - Use when: Initially capturing tasks during collection phase
+    /// - Review regularly: During inbox processing sessions
+    /// - Next step: Process each item to determine if actionable
     ///
-    /// Use this for tasks you can't complete yet because you're waiting for input, approval,
-    /// or action from others. Add notes about what/who you're waiting for.
-    #[tool]
-    async fn waiting_for_tasks(
-        &self,
-        /// Task IDs to move to waiting_for. Format: ["#1", "#2", "#3"]
-        task_ids: Vec<String>,
-    ) -> McpResult<String> {
-        let mut data = self.data.lock().unwrap();
-
-        let mut successful: Vec<String> = Vec::new();
-        let mut failed: Vec<(String, String)> = Vec::new();
-
-        // Process each task ID
-        for task_id in &task_ids {
-            let task_id = Self::normalize_task_id(task_id.trim());
-
-            // Check if task exists
-            if data.find_task_by_id(&task_id).is_none() {
-                eprintln!("Error: Task not found: {}", task_id);
-                failed.push((task_id.to_string(), "Task not found".to_string()));
-                continue;
-            }
-
-            let original_status = data
-                .find_task_by_id(&task_id)
-                .map(|t| format!("{:?}", t.status));
-            eprintln!(
-                "Moving task {} from {:?} to waiting_for",
-                task_id, original_status
-            );
-
-            // Move task to waiting_for
-            if data
-                .move_status(&task_id, TaskStatus::waiting_for)
-                .is_some()
-            {
-                // Update the timestamp after the move
-                if let Some(task) = data.find_task_by_id_mut(&task_id) {
-                    task.updated_at = local_date_today();
-                }
-                successful.push(task_id.to_string());
-                eprintln!("Successfully moved task {} to waiting_for", task_id);
-            } else {
-                eprintln!("Error: Failed to move task {} to waiting_for", task_id);
-                failed.push((task_id.to_string(), "Failed to move task".to_string()));
-            }
-        }
-
-        drop(data);
-
-        // Save data if any tasks were successfully moved
-        if !successful.is_empty() {
-            let task_list = successful.join(", ");
-            if let Err(e) =
-                self.save_data_with_message(&format!("Move tasks to waiting_for: {}", task_list))
-            {
-                eprintln!(
-                    "Error: Failed to save data after moving tasks to waiting_for: {}",
-                    e
-                );
-                bail!(
-                    "Failed to save tasks to waiting_for: {}. Some tasks may not have been moved.",
-                    e
-                );
-            }
-        }
-
-        // Build result message
-        let mut result = String::new();
-        if !successful.is_empty() {
-            result.push_str(&format!(
-                "Successfully moved {} task(s) to waiting for: {}",
-                successful.len(),
-                successful.join(", ")
-            ));
-        }
-        if !failed.is_empty() {
-            if !result.is_empty() {
-                result.push('\n');
-            }
-            result.push_str(&format!("Failed to move {} task(s): ", failed.len()));
-            let failures: Vec<String> = failed
-                .iter()
-                .map(|(id, reason)| format!("{} ({})", id, reason))
-                .collect();
-            result.push_str(&failures.join(", "));
-        }
-
-        if successful.is_empty() && !failed.is_empty() {
-            bail!("{}", result);
-        }
-
-        Ok(result)
-    }
-
-    /// Move one or more tasks to someday status - ideas for potential future action.
+    /// **next_action** - Ready-to-execute tasks (your primary to-do list)
+    /// - Use when: Task is clear, actionable, and ready to work on now
+    /// - Review regularly: Daily, when choosing what to work on
+    /// - Characteristics: Specific, physical, visible action; can be done immediately
+    /// - Example: "Call John about meeting agenda" not "Think about meeting"
     ///
-    /// Use this for tasks you might want to do someday but not now. Review during weekly reviews
-    /// to see if any should become active. This is your "someday/maybe" list.
-    #[tool]
-    async fn someday_tasks(
-        &self,
-        /// Task IDs to move to someday. Format: ["#1", "#2", "#3"]
-        task_ids: Vec<String>,
-    ) -> McpResult<String> {
-        let mut data = self.data.lock().unwrap();
-
-        let mut successful: Vec<String> = Vec::new();
-        let mut failed: Vec<(String, String)> = Vec::new();
-
-        // Process each task ID
-        for task_id in &task_ids {
-            let task_id = Self::normalize_task_id(task_id.trim());
-
-            // Check if task exists
-            if data.find_task_by_id(&task_id).is_none() {
-                eprintln!("Error: Task not found: {}", task_id);
-                failed.push((task_id.to_string(), "Task not found".to_string()));
-                continue;
-            }
-
-            let original_status = data
-                .find_task_by_id(&task_id)
-                .map(|t| format!("{:?}", t.status));
-            eprintln!(
-                "Moving task {} from {:?} to someday",
-                task_id, original_status
-            );
-
-            // Move task to someday
-            if data.move_status(&task_id, TaskStatus::someday).is_some() {
-                // Update the timestamp after the move
-                if let Some(task) = data.find_task_by_id_mut(&task_id) {
-                    task.updated_at = local_date_today();
-                }
-                successful.push(task_id.to_string());
-                eprintln!("Successfully moved task {} to someday", task_id);
-            } else {
-                eprintln!("Error: Failed to move task {} to someday", task_id);
-                failed.push((task_id.to_string(), "Failed to move task".to_string()));
-            }
-        }
-
-        drop(data);
-
-        // Save data if any tasks were successfully moved
-        if !successful.is_empty() {
-            let task_list = successful.join(", ");
-            if let Err(e) =
-                self.save_data_with_message(&format!("Move tasks to someday: {}", task_list))
-            {
-                eprintln!(
-                    "Error: Failed to save data after moving tasks to someday: {}",
-                    e
-                );
-                bail!(
-                    "Failed to save tasks to someday: {}. Some tasks may not have been moved.",
-                    e
-                );
-            }
-        }
-
-        // Build result message
-        let mut result = String::new();
-        if !successful.is_empty() {
-            result.push_str(&format!(
-                "Successfully moved {} task(s) to someday: {}",
-                successful.len(),
-                successful.join(", ")
-            ));
-        }
-        if !failed.is_empty() {
-            if !result.is_empty() {
-                result.push('\n');
-            }
-            result.push_str(&format!("Failed to move {} task(s): ", failed.len()));
-            let failures: Vec<String> = failed
-                .iter()
-                .map(|(id, reason)| format!("{} ({})", id, reason))
-                .collect();
-            result.push_str(&failures.join(", "));
-        }
-
-        if successful.is_empty() && !failed.is_empty() {
-            bail!("{}", result);
-        }
-
-        Ok(result)
-    }
-
-    /// Move one or more tasks to later status - deferred but still planned.
+    /// **waiting_for** - Blocked pending someone/something
+    /// - Use when: You've delegated or waiting for external input/approval
+    /// - Review regularly: During weekly review to follow up
+    /// - Best practice: Add notes about who/what you're waiting for and date delegated
+    /// - Example: "Waiting for Sarah's budget approval (requested 2024-03-15)"
     ///
-    /// Use this for tasks you've decided to defer but still intend to do (unlike someday which is uncertain).
-    /// These are committed tasks that are just not priorities right now.
-    #[tool]
-    async fn later_tasks(
-        &self,
-        /// Task IDs to move to later. Format: ["#1", "#2", "#3"]
-        task_ids: Vec<String>,
-    ) -> McpResult<String> {
-        let mut data = self.data.lock().unwrap();
-
-        let mut successful: Vec<String> = Vec::new();
-        let mut failed: Vec<(String, String)> = Vec::new();
-
-        // Process each task ID
-        for task_id in &task_ids {
-            let task_id = Self::normalize_task_id(task_id.trim());
-
-            // Check if task exists
-            if data.find_task_by_id(&task_id).is_none() {
-                eprintln!("Error: Task not found: {}", task_id);
-                failed.push((task_id.to_string(), "Task not found".to_string()));
-                continue;
-            }
-
-            let original_status = data
-                .find_task_by_id(&task_id)
-                .map(|t| format!("{:?}", t.status));
-            eprintln!(
-                "Moving task {} from {:?} to later",
-                task_id, original_status
-            );
-
-            // Move task to later
-            if data.move_status(&task_id, TaskStatus::later).is_some() {
-                // Update the timestamp after the move
-                if let Some(task) = data.find_task_by_id_mut(&task_id) {
-                    task.updated_at = local_date_today();
-                }
-                successful.push(task_id.to_string());
-                eprintln!("Successfully moved task {} to later", task_id);
-            } else {
-                eprintln!("Error: Failed to move task {} to later", task_id);
-                failed.push((task_id.to_string(), "Failed to move task".to_string()));
-            }
-        }
-
-        drop(data);
-
-        // Save data if any tasks were successfully moved
-        if !successful.is_empty() {
-            let task_list = successful.join(", ");
-            if let Err(e) =
-                self.save_data_with_message(&format!("Move tasks to later: {}", task_list))
-            {
-                eprintln!(
-                    "Error: Failed to save data after moving tasks to later: {}",
-                    e
-                );
-                bail!(
-                    "Failed to save tasks to later: {}. Some tasks may not have been moved.",
-                    e
-                );
-            }
-        }
-
-        // Build result message
-        let mut result = String::new();
-        if !successful.is_empty() {
-            result.push_str(&format!(
-                "Successfully moved {} task(s) to later: {}",
-                successful.len(),
-                successful.join(", ")
-            ));
-        }
-        if !failed.is_empty() {
-            if !result.is_empty() {
-                result.push('\n');
-            }
-            result.push_str(&format!("Failed to move {} task(s): ", failed.len()));
-            let failures: Vec<String> = failed
-                .iter()
-                .map(|(id, reason)| format!("{} ({})", id, reason))
-                .collect();
-            result.push_str(&failures.join(", "));
-        }
-
-        if successful.is_empty() && !failed.is_empty() {
-            bail!("{}", result);
-        }
-
-        Ok(result)
-    }
-
-    /// Move one or more tasks to done status - mark as completed.
+    /// **someday** - Potential future actions (someday/maybe list)
+    /// - Use when: Interesting ideas but no commitment to do them now
+    /// - Review regularly: During weekly/monthly review to see if timing is right
+    /// - Characteristics: Uncertain commitment, might never happen
+    /// - Example: "Learn to play guitar", "Visit Japan"
     ///
-    /// Use this when tasks are finished. Completed tasks remain in the system for reference
-    /// and can be reviewed later. This is your accomplishment record.
-    #[tool]
-    async fn done_tasks(
-        &self,
-        /// Task IDs to mark as done. Format: ["#1", "#2", "#3"]
-        task_ids: Vec<String>,
-    ) -> McpResult<String> {
-        let mut data = self.data.lock().unwrap();
-
-        let mut successful: Vec<String> = Vec::new();
-        let mut failed: Vec<(String, String)> = Vec::new();
-
-        // Process each task ID
-        for task_id in &task_ids {
-            let task_id = Self::normalize_task_id(task_id.trim());
-
-            // Check if task exists
-            if data.find_task_by_id(&task_id).is_none() {
-                eprintln!("Error: Task not found: {}", task_id);
-                failed.push((task_id.to_string(), "Task not found".to_string()));
-                continue;
-            }
-
-            let original_status = data
-                .find_task_by_id(&task_id)
-                .map(|t| format!("{:?}", t.status));
-            eprintln!("Moving task {} from {:?} to done", task_id, original_status);
-
-            // Move task to done
-            if data.move_status(&task_id, TaskStatus::done).is_some() {
-                // Update the timestamp after the move
-                if let Some(task) = data.find_task_by_id_mut(&task_id) {
-                    task.updated_at = local_date_today();
-                }
-                successful.push(task_id.to_string());
-                eprintln!("Successfully moved task {} to done", task_id);
-            } else {
-                eprintln!("Error: Failed to move task {} to done", task_id);
-                failed.push((task_id.to_string(), "Failed to move task".to_string()));
-            }
-        }
-
-        drop(data);
-
-        // Save data if any tasks were successfully moved
-        if !successful.is_empty() {
-            let task_list = successful.join(", ");
-            if let Err(e) =
-                self.save_data_with_message(&format!("Mark tasks as done: {}", task_list))
-            {
-                eprintln!(
-                    "Error: Failed to save data after moving tasks to done: {}",
-                    e
-                );
-                bail!(
-                    "Failed to save tasks to done: {}. Some tasks may not have been moved.",
-                    e
-                );
-            }
-        }
-
-        // Build result message
-        let mut result = String::new();
-        if !successful.is_empty() {
-            result.push_str(&format!(
-                "Successfully moved {} task(s) to done: {}",
-                successful.len(),
-                successful.join(", ")
-            ));
-        }
-        if !failed.is_empty() {
-            if !result.is_empty() {
-                result.push('\n');
-            }
-            result.push_str(&format!("Failed to move {} task(s): ", failed.len()));
-            let failures: Vec<String> = failed
-                .iter()
-                .map(|(id, reason)| format!("{} ({})", id, reason))
-                .collect();
-            result.push_str(&failures.join(", "));
-        }
-
-        if successful.is_empty() && !failed.is_empty() {
-            bail!("{}", result);
-        }
-
-        Ok(result)
-    }
-
-    /// Move one or more tasks to calendar status - for date-specific actions.
+    /// **later** - Deferred but planned tasks
+    /// - Use when: Committed to doing it, just not now (unlike someday which is uncertain)
+    /// - Review regularly: During weekly review to see if timing has arrived
+    /// - Characteristics: Definite commitment, waiting for right time/season
+    /// - Example: "File taxes" (when it's only February), "Plant spring garden" (when it's winter)
     ///
-    /// Use this for tasks that must be done on a specific date (appointments, deadlines).
-    /// These tasks should have a start_date set. Review calendar tasks daily.
+    /// **calendar** - Date-specific tasks (time-specific actions)
+    /// - Use when: Must be done on a specific date/time (appointments, deadlines)
+    /// - Review regularly: Daily, morning planning
+    /// - Important: Requires start_date to be set (can be set during status change)
+    /// - Example: "Dentist appointment 2024-03-20", "Submit report by 2024-03-25"
+    ///
+    /// **done** - Completed tasks (accomplishment record)
+    /// - Use when: Task is finished and complete
+    /// - Review regularly: During weekly review for sense of accomplishment
+    /// - Characteristics: Permanent record of what you've achieved
+    /// - Note: Tasks remain in system for reference
+    ///
+    /// **trash** - Deleted tasks (soft delete)
+    /// - Use when: Task is no longer relevant or was entered by mistake
+    /// - Review regularly: Periodically empty trash to clean up
+    /// - Note: Tasks remain in trash until permanently deleted with empty_trash
+    /// - Can be recovered by moving back to another status
+    ///
+    /// ## Status Change Best Practices
+    ///
+    /// 1. **Process inbox regularly**: Don't let items accumulate
+    /// 2. **Be specific with next_action**: "Call" not "Contact", "Draft" not "Work on"
+    /// 3. **Review waiting_for weekly**: Follow up on delegated items
+    /// 4. **Keep someday/maybe fresh**: Review monthly, delete stale ideas
+    /// 5. **Reserve calendar for time-specific**: Don't clutter with flexible tasks
+    /// 6. **Celebrate done**: Review accomplishments for motivation
+    /// 7. **Clean trash periodically**: Use empty_trash when certain
     #[tool]
-    async fn calendar_tasks(
+    async fn change_task_status(
         &self,
-        /// Task IDs to move to calendar. Format: ["#1", "#2", "#3"]
+        /// Task IDs to change status. Format: ["#1", "#2", "#3"]
         task_ids: Vec<String>,
-        /// Optional start date (format: YYYY-MM-DD). If not provided, each task must already have a start_date
+        /// Target status: "inbox", "next_action", "waiting_for", "someday", "later", "calendar", "done", or "trash"
+        status: String,
+        /// Optional start date (format: YYYY-MM-DD) - required when status is "calendar", can be set for any status
         start_date: Option<String>,
     ) -> McpResult<String> {
+        // Parse the target status
+        let target_status = match status.as_str() {
+            "inbox" => TaskStatus::inbox,
+            "next_action" => TaskStatus::next_action,
+            "waiting_for" => TaskStatus::waiting_for,
+            "someday" => TaskStatus::someday,
+            "later" => TaskStatus::later,
+            "calendar" => TaskStatus::calendar,
+            "done" => TaskStatus::done,
+            "trash" => TaskStatus::trash,
+            _ => bail!(
+                "Invalid status '{}'. Use: inbox, next_action, waiting_for, someday, later, calendar, done, or trash",
+                status
+            ),
+        };
+
+        // Parse date if provided
         let parsed_start_date = if let Some(date_str) = start_date {
             match NaiveDate::parse_from_str(&date_str, "%Y-%m-%d") {
                 Ok(date) => Some(date),
@@ -1032,30 +443,32 @@ impl McpServer for GtdServerHandler {
                 continue;
             }
 
-            // Check if task will have a start_date after the operation
-            let current_start_date = data.find_task_by_id(&task_id).unwrap().start_date;
-            let final_start_date = parsed_start_date.or(current_start_date);
+            // Check if calendar status requires start_date
+            if target_status == TaskStatus::calendar {
+                let current_start_date = data.find_task_by_id(&task_id).unwrap().start_date;
+                let final_start_date = parsed_start_date.or(current_start_date);
 
-            if final_start_date.is_none() {
-                eprintln!("Error: Task {} has no start_date", task_id);
-                failed.push((
-                    task_id.to_string(),
-                    "Task must have a start_date".to_string(),
-                ));
-                continue;
+                if final_start_date.is_none() {
+                    eprintln!("Error: Task {} has no start_date for calendar", task_id);
+                    failed.push((
+                        task_id.to_string(),
+                        "Task must have a start_date for calendar status".to_string(),
+                    ));
+                    continue;
+                }
             }
 
             let original_status = data
                 .find_task_by_id(&task_id)
                 .map(|t| format!("{:?}", t.status));
             eprintln!(
-                "Moving task {} from {:?} to calendar",
-                task_id, original_status
+                "Moving task {} from {:?} to {:?}",
+                task_id, original_status, target_status
             );
 
-            // Move task to calendar
-            if data.move_status(&task_id, TaskStatus::calendar).is_some() {
-                // Update the start_date if provided, and update timestamp
+            // Move task to target status
+            if data.move_status(&task_id, target_status.clone()).is_some() {
+                // Update the start_date if provided for calendar, and update timestamp
                 if let Some(task) = data.find_task_by_id_mut(&task_id) {
                     if let Some(date) = parsed_start_date {
                         task.start_date = Some(date);
@@ -1063,9 +476,12 @@ impl McpServer for GtdServerHandler {
                     task.updated_at = local_date_today();
                 }
                 successful.push(task_id.to_string());
-                eprintln!("Successfully moved task {} to calendar", task_id);
+                eprintln!("Successfully moved task {} to {:?}", task_id, target_status);
             } else {
-                eprintln!("Error: Failed to move task {} to calendar", task_id);
+                eprintln!(
+                    "Error: Failed to move task {} to {:?}",
+                    task_id, target_status
+                );
                 failed.push((task_id.to_string(), "Failed to move task".to_string()));
             }
         }
@@ -1075,15 +491,25 @@ impl McpServer for GtdServerHandler {
         // Save data if any tasks were successfully moved
         if !successful.is_empty() {
             let task_list = successful.join(", ");
-            if let Err(e) =
-                self.save_data_with_message(&format!("Move tasks to calendar: {}", task_list))
-            {
+            let commit_message = match target_status {
+                TaskStatus::inbox => format!("Move tasks to inbox: {}", task_list),
+                TaskStatus::next_action => format!("Move tasks to next_action: {}", task_list),
+                TaskStatus::waiting_for => format!("Move tasks to waiting_for: {}", task_list),
+                TaskStatus::someday => format!("Move tasks to someday: {}", task_list),
+                TaskStatus::later => format!("Move tasks to later: {}", task_list),
+                TaskStatus::calendar => format!("Move tasks to calendar: {}", task_list),
+                TaskStatus::done => format!("Mark tasks as done: {}", task_list),
+                TaskStatus::trash => format!("Move tasks to trash: {}", task_list),
+            };
+
+            if let Err(e) = self.save_data_with_message(&commit_message) {
                 eprintln!(
-                    "Error: Failed to save data after moving tasks to calendar: {}",
-                    e
+                    "Error: Failed to save data after moving tasks to {:?}: {}",
+                    target_status, e
                 );
                 bail!(
-                    "Failed to save tasks to calendar: {}. Some tasks may not have been moved.",
+                    "Failed to save tasks to {:?}: {}. Some tasks may not have been moved.",
+                    target_status,
                     e
                 );
             }
@@ -1092,9 +518,15 @@ impl McpServer for GtdServerHandler {
         // Build result message
         let mut result = String::new();
         if !successful.is_empty() {
+            let status_display = match target_status {
+                TaskStatus::next_action => "next action",
+                TaskStatus::waiting_for => "waiting for",
+                _ => &status,
+            };
             result.push_str(&format!(
-                "Successfully moved {} task(s) to calendar: {}",
+                "Successfully moved {} task(s) to {}: {}",
                 successful.len(),
+                status_display,
                 successful.join(", ")
             ));
         }
@@ -1436,6 +868,64 @@ impl McpServer for GtdServerHandler {
         Ok(format!("Project {} updated successfully", new_project_id))
     }
 
+    /// Delete a project from the system.
+    ///
+    /// Deletes a project if it is not referenced by any tasks. This ensures data integrity
+    /// by preventing deletion of projects that are still in use.
+    #[tool]
+    async fn delete_project(
+        &self,
+        /// Project ID to delete (e.g., "website-redesign")
+        project_id: String,
+    ) -> McpResult<String> {
+        let mut data = self.data.lock().unwrap();
+
+        // Check if project exists
+        if data.find_project_by_id(&project_id).is_none() {
+            drop(data);
+            bail!("Project not found: {}", project_id);
+        }
+
+        // Check if any tasks reference this project
+        let task_lists = [
+            &data.inbox,
+            &data.next_action,
+            &data.waiting_for,
+            &data.later,
+            &data.calendar,
+            &data.someday,
+            &data.done,
+            &data.trash,
+        ];
+
+        for task_list in &task_lists {
+            for task in *task_list {
+                if let Some(ref task_project) = task.project
+                    && task_project == &project_id
+                {
+                    let task_id = task.id.clone();
+                    drop(data);
+                    bail!(
+                        "Cannot delete project '{}': task {} still references it",
+                        project_id,
+                        task_id
+                    );
+                }
+            }
+        }
+
+        // Remove the project
+        data.projects.remove(&project_id);
+
+        drop(data);
+
+        if let Err(e) = self.save_data_with_message(&format!("Delete project {}", project_id)) {
+            bail!("Failed to save: {}", e);
+        }
+
+        Ok(format!("Project {} deleted successfully", project_id))
+    }
+
     /// Create a new context to categorize where/how tasks can be done.
     ///
     /// Contexts represent locations, tools, or situations (e.g., "@office", "@home", "@phone", "@computer").
@@ -1565,29 +1055,6 @@ impl McpServer for GtdServerHandler {
         Ok(format!("Context {} deleted successfully", name))
     }
 
-    /// GTD (Getting Things Done) task management server implementing David Allen's productivity methodology.
-    ///
-    /// This server helps you capture, organize, and track tasks through a proven workflow system.
-    /// GTD organizes tasks into different status categories (inbox, next_action, waiting_for, someday, later, calendar, done, trash)
-    /// and supports projects (multi-step endeavors) and contexts (environments/tools like @office, @home).
-    ///
-    /// Key concepts:
-    /// - **inbox**: Unprocessed items (start here)
-    /// - **next_action**: Ready-to-execute tasks (focus here)
-    /// - **waiting_for**: Blocked tasks awaiting someone/something
-    /// - **someday**: Potential future actions
-    /// - **later**: Deferred but planned tasks
-    /// - **calendar**: Date-specific tasks
-    /// - **done**: Completed tasks
-    /// - **trash**: Deleted tasks
-    ///
-    /// Task IDs use format: #1, #2, #3
-    /// Project IDs: Use meaningful abbreviations (e.g., "website-redesign", "q1-budget")
-    #[tool]
-    async fn overview(&self) -> McpResult<String> {
-        Ok(String::new())
-    }
-
     // ==================== Prompts ====================
 
     /// GTD system overview and available tools
@@ -1633,11 +1100,12 @@ Projects use: project-1, project-2, project-3
 ## Key Tools
 
 - Task Management: add_task, update_task, list_tasks, delete_task
-- Status Movement: inbox_tasks, next_action_tasks, waiting_for_tasks, someday_tasks, later_tasks, calendar_tasks, done_tasks, trash_tasks
+- Status Movement: change_task_status (unified tool for all status transitions)
 - Projects: add_project, list_projects, update_project, delete_project
 - Contexts: add_context, list_contexts, update_context, delete_context
 
-Use prompts like `process_inbox`, `weekly_review`, or `next_actions` for workflow guidance."#.to_string())
+Use prompts like `process_inbox`, `weekly_review`, or `next_actions` for workflow guidance."#
+            .to_string())
     }
 
     /// Guide for processing inbox items
@@ -1651,11 +1119,11 @@ Use prompts like `process_inbox`, `weekly_review`, or `next_actions` for workflo
 
 2. **For each task, ask:**
    - Is it actionable?
-     - NO → Move to `someday_tasks` or `trash_tasks`
+     - NO → Use `change_task_status` to move to "someday" or "trash"
      - YES → Continue to step 3
 
 3. **Will it take less than 2 minutes?**
-   - YES → Do it now, then `done_tasks`
+   - YES → Do it now, then use `change_task_status` to move to "done"
    - NO → Continue to step 4
 
 4. **Can I do it myself?**
@@ -1678,7 +1146,7 @@ Use prompts like `process_inbox`, `weekly_review`, or `next_actions` for workflo
    - Use `update_task` to set context
 
 9. **Move to next actions**
-   - Use `next_action_tasks`
+   - Use `change_task_status` with status "next_action"
 
 ## Goal
 
@@ -1705,7 +1173,7 @@ The weekly review keeps your system current and complete.
      - Move completed calendar items to done
    
    - Review `next_action` tasks: `list_tasks` status "next_action"
-     - Mark completed ones as `done_tasks`
+     - Mark completed ones as done using `change_task_status`
      - Update stale tasks with `update_task`
      - Identify tasks that should move to waiting/someday/later
 
@@ -1776,7 +1244,7 @@ List next actions with `list_tasks` status "next_action"
 ## After Completion
 
 When done:
-- Use `done_tasks` to mark complete
+- Use `change_task_status` to mark complete (status "done")
 - If it was part of a project, check if project needs a new next action"#
             .to_string())
     }
@@ -1907,6 +1375,131 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_change_task_status_unified_api() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Create a task in inbox
+        let result = handler
+            .add_task("Test Task".to_string(), None, None, None, None)
+            .await;
+        assert!(result.is_ok());
+        let task_id = result
+            .unwrap()
+            .split_whitespace()
+            .last()
+            .unwrap()
+            .to_string();
+
+        // Test moving to next_action
+        let result = handler
+            .change_task_status(vec![task_id.clone()], "next_action".to_string(), None)
+            .await;
+        assert!(result.is_ok());
+        {
+            let data = handler.data.lock().unwrap();
+            let task = data.find_task_by_id(&task_id).unwrap();
+            assert_eq!(task.status, TaskStatus::next_action);
+        }
+
+        // Test moving to done
+        let result = handler
+            .change_task_status(vec![task_id.clone()], "done".to_string(), None)
+            .await;
+        assert!(result.is_ok());
+        {
+            let data = handler.data.lock().unwrap();
+            let task = data.find_task_by_id(&task_id).unwrap();
+            assert_eq!(task.status, TaskStatus::done);
+        }
+
+        // Test moving to trash
+        let result = handler
+            .change_task_status(vec![task_id.clone()], "trash".to_string(), None)
+            .await;
+        assert!(result.is_ok());
+        {
+            let data = handler.data.lock().unwrap();
+            let task = data.find_task_by_id(&task_id).unwrap();
+            assert_eq!(task.status, TaskStatus::trash);
+        }
+
+        // Test invalid status
+        let result = handler
+            .change_task_status(vec![task_id.clone()], "invalid_status".to_string(), None)
+            .await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_change_task_status_calendar_with_date() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Create a task
+        let result = handler
+            .add_task("Test Task".to_string(), None, None, None, None)
+            .await;
+        assert!(result.is_ok());
+        let task_id = result
+            .unwrap()
+            .split_whitespace()
+            .last()
+            .unwrap()
+            .to_string();
+
+        // Test moving to calendar with date
+        let result = handler
+            .change_task_status(
+                vec![task_id.clone()],
+                "calendar".to_string(),
+                Some("2024-12-25".to_string()),
+            )
+            .await;
+        assert!(result.is_ok());
+        let data = handler.data.lock().unwrap();
+        let task = data.find_task_by_id(&task_id).unwrap();
+        assert_eq!(task.status, TaskStatus::calendar);
+        assert_eq!(
+            task.start_date.unwrap(),
+            NaiveDate::from_ymd_opt(2024, 12, 25).unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_change_task_status_batch_operation() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Create multiple tasks
+        let mut task_ids = Vec::new();
+        for i in 1..=3 {
+            let result = handler
+                .add_task(format!("Test Task {}", i), None, None, None, None)
+                .await;
+            assert!(result.is_ok());
+            let task_id = result
+                .unwrap()
+                .split_whitespace()
+                .last()
+                .unwrap()
+                .to_string();
+            task_ids.push(task_id);
+        }
+
+        // Test batch move to next_action
+        let result = handler
+            .change_task_status(task_ids.clone(), "next_action".to_string(), None)
+            .await;
+        assert!(result.is_ok());
+
+        // Verify all tasks moved
+        let data = handler.data.lock().unwrap();
+        assert_eq!(data.next_action.len(), 3);
+        for task_id in &task_ids {
+            let task = data.find_task_by_id(task_id).unwrap();
+            assert_eq!(task.status, TaskStatus::next_action);
+        }
+    }
+
+    #[tokio::test]
     async fn test_update_task_with_plain_number_id() {
         let (handler, _temp_file) = get_test_handler();
 
@@ -1946,7 +1539,9 @@ mod tests {
         assert!(result.is_ok());
 
         // Move to next_action using plain number
-        let result = handler.next_action_tasks(vec!["1".to_string()]).await;
+        let result = handler
+            .change_task_status(vec!["1".to_string()], "next_action".to_string(), None)
+            .await;
         assert!(result.is_ok());
 
         // Verify the task moved
@@ -2018,7 +1613,9 @@ mod tests {
         }
 
         // Update status to next_action using new method
-        let result = handler.next_action_tasks(vec![task_id.clone()]).await;
+        let result = handler
+            .change_task_status(vec![task_id.clone()], "next_action".to_string(), None)
+            .await;
         assert!(result.is_ok());
 
         // Verify status changed and task moved
@@ -2517,6 +2114,125 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_delete_project_success() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Add a project
+        let result = handler
+            .add_project(
+                "Test Project".to_string(),
+                "test-project-1".to_string(),
+                None,
+                None,
+            )
+            .await;
+        assert!(result.is_ok());
+
+        // Delete the project
+        let result = handler.delete_project("test-project-1".to_string()).await;
+        assert!(result.is_ok());
+        assert!(result.unwrap().contains("deleted successfully"));
+
+        // Verify the project was deleted
+        let data = handler.data.lock().unwrap();
+        assert!(data.find_project_by_id("test-project-1").is_none());
+    }
+
+    #[tokio::test]
+    async fn test_delete_project_not_found() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Try to delete non-existent project
+        let result = handler.delete_project("non-existent-id".to_string()).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_delete_project_with_task_reference() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Add a project
+        let result = handler
+            .add_project(
+                "Test Project".to_string(),
+                "test-project-1".to_string(),
+                None,
+                None,
+            )
+            .await;
+        assert!(result.is_ok());
+
+        // Add a task that references the project
+        let result = handler
+            .add_task(
+                "Test Task".to_string(),
+                Some("test-project-1".to_string()),
+                None,
+                None,
+                None,
+            )
+            .await;
+        assert!(result.is_ok());
+
+        // Try to delete the project (should fail)
+        let result = handler.delete_project("test-project-1".to_string()).await;
+        assert!(result.is_err());
+
+        // Verify the project was NOT deleted
+        let data = handler.data.lock().unwrap();
+        assert!(data.find_project_by_id("test-project-1").is_some());
+    }
+
+    #[tokio::test]
+    async fn test_delete_project_after_unlinking_tasks() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Add a project
+        let result = handler
+            .add_project(
+                "Test Project".to_string(),
+                "test-project-1".to_string(),
+                None,
+                None,
+            )
+            .await;
+        assert!(result.is_ok());
+
+        // Add a task that references the project
+        let result = handler
+            .add_task(
+                "Test Task".to_string(),
+                Some("test-project-1".to_string()),
+                None,
+                None,
+                None,
+            )
+            .await;
+        assert!(result.is_ok());
+
+        // Unlink the task from the project
+        let result = handler
+            .update_task(
+                "#1".to_string(),
+                None,
+                Some("".to_string()), // Empty string removes project
+                None,
+                None,
+                None,
+            )
+            .await;
+        assert!(result.is_ok());
+
+        // Now delete the project (should succeed)
+        let result = handler.delete_project("test-project-1".to_string()).await;
+        assert!(result.is_ok());
+
+        // Verify the project was deleted
+        let data = handler.data.lock().unwrap();
+        assert!(data.find_project_by_id("test-project-1").is_none());
+    }
+
+    #[tokio::test]
     async fn test_update_multiple_fields_simultaneously() {
         let (handler, _temp_file) = get_test_handler();
 
@@ -2574,7 +2290,9 @@ mod tests {
         assert!(result.is_ok());
 
         // Change status separately using new method
-        let result = handler.done_tasks(vec![task_id.clone()]).await;
+        let result = handler
+            .change_task_status(vec![task_id.clone()], "done".to_string(), None)
+            .await;
         assert!(result.is_ok());
 
         // Verify all updates
@@ -2610,7 +2328,9 @@ mod tests {
             .to_string();
 
         // Move to next_action first
-        let result = handler.next_action_tasks(vec![task_id.clone()]).await;
+        let result = handler
+            .change_task_status(vec![task_id.clone()], "next_action".to_string(), None)
+            .await;
         assert!(result.is_ok());
 
         // Verify it's in next_action
@@ -2623,7 +2343,9 @@ mod tests {
         }
 
         // Move back to inbox
-        let result = handler.inbox_tasks(vec![task_id.clone()]).await;
+        let result = handler
+            .change_task_status(vec![task_id.clone()], "inbox".to_string(), None)
+            .await;
         assert!(result.is_ok());
 
         // Verify it's back in inbox
@@ -2651,7 +2373,9 @@ mod tests {
             .unwrap()
             .to_string();
 
-        let result = handler.next_action_tasks(vec![task_id.clone()]).await;
+        let result = handler
+            .change_task_status(vec![task_id.clone()], "next_action".to_string(), None)
+            .await;
         assert!(result.is_ok());
 
         let data = handler.data.lock().unwrap();
@@ -2676,7 +2400,9 @@ mod tests {
             .unwrap()
             .to_string();
 
-        let result = handler.waiting_for_tasks(vec![task_id.clone()]).await;
+        let result = handler
+            .change_task_status(vec![task_id.clone()], "waiting_for".to_string(), None)
+            .await;
         assert!(result.is_ok());
 
         let data = handler.data.lock().unwrap();
@@ -2701,7 +2427,9 @@ mod tests {
             .unwrap()
             .to_string();
 
-        let result = handler.someday_tasks(vec![task_id.clone()]).await;
+        let result = handler
+            .change_task_status(vec![task_id.clone()], "someday".to_string(), None)
+            .await;
         assert!(result.is_ok());
 
         let data = handler.data.lock().unwrap();
@@ -2726,7 +2454,9 @@ mod tests {
             .unwrap()
             .to_string();
 
-        let result = handler.later_tasks(vec![task_id.clone()]).await;
+        let result = handler
+            .change_task_status(vec![task_id.clone()], "later".to_string(), None)
+            .await;
         assert!(result.is_ok());
 
         let data = handler.data.lock().unwrap();
@@ -2751,7 +2481,9 @@ mod tests {
             .unwrap()
             .to_string();
 
-        let result = handler.done_tasks(vec![task_id.clone()]).await;
+        let result = handler
+            .change_task_status(vec![task_id.clone()], "done".to_string(), None)
+            .await;
         assert!(result.is_ok());
 
         let data = handler.data.lock().unwrap();
@@ -2776,7 +2508,9 @@ mod tests {
             .unwrap()
             .to_string();
 
-        let result = handler.trash_tasks(vec![task_id.clone()]).await;
+        let result = handler
+            .change_task_status(vec![task_id.clone()], "trash".to_string(), None)
+            .await;
         assert!(result.is_ok(), "Failed to trash task: {:?}", result.err());
 
         let data = handler.data.lock().unwrap();
@@ -2802,7 +2536,9 @@ mod tests {
             .unwrap()
             .to_string();
 
-        let result = handler.trash_tasks(vec![task_id_1.clone()]).await;
+        let result = handler
+            .change_task_status(vec![task_id_1.clone()], "trash".to_string(), None)
+            .await;
         assert!(result.is_ok(), "Direct trash failed: {:?}", result.err());
 
         // Test 2: inbox → done → trash (the workflow user reported as working)
@@ -2817,10 +2553,14 @@ mod tests {
             .unwrap()
             .to_string();
 
-        let result = handler.done_tasks(vec![task_id_2.clone()]).await;
+        let result = handler
+            .change_task_status(vec![task_id_2.clone()], "done".to_string(), None)
+            .await;
         assert!(result.is_ok(), "Moving to done failed: {:?}", result.err());
 
-        let result = handler.trash_tasks(vec![task_id_2.clone()]).await;
+        let result = handler
+            .change_task_status(vec![task_id_2.clone()], "trash".to_string(), None)
+            .await;
         assert!(result.is_ok(), "Trash from done failed: {:?}", result.err());
 
         // Verify both tasks ended up in trash
@@ -2843,7 +2583,9 @@ mod tests {
         let test_cases = vec!["#999", "invalid-id", "task-999"];
 
         for task_id in test_cases {
-            let result = handler.trash_tasks(vec![task_id.to_string()]).await;
+            let result = handler
+                .change_task_status(vec![task_id.to_string()], "trash".to_string(), None)
+                .await;
             assert!(result.is_err(), "Expected error for task_id: {}", task_id);
         }
     }
@@ -2869,7 +2611,9 @@ mod tests {
         }
 
         // 複数のタスクを一度にtrashに移動
-        let result = handler.trash_tasks(task_ids.clone()).await;
+        let result = handler
+            .change_task_status(task_ids.clone(), "trash".to_string(), None)
+            .await;
         assert!(
             result.is_ok(),
             "Failed to trash multiple tasks: {:?}",
@@ -2912,7 +2656,9 @@ mod tests {
         task_ids.push("invalid-id".to_string());
 
         // 部分的な成功を確認
-        let result = handler.trash_tasks(task_ids.clone()).await;
+        let result = handler
+            .change_task_status(task_ids.clone(), "trash".to_string(), None)
+            .await;
         assert!(
             result.is_ok(),
             "Should succeed with partial success: {:?}",
@@ -2941,7 +2687,9 @@ mod tests {
         ];
 
         // すべて失敗する場合はエラーを返す
-        let result = handler.trash_tasks(task_ids).await;
+        let result = handler
+            .change_task_status(task_ids, "trash".to_string(), None)
+            .await;
         assert!(result.is_err(), "Expected error when all tasks are invalid");
     }
 
@@ -2952,7 +2700,9 @@ mod tests {
         // 空のリスト
         let task_ids: Vec<String> = Vec::new();
 
-        let result = handler.trash_tasks(task_ids).await;
+        let result = handler
+            .change_task_status(task_ids, "trash".to_string(), None)
+            .await;
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "");
     }
@@ -2985,7 +2735,11 @@ mod tests {
             .unwrap()
             .to_string();
         handler
-            .next_action_tasks(vec![next_action_task_id.clone()])
+            .change_task_status(
+                vec![next_action_task_id.clone()],
+                "next_action".to_string(),
+                None,
+            )
             .await
             .unwrap();
 
@@ -3001,7 +2755,7 @@ mod tests {
             .unwrap()
             .to_string();
         handler
-            .done_tasks(vec![done_task_id.clone()])
+            .change_task_status(vec![done_task_id.clone()], "done".to_string(), None)
             .await
             .unwrap();
 
@@ -3011,7 +2765,9 @@ mod tests {
             next_action_task_id.clone(),
             done_task_id.clone(),
         ];
-        let result = handler.trash_tasks(task_ids).await;
+        let result = handler
+            .change_task_status(task_ids, "trash".to_string(), None)
+            .await;
         assert!(
             result.is_ok(),
             "Failed to trash tasks from different statuses: {:?}",
@@ -3049,7 +2805,11 @@ mod tests {
             .to_string();
 
         let result = handler
-            .calendar_tasks(vec![task_id.clone()], Some("2024-12-25".to_string()))
+            .change_task_status(
+                vec![task_id.clone()],
+                "calendar".to_string(),
+                Some("2024-12-25".to_string()),
+            )
             .await;
         assert!(result.is_ok());
 
@@ -3082,7 +2842,9 @@ mod tests {
             .to_string();
 
         // start_dateを指定せずにcalendarに移動しようとするとエラー
-        let result = handler.calendar_tasks(vec![task_id.clone()], None).await;
+        let result = handler
+            .change_task_status(vec![task_id.clone()], "calendar".to_string(), None)
+            .await;
         assert!(result.is_err());
     }
 
@@ -3109,7 +2871,9 @@ mod tests {
             .to_string();
 
         // start_dateパラメータなしでcalendarに移動（既存のstart_dateを使用）
-        let result = handler.calendar_tasks(vec![task_id.clone()], None).await;
+        let result = handler
+            .change_task_status(vec![task_id.clone()], "calendar".to_string(), None)
+            .await;
         assert!(result.is_ok());
 
         let data = handler.data.lock().unwrap();
@@ -3146,7 +2910,11 @@ mod tests {
 
         // 新しいstart_dateを指定してcalendarに移動（既存のstart_dateを上書き）
         let result = handler
-            .calendar_tasks(vec![task_id.clone()], Some("2024-12-31".to_string()))
+            .change_task_status(
+                vec![task_id.clone()],
+                "calendar".to_string(),
+                Some("2024-12-31".to_string()),
+            )
             .await;
         assert!(result.is_ok());
 
@@ -3176,7 +2944,11 @@ mod tests {
 
         // 無効な日付形式
         let result = handler
-            .calendar_tasks(vec![task_id.clone()], Some("2024/12/25".to_string()))
+            .change_task_status(
+                vec![task_id.clone()],
+                "calendar".to_string(),
+                Some("2024/12/25".to_string()),
+            )
             .await;
         assert!(result.is_err());
     }
@@ -3203,7 +2975,9 @@ mod tests {
         };
 
         // Move to next_action
-        let result = handler.next_action_tasks(vec![task_id.clone()]).await;
+        let result = handler
+            .change_task_status(vec![task_id.clone()], "next_action".to_string(), None)
+            .await;
         assert!(result.is_ok());
 
         // Verify created_at unchanged
@@ -3217,15 +2991,25 @@ mod tests {
         let (handler, _temp_file) = get_test_handler();
 
         let result = handler
-            .next_action_tasks(vec!["nonexistent-id".to_string()])
+            .change_task_status(
+                vec!["nonexistent-id".to_string()],
+                "next_action".to_string(),
+                None,
+            )
             .await;
         assert!(result.is_err());
 
-        let result = handler.done_tasks(vec!["nonexistent-id".to_string()]).await;
+        let result = handler
+            .change_task_status(vec!["nonexistent-id".to_string()], "done".to_string(), None)
+            .await;
         assert!(result.is_err());
 
         let result = handler
-            .trash_tasks(vec!["nonexistent-id".to_string()])
+            .change_task_status(
+                vec!["nonexistent-id".to_string()],
+                "trash".to_string(),
+                None,
+            )
             .await;
         assert!(result.is_err());
     }
@@ -3359,17 +3143,6 @@ mod tests {
 
         let result = handler.delete_context("NonExistent".to_string()).await;
         assert!(result.is_err());
-    }
-
-    #[tokio::test]
-    async fn test_overview() {
-        let (handler, _temp_file) = get_test_handler();
-
-        let result = handler.overview().await;
-        assert!(result.is_ok());
-        // overviewツールは空文字列を返す
-        let content = result.unwrap();
-        assert_eq!(content, "");
     }
 
     #[tokio::test]
@@ -3982,9 +3755,13 @@ mod tests {
             .to_string();
 
         // 両方をカレンダーステータスに移動
-        let result = handler.calendar_tasks(vec![task_id1.clone()], None).await;
+        let result = handler
+            .change_task_status(vec![task_id1.clone()], "calendar".to_string(), None)
+            .await;
         assert!(result.is_ok());
-        let result = handler.calendar_tasks(vec![task_id2.clone()], None).await;
+        let result = handler
+            .change_task_status(vec![task_id2.clone()], "calendar".to_string(), None)
+            .await;
         assert!(result.is_ok());
 
         // カレンダーステータスでフィルタリングし、日付フィルタも適用
@@ -4217,12 +3994,16 @@ mod tests {
                 .unwrap()
                 .to_string();
             // Move to next_action first
-            let _ = handler.next_action_tasks(vec![task_id.clone()]).await;
+            let _ = handler
+                .change_task_status(vec![task_id.clone()], "next_action".to_string(), None)
+                .await;
             task_ids.push(task_id);
         }
 
         // 複数のタスクを一度にinboxに移動
-        let result = handler.inbox_tasks(task_ids.clone()).await;
+        let result = handler
+            .change_task_status(task_ids.clone(), "inbox".to_string(), None)
+            .await;
         assert!(
             result.is_ok(),
             "Failed to move multiple tasks to inbox: {:?}",
@@ -4261,7 +4042,9 @@ mod tests {
         }
 
         // 複数のタスクを一度にnext_actionに移動
-        let result = handler.next_action_tasks(task_ids.clone()).await;
+        let result = handler
+            .change_task_status(task_ids.clone(), "next_action".to_string(), None)
+            .await;
         assert!(
             result.is_ok(),
             "Failed to move multiple tasks to next_action: {:?}",
@@ -4300,7 +4083,9 @@ mod tests {
         }
 
         // 複数のタスクを一度にwaiting_forに移動
-        let result = handler.waiting_for_tasks(task_ids.clone()).await;
+        let result = handler
+            .change_task_status(task_ids.clone(), "waiting_for".to_string(), None)
+            .await;
         assert!(
             result.is_ok(),
             "Failed to move multiple tasks to waiting_for: {:?}",
@@ -4339,7 +4124,9 @@ mod tests {
         }
 
         // 複数のタスクを一度にsomedayに移動
-        let result = handler.someday_tasks(task_ids.clone()).await;
+        let result = handler
+            .change_task_status(task_ids.clone(), "someday".to_string(), None)
+            .await;
         assert!(
             result.is_ok(),
             "Failed to move multiple tasks to someday: {:?}",
@@ -4378,7 +4165,9 @@ mod tests {
         }
 
         // 複数のタスクを一度にlaterに移動
-        let result = handler.later_tasks(task_ids.clone()).await;
+        let result = handler
+            .change_task_status(task_ids.clone(), "later".to_string(), None)
+            .await;
         assert!(
             result.is_ok(),
             "Failed to move multiple tasks to later: {:?}",
@@ -4417,7 +4206,9 @@ mod tests {
         }
 
         // 複数のタスクを一度にdoneに移動
-        let result = handler.done_tasks(task_ids.clone()).await;
+        let result = handler
+            .change_task_status(task_ids.clone(), "done".to_string(), None)
+            .await;
         assert!(
             result.is_ok(),
             "Failed to move multiple tasks to done: {:?}",
@@ -4457,7 +4248,11 @@ mod tests {
 
         // 複数のタスクを一度にcalendarに移動（start_date指定）
         let result = handler
-            .calendar_tasks(task_ids.clone(), Some("2025-01-15".to_string()))
+            .change_task_status(
+                task_ids.clone(),
+                "calendar".to_string(),
+                Some("2025-01-15".to_string()),
+            )
             .await;
         assert!(
             result.is_ok(),
@@ -4507,7 +4302,9 @@ mod tests {
         }
 
         // start_dateを指定せずにcalendarに移動（既存のstart_dateを使用）
-        let result = handler.calendar_tasks(task_ids.clone(), None).await;
+        let result = handler
+            .change_task_status(task_ids.clone(), "calendar".to_string(), None)
+            .await;
         assert!(
             result.is_ok(),
             "Failed to move multiple tasks to calendar: {:?}",
@@ -4569,7 +4366,9 @@ mod tests {
         );
 
         // start_dateを指定せずに移動を試みる（部分的な失敗）
-        let result = handler.calendar_tasks(task_ids.clone(), None).await;
+        let result = handler
+            .change_task_status(task_ids.clone(), "calendar".to_string(), None)
+            .await;
         assert!(
             result.is_ok(),
             "Should succeed with partial success: {:?}",

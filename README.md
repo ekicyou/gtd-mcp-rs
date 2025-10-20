@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/ekicyou/gtd-mcp-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/ekicyou/gtd-mcp-rs/actions/workflows/ci.yml)
 
-**Version 0.6.0**
+**Version 0.7.0**
 
 A Model Context Protocol (MCP) server for GTD (Getting Things Done) task management. This server enables LLM assistants like Claude to help you manage your tasks and projects using the proven GTD methodology.
 
@@ -83,7 +83,8 @@ Once configured, you can ask your LLM assistant to help you manage tasks:
 
 - "Add a task to review the project proposal"
 - "Show me my next actions"
-- "Move tasks #1, #2, and #3 to done"
+- "Change tasks #1, #2, and #3 to done status"
+- "Move task #5 to calendar for December 25th"
 - "Create a project for the Q1 marketing campaign"
 - "What's in my inbox?"
 - "Help me process my inbox" (uses built-in GTD workflow prompt)
@@ -106,29 +107,32 @@ Once configured, you can ask your LLM assistant to help you manage tasks:
 - Optional: `title`, `project`, `context`, `notes`, `start_date`
 - Note: Use empty string to remove optional fields
 
-### Status Movement (Batch Operations)
+### Status Management
 
-All status movement methods support moving multiple tasks at once:
+**change_task_status** - Change status of one or more tasks in GTD workflow
+- Required: `task_ids` (array like ["#1", "#2", "#3"]), `status` (target status)
+- Optional: `start_date` (YYYY-MM-DD format, required for calendar status)
+- Supports: inbox, next_action, waiting_for, someday, later, calendar, done, trash
+- Batch operation: Move multiple tasks at once
 
-- **inbox_tasks** - Move tasks to inbox
-- **next_action_tasks** - Move tasks to next action
-- **waiting_for_tasks** - Move tasks to waiting for
-- **someday_tasks** - Move tasks to someday/maybe
-- **later_tasks** - Move tasks to later (deferred)
-- **done_tasks** - Mark tasks as done
-- **calendar_tasks** - Move tasks to calendar (requires `start_date`)
-- **trash_tasks** - Move tasks to trash
-
-All methods take: `task_ids` (array of strings)
-
-Example:
+Example (move to next_action):
 ```json
 {
-  "task_ids": ["#1", "#2", "#3"]
+  "task_ids": ["#1", "#2", "#3"],
+  "status": "next_action"
 }
 ```
 
-**empty_trash** - Permanently delete all trashed tasks
+Example (move to calendar with date):
+```json
+{
+  "task_ids": ["#5"],
+  "status": "calendar",
+  "start_date": "2024-12-25"
+}
+```
+
+**empty_trash** - Permanently delete all trashed tasks (irreversible)
 
 ### Project Management
 
