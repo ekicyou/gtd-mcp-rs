@@ -137,7 +137,7 @@ Example (move to calendar with date):
 ### Project Management
 
 **add_project** - Create a new project
-- Required: `name`
+- Required: `name`, `id`
 - Optional: `description`, `context`
 
 **list_projects** - List all projects
@@ -145,6 +145,10 @@ Example (move to calendar with date):
 **update_project** - Update an existing project
 - Required: `project_id`
 - Optional: `name`, `description`, `status` (active, on_hold, completed), `context`
+
+**delete_project** - Delete a project
+- Required: `project_id`
+- Note: Cannot delete project if tasks reference it
 
 ### Context Management
 
