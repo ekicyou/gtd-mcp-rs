@@ -933,7 +933,7 @@ impl McpServer for GtdServerHandler {
         Ok(format!("Context {} updated successfully", name))
     }
 
-    /// Delete context. Note: tasks/projects using this context will keep their references.
+    /// Delete context if not referenced by any tasks or projects. Ensures data integrity by preventing deletion of contexts in use.
     #[tool]
     async fn delete_context(
         &self,
@@ -943,10 +943,56 @@ impl McpServer for GtdServerHandler {
         let mut data = self.data.lock().unwrap();
 
         // Check if context exists
-        if data.contexts.remove(&name).is_none() {
+        if data.find_context_by_name(&name).is_none() {
             drop(data);
             bail!("Context not found: {}", name);
         }
+
+        // Check if any tasks reference this context
+        let task_lists = [
+            &data.inbox,
+            &data.next_action,
+            &data.waiting_for,
+            &data.later,
+            &data.calendar,
+            &data.someday,
+            &data.done,
+            &data.trash,
+        ];
+
+        for task_list in &task_lists {
+            for task in *task_list {
+                if let Some(ref task_context) = task.context
+                    && task_context == &name
+                {
+                    let task_id = task.id.clone();
+                    drop(data);
+                    bail!(
+                        "Cannot delete context '{}': task {} still references it",
+                        name,
+                        task_id
+                    );
+                }
+            }
+        }
+
+        // Check if any projects reference this context
+        for (project_id, project) in &data.projects {
+            if let Some(ref project_context) = project.context
+                && project_context == &name
+            {
+                let project_id = project_id.clone();
+                drop(data);
+                bail!(
+                    "Cannot delete context '{}': project {} still references it",
+                    name,
+                    project_id
+                );
+            }
+        }
+
+        // Remove the context
+        data.contexts.remove(&name);
 
         drop(data);
 
@@ -3045,6 +3091,239 @@ mod tests {
 
         let result = handler.delete_context("NonExistent".to_string()).await;
         assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_delete_context_with_task_reference() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Add a context
+        handler
+            .add_context("Office".to_string(), None)
+            .await
+            .unwrap();
+
+        // Add a task that references the context
+        handler
+            .add_task(
+                "Office work".to_string(),
+                None,
+                Some("Office".to_string()),
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        // Try to delete the context - should fail
+        let result = handler.delete_context("Office".to_string()).await;
+        assert!(result.is_err());
+
+        // Verify context still exists
+        let data = handler.data.lock().unwrap();
+        assert_eq!(data.contexts.len(), 1);
+        assert!(data.contexts.contains_key("Office"));
+    }
+
+    #[tokio::test]
+    async fn test_delete_context_with_project_reference() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Add a context
+        handler
+            .add_context("Office".to_string(), None)
+            .await
+            .unwrap();
+
+        // Add a project that references the context
+        handler
+            .add_project(
+                "Office Project".to_string(),
+                "office-proj".to_string(),
+                None,
+                Some("Office".to_string()),
+            )
+            .await
+            .unwrap();
+
+        // Try to delete the context - should fail
+        let result = handler.delete_context("Office".to_string()).await;
+        assert!(result.is_err());
+
+        // Verify context still exists
+        let data = handler.data.lock().unwrap();
+        assert_eq!(data.contexts.len(), 1);
+        assert!(data.contexts.contains_key("Office"));
+    }
+
+    #[tokio::test]
+    async fn test_delete_context_with_both_task_and_project_references() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Add a context
+        handler
+            .add_context("Office".to_string(), None)
+            .await
+            .unwrap();
+
+        // Add a task that references the context
+        handler
+            .add_task(
+                "Office work".to_string(),
+                None,
+                Some("Office".to_string()),
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        // Add a project that references the context
+        handler
+            .add_project(
+                "Office Project".to_string(),
+                "office-proj".to_string(),
+                None,
+                Some("Office".to_string()),
+            )
+            .await
+            .unwrap();
+
+        // Try to delete the context - should fail (task check comes first)
+        let result = handler.delete_context("Office".to_string()).await;
+        assert!(result.is_err());
+
+        // Verify context still exists
+        let data = handler.data.lock().unwrap();
+        assert_eq!(data.contexts.len(), 1);
+        assert!(data.contexts.contains_key("Office"));
+    }
+
+    #[tokio::test]
+    async fn test_delete_context_after_removing_task_reference() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Add a context
+        handler
+            .add_context("Office".to_string(), None)
+            .await
+            .unwrap();
+
+        // Add a task that references the context
+        let task_id = handler
+            .add_task(
+                "Office work".to_string(),
+                None,
+                Some("Office".to_string()),
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        // Extract task ID from the response
+        let task_id = task_id.split("ID: ").nth(1).unwrap().trim().to_string();
+
+        // Remove the context reference from the task
+        handler
+            .update_task(task_id, None, None, Some(String::new()), None, None)
+            .await
+            .unwrap();
+
+        // Now deletion should succeed
+        let result = handler.delete_context("Office".to_string()).await;
+        assert!(result.is_ok());
+        assert!(result.unwrap().contains("deleted"));
+
+        // Verify context is gone
+        let data = handler.data.lock().unwrap();
+        assert_eq!(data.contexts.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_delete_context_after_removing_project_reference() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Add a context
+        handler
+            .add_context("Office".to_string(), None)
+            .await
+            .unwrap();
+
+        // Add a project that references the context
+        handler
+            .add_project(
+                "Office Project".to_string(),
+                "office-proj".to_string(),
+                None,
+                Some("Office".to_string()),
+            )
+            .await
+            .unwrap();
+
+        // Remove the context reference from the project
+        handler
+            .update_project(
+                "office-proj".to_string(),
+                None,
+                None,
+                None,
+                None,
+                Some(String::new()),
+            )
+            .await
+            .unwrap();
+
+        // Now deletion should succeed
+        let result = handler.delete_context("Office".to_string()).await;
+        assert!(result.is_ok());
+        assert!(result.unwrap().contains("deleted"));
+
+        // Verify context is gone
+        let data = handler.data.lock().unwrap();
+        assert_eq!(data.contexts.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_delete_context_with_multiple_task_references() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Add a context
+        handler
+            .add_context("Office".to_string(), None)
+            .await
+            .unwrap();
+
+        // Add multiple tasks that reference the context
+        handler
+            .add_task(
+                "Task 1".to_string(),
+                None,
+                Some("Office".to_string()),
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        handler
+            .add_task(
+                "Task 2".to_string(),
+                None,
+                Some("Office".to_string()),
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        // Try to delete the context - should fail with the first task found
+        let result = handler.delete_context("Office".to_string()).await;
+        assert!(result.is_err());
+
+        // Verify context still exists
+        let data = handler.data.lock().unwrap();
+        assert_eq!(data.contexts.len(), 1);
     }
 
     #[tokio::test]
