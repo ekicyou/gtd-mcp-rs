@@ -66,6 +66,14 @@ Token reduction: **Approximately 70% fewer tokens in tool documentation**
 - Validates that no tasks reference the project before deletion
 - Provides clear error messages if project is in use
 
+#### Improvements
+
+**delete_context** - Enhanced with reference validation
+- Now validates that no tasks reference the context before deletion
+- Now validates that no projects reference the context before deletion
+- Provides clear error messages identifying which task or project blocks deletion
+- Prevents data integrity issues with orphaned references
+
 #### Current Tool Set (13 tools)
 
 **Task Management (3 tools):**
@@ -116,7 +124,7 @@ All existing functionality remains fully operational:
 
 ### Testing Performed
 
-- ✅ All 185 unit tests pass (increased from 179 in v0.6.0)
+- ✅ All 191 unit tests pass (increased from 179 in v0.6.0, +6 new tests for delete_context validation)
 - ✅ All 3 doc tests pass
 - ✅ Code formatting check passes (`cargo fmt --check`)
 - ✅ Clippy linting passes with no warnings (`cargo clippy -- -D warnings`)
@@ -168,7 +176,8 @@ New (v0.7.0):
 3. **Simpler API**: One unified status movement tool instead of eight separate ones
 4. **Maintained Functionality**: All GTD workflow features still available
 5. **Better Project Management**: New `delete_project` tool for cleanup
-6. **Improved Maintainability**: Less code duplication, clearer structure
+6. **Improved Data Integrity**: Enhanced `delete_context` validation prevents orphaned references
+7. **Improved Maintainability**: Less code duplication, clearer structure
 
 ### Use Cases Enhanced by This Release
 

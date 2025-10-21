@@ -164,6 +164,7 @@ Example (move to calendar with date):
 
 **delete_context** - Delete a context
 - Required: `name`
+- Note: Cannot delete context if tasks or projects reference it
 
 ## MCP Prompts
 
