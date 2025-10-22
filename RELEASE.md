@@ -4,6 +4,58 @@ This file contains release notes for all versions of gtd-mcp, with the newest re
 
 ---
 
+## Version 0.7.1
+
+### Summary
+
+This patch release improves error handling for invalid status values in MCP tools. When users provide an invalid status (e.g., "in_progress"), they now receive clear, actionable error messages instead of cryptic internal errors.
+
+### Changes
+
+#### Version Update
+- **Version**: Updated from 0.7.0 to 0.7.1
+- **Crate name**: gtd-mcp (unchanged)
+- **Binary name**: gtd-mcp (unchanged)
+
+#### Improved Error Messages
+
+**Problem**: Previously, when users provided an invalid status value to MCP tools like `change_task_status`, they received a cryptic error:
+```
+Error: MPC -32603: Internal error
+```
+
+**Solution**: Implemented the standard Rust `FromStr` trait for both `TaskStatus` and `ProjectStatus` enums, enabling proper validation with clear, actionable error messages.
+
+**Example**:
+- **Before**: `Error: MPC -32603: Internal error`
+- **After**: `Invalid status 'in_progress'. Valid options are: inbox, next_action, waiting_for, someday, later, calendar, done, trash`
+
+#### Technical Changes
+
+- Implemented `FromStr` trait for `TaskStatus` enum with validation for all 8 valid statuses
+- Implemented `FromStr` trait for `ProjectStatus` enum with validation for all 3 valid statuses
+- Updated `change_task_status` tool to use `status.parse::<TaskStatus>()` for validation
+- Updated `list_tasks` tool to validate status filter parameter
+- Updated `update_project` tool to use `status.parse::<ProjectStatus>()` for validation
+- Added 17 comprehensive tests covering status parsing and error message validation
+
+#### Impact
+
+This change improves the developer experience by:
+1. **Clarity**: Users immediately understand what went wrong
+2. **Actionability**: Error messages include all valid options, making it easy to fix mistakes
+3. **Consistency**: All status-related tools now provide uniform error messages
+4. **Best Practices**: Uses Rust's standard `FromStr` trait for proper type conversion
+
+All existing tests pass (204/204), and the implementation follows the project's coding guidelines.
+
+#### Files Changed
+
+- `src/gtd.rs`: Added `FromStr` trait implementations and tests (+152 lines)
+- `src/lib.rs`: Updated MCP tools to use new validation (+231 lines)
+
+---
+
 ## Version 0.7.0
 
 ### Summary
