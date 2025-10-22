@@ -238,6 +238,12 @@ impl McpServer for GtdServerHandler {
 
         // Collect tasks from all status lists or just the filtered one
         if let Some(status_str) = status {
+            // Validate the status string first
+            if let Err(e) = status_str.parse::<TaskStatus>() {
+                drop(data);
+                bail!("{}", e);
+            }
+
             match status_str.as_str() {
                 "inbox" => tasks.extend(data.inbox.iter()),
                 "next_action" => tasks.extend(data.next_action.iter()),
@@ -248,7 +254,7 @@ impl McpServer for GtdServerHandler {
                 "trash" => tasks.extend(data.trash.iter()),
                 "calendar" => tasks.extend(data.calendar.iter()),
                 _ => {
-                    // If unknown status, return all tasks
+                    // This should not happen after validation, but handle it anyway
                     tasks.extend(data.inbox.iter());
                     tasks.extend(data.next_action.iter());
                     tasks.extend(data.waiting_for.iter());
@@ -333,19 +339,9 @@ impl McpServer for GtdServerHandler {
         start_date: Option<String>,
     ) -> McpResult<String> {
         // Parse the target status
-        let target_status = match status.as_str() {
-            "inbox" => TaskStatus::inbox,
-            "next_action" => TaskStatus::next_action,
-            "waiting_for" => TaskStatus::waiting_for,
-            "someday" => TaskStatus::someday,
-            "later" => TaskStatus::later,
-            "calendar" => TaskStatus::calendar,
-            "done" => TaskStatus::done,
-            "trash" => TaskStatus::trash,
-            _ => bail!(
-                "Invalid status '{}'. Use: inbox, next_action, waiting_for, someday, later, calendar, done, or trash",
-                status
-            ),
+        let target_status = match status.parse::<TaskStatus>() {
+            Ok(s) => s,
+            Err(e) => bail!("{}", e),
         };
 
         // Parse date if provided
@@ -737,13 +733,11 @@ impl McpServer for GtdServerHandler {
 
         // Update status if provided
         if let Some(status_str) = status {
-            project.status = match status_str.as_str() {
-                "active" => ProjectStatus::active,
-                "on_hold" => ProjectStatus::on_hold,
-                "completed" => ProjectStatus::completed,
-                _ => {
+            project.status = match status_str.parse::<ProjectStatus>() {
+                Ok(s) => s,
+                Err(e) => {
                     drop(data);
-                    bail!("Invalid status. Use: active, on_hold, completed");
+                    bail!("{}", e);
                 }
             };
         }
@@ -4404,6 +4398,203 @@ mod tests {
         for task_id in &task_ids {
             let task = data.find_task_by_id(task_id).unwrap();
             assert!(matches!(task.status, TaskStatus::done));
+        }
+    }
+
+    // ==================== Invalid Status Error Message Tests ====================
+
+    #[tokio::test]
+    async fn test_change_task_status_invalid_status_error_message() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // タスクを作成
+        let result = handler
+            .add_task("Test Task".to_string(), None, None, None, None)
+            .await;
+        assert!(result.is_ok());
+        let task_id = result
+            .unwrap()
+            .split_whitespace()
+            .last()
+            .unwrap()
+            .to_string();
+
+        // 無効なステータス "in_progress" でエラーをテスト（問題として報告されたもの）
+        let result = handler
+            .change_task_status(vec![task_id.clone()], "in_progress".to_string(), None)
+            .await;
+        assert!(result.is_err());
+        let err_msg = format!("{:?}", result.unwrap_err());
+        assert!(err_msg.contains("Invalid status 'in_progress'"));
+        assert!(err_msg.contains("inbox"));
+        assert!(err_msg.contains("next_action"));
+        assert!(err_msg.contains("waiting_for"));
+        assert!(err_msg.contains("someday"));
+        assert!(err_msg.contains("later"));
+        assert!(err_msg.contains("calendar"));
+        assert!(err_msg.contains("done"));
+        assert!(err_msg.contains("trash"));
+    }
+
+    #[tokio::test]
+    async fn test_change_task_status_various_invalid_statuses() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // タスクを作成
+        let result = handler
+            .add_task("Test Task".to_string(), None, None, None, None)
+            .await;
+        assert!(result.is_ok());
+        let task_id = result
+            .unwrap()
+            .split_whitespace()
+            .last()
+            .unwrap()
+            .to_string();
+
+        // 様々な無効なステータスをテスト
+        let invalid_statuses = vec![
+            "invalid",
+            "complete",
+            "completed",
+            "pending",
+            "todo",
+            "in-progress",
+            "INBOX",
+            "Next_Action",
+        ];
+
+        for invalid_status in invalid_statuses {
+            let result = handler
+                .change_task_status(vec![task_id.clone()], invalid_status.to_string(), None)
+                .await;
+            assert!(
+                result.is_err(),
+                "Expected error for invalid status: {}",
+                invalid_status
+            );
+            let err_msg = format!("{:?}", result.unwrap_err());
+            assert!(
+                err_msg.contains(&format!("Invalid status '{}'", invalid_status)),
+                "Error message should contain the invalid status '{}', got: {}",
+                invalid_status,
+                err_msg
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_list_tasks_invalid_status_error_message() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // 無効なステータスでリストを取得しようとする
+        let result = handler
+            .list_tasks(Some("in_progress".to_string()), None, None)
+            .await;
+        assert!(result.is_err());
+        let err_msg = format!("{:?}", result.unwrap_err());
+        assert!(err_msg.contains("Invalid status 'in_progress'"));
+        assert!(err_msg.contains("inbox"));
+        assert!(err_msg.contains("next_action"));
+    }
+
+    #[tokio::test]
+    async fn test_list_tasks_various_invalid_statuses() {
+        let (handler, _temp_file) = get_test_handler();
+
+        let invalid_statuses = vec!["invalid", "complete", "pending", "INBOX"];
+
+        for invalid_status in invalid_statuses {
+            let result = handler
+                .list_tasks(Some(invalid_status.to_string()), None, None)
+                .await;
+            assert!(
+                result.is_err(),
+                "Expected error for invalid status: {}",
+                invalid_status
+            );
+            let err_msg = format!("{:?}", result.unwrap_err());
+            assert!(
+                err_msg.contains(&format!("Invalid status '{}'", invalid_status)),
+                "Error message should contain the invalid status '{}'",
+                invalid_status
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_update_project_invalid_status_error_message() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // プロジェクトを作成
+        let result = handler
+            .add_project(
+                "Test Project".to_string(),
+                "test-project-1".to_string(),
+                None,
+                None,
+            )
+            .await;
+        assert!(result.is_ok());
+
+        // 無効なステータスで更新しようとする
+        let result = handler
+            .update_project(
+                "test-project-1".to_string(),
+                None,
+                None,
+                None,
+                Some("in_progress".to_string()),
+                None,
+            )
+            .await;
+        assert!(result.is_err());
+        let err_msg = format!("{:?}", result.unwrap_err());
+        assert!(err_msg.contains("Invalid project status 'in_progress'"));
+        assert!(err_msg.contains("active"));
+        assert!(err_msg.contains("on_hold"));
+        assert!(err_msg.contains("completed"));
+    }
+
+    #[tokio::test]
+    async fn test_update_project_various_invalid_statuses() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // プロジェクトを作成
+        let result = handler
+            .add_project(
+                "Test Project".to_string(),
+                "test-project-1".to_string(),
+                None,
+                None,
+            )
+            .await;
+        assert!(result.is_ok());
+
+        let invalid_statuses = vec!["pending", "in_progress", "done", "onhold", "ACTIVE"];
+
+        for invalid_status in invalid_statuses {
+            let result = handler
+                .update_project(
+                    "test-project-1".to_string(),
+                    None,
+                    None,
+                    None,
+                    Some(invalid_status.to_string()),
+                    None,
+                )
+                .await;
+            assert!(
+                result.is_err(),
+                "Expected error for invalid project status: {}",
+                invalid_status
+            );
+            let err_msg = format!("{:?}", result.unwrap_err());
+            assert!(
+                err_msg.contains(&format!("Invalid project status '{}'", invalid_status)),
+                "Error message should contain the invalid status '{}'",
+                invalid_status
+            );
         }
     }
 

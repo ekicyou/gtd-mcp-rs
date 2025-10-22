@@ -1,6 +1,7 @@
 use chrono::{Local, NaiveDate};
 use serde::{Deserialize, Deserializer, Serialize};
 use std::collections::HashMap;
+use std::str::FromStr;
 
 /// A GTD (Getting Things Done) task
 ///
@@ -65,6 +66,27 @@ pub enum TaskStatus {
     trash,
 }
 
+impl FromStr for TaskStatus {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "inbox" => Ok(TaskStatus::inbox),
+            "next_action" => Ok(TaskStatus::next_action),
+            "waiting_for" => Ok(TaskStatus::waiting_for),
+            "someday" => Ok(TaskStatus::someday),
+            "later" => Ok(TaskStatus::later),
+            "calendar" => Ok(TaskStatus::calendar),
+            "done" => Ok(TaskStatus::done),
+            "trash" => Ok(TaskStatus::trash),
+            _ => Err(format!(
+                "Invalid status '{}'. Valid options are: inbox, next_action, waiting_for, someday, later, calendar, done, trash",
+                s
+            )),
+        }
+    }
+}
+
 /// A GTD project
 ///
 /// Projects represent multi-step outcomes that require more than one action.
@@ -98,6 +120,22 @@ pub enum ProjectStatus {
     on_hold,
     /// Project has been finished
     completed,
+}
+
+impl FromStr for ProjectStatus {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "active" => Ok(ProjectStatus::active),
+            "on_hold" => Ok(ProjectStatus::on_hold),
+            "completed" => Ok(ProjectStatus::completed),
+            _ => Err(format!(
+                "Invalid project status '{}'. Valid options are: active, on_hold, completed",
+                s
+            )),
+        }
+    }
 }
 
 /// A GTD context
@@ -2343,6 +2381,120 @@ updated_at = "2024-01-01"
         assert_eq!(reloaded.projects.len(), 2);
         assert!(reloaded.projects.contains_key("project-1"));
         assert!(reloaded.projects.contains_key("project-2"));
+    }
+
+    // TaskStatus::from_strのテスト - 有効なステータス
+    // 全ての有効なステータス文字列が正しくパースされることを確認
+    #[test]
+    fn test_task_status_from_str_valid() {
+        assert_eq!(TaskStatus::from_str("inbox").unwrap(), TaskStatus::inbox);
+        assert_eq!(
+            TaskStatus::from_str("next_action").unwrap(),
+            TaskStatus::next_action
+        );
+        assert_eq!(
+            TaskStatus::from_str("waiting_for").unwrap(),
+            TaskStatus::waiting_for
+        );
+        assert_eq!(
+            TaskStatus::from_str("someday").unwrap(),
+            TaskStatus::someday
+        );
+        assert_eq!(TaskStatus::from_str("later").unwrap(), TaskStatus::later);
+        assert_eq!(
+            TaskStatus::from_str("calendar").unwrap(),
+            TaskStatus::calendar
+        );
+        assert_eq!(TaskStatus::from_str("done").unwrap(), TaskStatus::done);
+        assert_eq!(TaskStatus::from_str("trash").unwrap(), TaskStatus::trash);
+    }
+
+    // TaskStatus::from_strのテスト - 無効なステータス
+    // 無効なステータス文字列が適切なエラーメッセージを返すことを確認
+    #[test]
+    fn test_task_status_from_str_invalid() {
+        let result = TaskStatus::from_str("invalid_status");
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err();
+        assert!(err_msg.contains("Invalid status 'invalid_status'"));
+        assert!(err_msg.contains("inbox"));
+        assert!(err_msg.contains("next_action"));
+        assert!(err_msg.contains("waiting_for"));
+        assert!(err_msg.contains("someday"));
+        assert!(err_msg.contains("later"));
+        assert!(err_msg.contains("calendar"));
+        assert!(err_msg.contains("done"));
+        assert!(err_msg.contains("trash"));
+    }
+
+    // TaskStatus::from_strのテスト - 大文字小文字の違い
+    // 大文字小文字が異なる場合はエラーになることを確認（厳密な一致が必要）
+    #[test]
+    fn test_task_status_from_str_case_sensitive() {
+        assert!(TaskStatus::from_str("Inbox").is_err());
+        assert!(TaskStatus::from_str("INBOX").is_err());
+        assert!(TaskStatus::from_str("Next_Action").is_err());
+        assert!(TaskStatus::from_str("NEXT_ACTION").is_err());
+    }
+
+    // TaskStatus::from_strのテスト - 存在しない一般的な名前
+    // よくある誤りのステータス名がエラーになることを確認
+    #[test]
+    fn test_task_status_from_str_common_mistakes() {
+        // 問題として報告された "in_progress" をテスト
+        let result = TaskStatus::from_str("in_progress");
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err();
+        assert!(err_msg.contains("Invalid status 'in_progress'"));
+
+        // その他の一般的な誤り
+        assert!(TaskStatus::from_str("complete").is_err());
+        assert!(TaskStatus::from_str("completed").is_err());
+        assert!(TaskStatus::from_str("pending").is_err());
+        assert!(TaskStatus::from_str("todo").is_err());
+        assert!(TaskStatus::from_str("in-progress").is_err());
+    }
+
+    // ProjectStatus::from_strのテスト - 有効なステータス
+    // 全ての有効なプロジェクトステータス文字列が正しくパースされることを確認
+    #[test]
+    fn test_project_status_from_str_valid() {
+        assert_eq!(
+            ProjectStatus::from_str("active").unwrap(),
+            ProjectStatus::active
+        );
+        assert_eq!(
+            ProjectStatus::from_str("on_hold").unwrap(),
+            ProjectStatus::on_hold
+        );
+        assert_eq!(
+            ProjectStatus::from_str("completed").unwrap(),
+            ProjectStatus::completed
+        );
+    }
+
+    // ProjectStatus::from_strのテスト - 無効なステータス
+    // 無効なプロジェクトステータス文字列が適切なエラーメッセージを返すことを確認
+    #[test]
+    fn test_project_status_from_str_invalid() {
+        let result = ProjectStatus::from_str("invalid_status");
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err();
+        assert!(err_msg.contains("Invalid project status 'invalid_status'"));
+        assert!(err_msg.contains("active"));
+        assert!(err_msg.contains("on_hold"));
+        assert!(err_msg.contains("completed"));
+    }
+
+    // ProjectStatus::from_strのテスト - よくある誤り
+    // よくある誤りのプロジェクトステータス名がエラーになることを確認
+    #[test]
+    fn test_project_status_from_str_common_mistakes() {
+        assert!(ProjectStatus::from_str("pending").is_err());
+        assert!(ProjectStatus::from_str("in_progress").is_err());
+        assert!(ProjectStatus::from_str("done").is_err());
+        assert!(ProjectStatus::from_str("onhold").is_err());
+        assert!(ProjectStatus::from_str("on-hold").is_err());
     }
 
     // タスクステータスの順序がTOMLシリアライズに反映されることを確認
