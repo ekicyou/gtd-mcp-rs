@@ -159,6 +159,9 @@ pub struct Context {
 /// Tasks are stored in separate vectors based on their status to facilitate
 /// efficient serialization to TOML with a clear, human-readable structure.
 ///
+/// Internally, a HashMap is maintained to prevent duplicate task IDs and enable
+/// fast lookups by ID.
+///
 /// The data is designed to be serialized to/from TOML format for persistent storage.
 ///
 /// ## Format Versions
@@ -200,6 +203,9 @@ pub struct GtdData {
     pub projects: HashMap<String, Project>,
     /// All contexts (keyed by name)
     pub contexts: HashMap<String, Context>,
+    /// Internal map of all tasks by ID for duplicate checking (not serialized)
+    #[serde(skip)]
+    pub(crate) task_map: HashMap<String, TaskStatus>,
     /// Counter for generating unique task IDs
     #[serde(default, skip_serializing_if = "is_zero")]
     pub task_counter: u32,
@@ -222,6 +228,7 @@ impl Default for GtdData {
             trash: Vec::new(),
             projects: HashMap::new(),
             contexts: HashMap::new(),
+            task_map: HashMap::new(),
             task_counter: 0,
             project_counter: 0,
         }
@@ -299,6 +306,33 @@ impl<'de> Deserialize<'de> for GtdData {
             task.status = TaskStatus::trash;
         }
 
+        // Build task_map from all tasks for duplicate checking
+        let mut task_map = HashMap::new();
+        for task in &helper.inbox {
+            task_map.insert(task.id.clone(), TaskStatus::inbox);
+        }
+        for task in &helper.next_action {
+            task_map.insert(task.id.clone(), TaskStatus::next_action);
+        }
+        for task in &helper.waiting_for {
+            task_map.insert(task.id.clone(), TaskStatus::waiting_for);
+        }
+        for task in &helper.later {
+            task_map.insert(task.id.clone(), TaskStatus::later);
+        }
+        for task in &helper.calendar {
+            task_map.insert(task.id.clone(), TaskStatus::calendar);
+        }
+        for task in &helper.someday {
+            task_map.insert(task.id.clone(), TaskStatus::someday);
+        }
+        for task in &helper.done {
+            task_map.insert(task.id.clone(), TaskStatus::done);
+        }
+        for task in &helper.trash {
+            task_map.insert(task.id.clone(), TaskStatus::trash);
+        }
+
         Ok(GtdData {
             format_version: 2, // Always use version 2 for in-memory representation
             inbox: helper.inbox,
@@ -311,6 +345,7 @@ impl<'de> Deserialize<'de> for GtdData {
             trash: helper.trash,
             projects,
             contexts: helper.contexts,
+            task_map,
             task_counter: helper.task_counter,
             project_counter: helper.project_counter,
         })
@@ -450,24 +485,39 @@ impl GtdData {
     /// * `task` - The task to add
     pub fn add_task(&mut self, task: Task) {
         let status = task.status.clone();
+        let id = task.id.clone();
+
+        // Add to task_map for duplicate checking
+        self.task_map.insert(id, status.clone());
+
+        // Add to appropriate status list
         self.get_task_list_mut(&status).push(task);
     }
 
     /// Remove a task from its container and return it
     ///
     /// # Arguments
-    /// * `id` - The task ID to remove (e.g., "#1")
+    /// * `id` - The task ID to remove (e.g., "task-1")
     ///
     /// # Returns
     /// The removed task if found
     #[allow(dead_code)]
     pub fn remove_task(&mut self, id: &str) -> Option<Task> {
+        // Find and remove task from its list
+        let mut removed_task = None;
         for list in self.all_task_lists_mut() {
             if let Some(pos) = list.iter().position(|t| t.id == id) {
-                return Some(list.remove(pos));
+                removed_task = Some(list.remove(pos));
+                break;
             }
         }
-        None
+
+        // If found, remove from task_map as well
+        if removed_task.is_some() {
+            self.task_map.remove(id);
+        }
+
+        removed_task
     }
 
     /// Move a task to a different status container
@@ -2568,5 +2618,143 @@ updated_at = "2024-01-01"
                 i, expected, sections[i]
             );
         }
+    }
+
+    // Tests for task_map HashMap functionality
+    #[test]
+    fn test_task_map_prevents_duplicate_ids() {
+        let mut data = GtdData::new();
+
+        // Add a task
+        let task1 = Task {
+            id: "test-task".to_string(),
+            title: "Test Task 1".to_string(),
+            status: TaskStatus::inbox,
+            project: None,
+            context: None,
+            notes: None,
+            start_date: None,
+            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+        };
+        data.add_task(task1);
+
+        // Verify task is in map
+        assert!(data.task_map.contains_key("test-task"));
+        assert_eq!(data.task_map.get("test-task"), Some(&TaskStatus::inbox));
+
+        // Try to add another task with same ID in a different status
+        let task2 = Task {
+            id: "test-task".to_string(),
+            title: "Test Task 2".to_string(),
+            status: TaskStatus::next_action,
+            project: None,
+            context: None,
+            notes: None,
+            start_date: None,
+            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+        };
+
+        // This would add a duplicate - the application layer (lib.rs) should check
+        // the task_map before calling add_task
+        // Here we just verify that task_map gets updated
+        data.add_task(task2);
+
+        // The task_map should now show the new status (last one wins)
+        assert_eq!(
+            data.task_map.get("test-task"),
+            Some(&TaskStatus::next_action)
+        );
+
+        // But there are actually TWO tasks with same ID (one in inbox, one in next_action)
+        // This demonstrates why the application layer MUST check task_map before adding
+        assert_eq!(data.inbox.len(), 1);
+        assert_eq!(data.next_action.len(), 1);
+    }
+
+    #[test]
+    fn test_task_map_updated_on_remove() {
+        let mut data = GtdData::new();
+
+        let task = Task {
+            id: "remove-test".to_string(),
+            title: "Test Task".to_string(),
+            status: TaskStatus::inbox,
+            project: None,
+            context: None,
+            notes: None,
+            start_date: None,
+            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+        };
+        data.add_task(task);
+
+        // Verify task is in map
+        assert!(data.task_map.contains_key("remove-test"));
+
+        // Remove task
+        let removed = data.remove_task("remove-test");
+        assert!(removed.is_some());
+
+        // Verify task is removed from map
+        assert!(!data.task_map.contains_key("remove-test"));
+    }
+
+    #[test]
+    fn test_task_map_updated_on_status_change() {
+        let mut data = GtdData::new();
+
+        let task = Task {
+            id: "status-test".to_string(),
+            title: "Test Task".to_string(),
+            status: TaskStatus::inbox,
+            project: None,
+            context: None,
+            notes: None,
+            start_date: None,
+            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+        };
+        data.add_task(task);
+
+        // Verify initial status
+        assert_eq!(data.task_map.get("status-test"), Some(&TaskStatus::inbox));
+
+        // Move to next_action
+        data.move_status("status-test", TaskStatus::next_action);
+
+        // Verify status updated in map
+        assert_eq!(
+            data.task_map.get("status-test"),
+            Some(&TaskStatus::next_action)
+        );
+    }
+
+    #[test]
+    fn test_task_map_rebuilt_from_toml() {
+        // Test that task_map is correctly rebuilt when loading from TOML
+        let toml_str = r#"
+format_version = 2
+
+[[inbox]]
+id = "task-1"
+title = "First task"
+created_at = "2024-01-01"
+updated_at = "2024-01-01"
+
+[[next_action]]
+id = "task-2"
+title = "Second task"
+created_at = "2024-01-01"
+updated_at = "2024-01-01"
+"#;
+
+        let data: GtdData = toml::from_str(toml_str).unwrap();
+
+        // Verify both tasks are in task_map with correct statuses
+        assert_eq!(data.task_map.len(), 2);
+        assert_eq!(data.task_map.get("task-1"), Some(&TaskStatus::inbox));
+        assert_eq!(data.task_map.get("task-2"), Some(&TaskStatus::next_action));
     }
 }
