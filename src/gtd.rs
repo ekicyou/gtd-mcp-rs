@@ -36,6 +36,16 @@ fn default_task_status() -> TaskStatus {
     TaskStatus::inbox
 }
 
+/// Default context status for deserialization
+fn default_context_status() -> TaskStatus {
+    TaskStatus::context
+}
+
+/// Check if status is context (for skipping serialization)
+fn is_context_status(status: &TaskStatus) -> bool {
+    *status == TaskStatus::context
+}
+
 /// Get the current date in local timezone
 pub fn local_date_today() -> NaiveDate {
     Local::now().date_naive()
@@ -172,9 +182,9 @@ pub struct Context {
     pub title: Option<String>,
     /// Optional notes about the context
     pub notes: Option<String>,
-    /// Status (will be used when contexts become notas with status=TaskStatus::context)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub status: Option<TaskStatus>,
+    /// Status (always TaskStatus::context for context notas)
+    #[serde(default = "default_context_status", skip_serializing_if = "is_context_status")]
+    pub status: TaskStatus,
     /// Parent project (None for contexts)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub project: Option<String>,
@@ -315,7 +325,7 @@ impl Nota {
                 name: self.id.clone(),
                 title: Some(self.title.clone()),
                 notes: self.notes.clone(),
-                status: Some(TaskStatus::context),
+                status: TaskStatus::context,
                 project: self.project.clone(),
                 context: self.context.clone(),
                 start_date: self.start_date,
@@ -1430,7 +1440,7 @@ mod tests {
             name: "Office".to_string(),
             notes: None,
             title: None,
-            status: None,
+            status: TaskStatus::context,
             project: None,
             context: None,
             start_date: None,
@@ -1450,7 +1460,7 @@ mod tests {
             name: "Office".to_string(),
             notes: Some("Work environment with desk and computer".to_string()),
             title: None,
-            status: None,
+            status: TaskStatus::context,
             project: None,
             context: None,
             start_date: None,
@@ -1474,7 +1484,7 @@ mod tests {
             name: "Office".to_string(),
             notes: None,
             title: None,
-            status: None,
+            status: TaskStatus::context,
             project: None,
             context: None,
             start_date: None,
@@ -1499,7 +1509,7 @@ mod tests {
                 name: name.to_string(),
                 notes: None,
                 title: None,
-                status: None,
+                status: TaskStatus::context,
                 project: None,
                 context: None,
                 start_date: None,
@@ -1578,7 +1588,7 @@ mod tests {
             name: "Office".to_string(),
             notes: None,
             title: None,
-            status: None,
+            status: TaskStatus::context,
             project: None,
             context: None,
             start_date: None,
@@ -1635,7 +1645,7 @@ mod tests {
             name: "Office".to_string(),
             notes: None,
             title: None,
-            status: None,
+            status: TaskStatus::context,
             project: None,
             context: None,
             start_date: None,
@@ -1984,7 +1994,7 @@ mod tests {
             name: "Office".to_string(),
             notes: Some("Work environment with desk and computer".to_string()),
             title: None,
-            status: None,
+            status: TaskStatus::context,
             project: None,
             context: None,
             start_date: None,
@@ -2216,7 +2226,7 @@ name = "Home"
             name: "Office".to_string(),
             notes: None,
             title: None,
-            status: None,
+            status: TaskStatus::context,
             project: None,
             context: None,
             start_date: None,
@@ -2303,7 +2313,7 @@ name = "Home"
             name: "Office".to_string(),
             notes: None,
             title: None,
-            status: None,
+            status: TaskStatus::context,
             project: None,
             context: None,
             start_date: None,
@@ -2336,7 +2346,7 @@ name = "Home"
             name: "Office".to_string(),
             notes: None,
             title: None,
-            status: None,
+            status: TaskStatus::context,
             project: None,
             context: None,
             start_date: None,
@@ -2592,7 +2602,7 @@ name = "Home"
             name: "Office".to_string(),
             notes: None,
             title: None,
-            status: None,
+            status: TaskStatus::context,
             project: None,
             context: None,
             start_date: None,
@@ -2667,7 +2677,7 @@ name = "Home"
             name: "Office".to_string(),
             notes: Some("Work environment".to_string()),
             title: None,
-            status: None,
+            status: TaskStatus::context,
             project: None,
             context: None,
             start_date: None,
@@ -3256,7 +3266,7 @@ updated_at = "2024-01-01"
             name: "Office".to_string(),
             title: Some("Office Context".to_string()),
             notes: Some("Office location".to_string()),
-            status: None,
+            status: TaskStatus::context,
             project: None,
             context: None,
             start_date: None,
