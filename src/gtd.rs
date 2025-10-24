@@ -90,17 +90,17 @@ impl FromStr for TaskStatus {
 /// A GTD project
 ///
 /// Projects represent multi-step outcomes that require more than one action.
-/// Each project has a unique ID, name, status, and optional description and context.
+/// Each project has a unique ID, title, status, and optional notes and context.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Project {
     /// Unique project identifier (e.g., "project-1", "project-2")
     /// Not serialized to TOML (used as HashMap key)
     #[serde(skip_serializing, default)]
     pub id: String,
-    /// Project name
-    pub name: String,
-    /// Optional project description
-    pub description: Option<String>,
+    /// Project title
+    pub title: String,
+    /// Optional project notes
+    pub notes: Option<String>,
     /// Current status of the project
     pub status: ProjectStatus,
     /// Optional context where this project can be worked on
@@ -149,8 +149,8 @@ pub struct Context {
     /// Context name (e.g., "Office", "Home") - not serialized to TOML
     #[serde(skip_serializing, default)]
     pub name: String,
-    /// Optional description of the context
-    pub description: Option<String>,
+    /// Optional notes about the context
+    pub notes: Option<String>,
 }
 
 /// The main GTD data structure
@@ -1049,15 +1049,15 @@ mod tests {
     fn test_project_creation() {
         let project = Project {
             id: "project-1".to_string(),
-            name: "Test Project".to_string(),
-            description: Some("Test description".to_string()),
+            title: "Test Project".to_string(),
+            notes: Some("Test description".to_string()),
             status: ProjectStatus::active,
             context: None,
         };
 
         assert_eq!(project.id, "project-1");
-        assert_eq!(project.name, "Test Project");
-        assert_eq!(project.description.as_ref().unwrap(), "Test description");
+        assert_eq!(project.title, "Test Project");
+        assert_eq!(project.notes.as_ref().unwrap(), "Test description");
         assert!(matches!(project.status, ProjectStatus::active));
     }
 
@@ -1067,13 +1067,13 @@ mod tests {
     fn test_project_without_description() {
         let project = Project {
             id: "project-1".to_string(),
-            name: "Test Project".to_string(),
-            description: None,
+            title: "Test Project".to_string(),
+            notes: None,
             status: ProjectStatus::active,
             context: None,
         };
 
-        assert!(project.description.is_none());
+        assert!(project.notes.is_none());
     }
 
     // プロジェクトステータスの全バリアントテスト
@@ -1089,8 +1089,8 @@ mod tests {
         for status in statuses {
             let project = Project {
                 id: "project-1".to_string(),
-                name: "Test Project".to_string(),
-                description: None,
+                title: "Test Project".to_string(),
+                notes: None,
                 status: status.clone(),
                 context: None,
             };
@@ -1112,8 +1112,8 @@ mod tests {
         let mut data = GtdData::new();
         let project = Project {
             id: "project-1".to_string(),
-            name: "Test Project".to_string(),
-            description: None,
+            title: "Test Project".to_string(),
+            notes: None,
             status: ProjectStatus::active,
             context: None,
         };
@@ -1121,7 +1121,7 @@ mod tests {
         data.add_project(project.clone());
         assert_eq!(data.projects.len(), 1);
         assert_eq!(
-            data.find_project_by_id("project-1").unwrap().name,
+            data.find_project_by_id("project-1").unwrap().title,
             "Test Project"
         );
     }
@@ -1134,8 +1134,8 @@ mod tests {
         let project_id = "project-1".to_string();
         let project = Project {
             id: project_id.clone(),
-            name: "Test Project".to_string(),
-            description: None,
+            title: "Test Project".to_string(),
+            notes: None,
             status: ProjectStatus::active,
             context: None,
         };
@@ -1159,11 +1159,11 @@ mod tests {
     fn test_context_creation() {
         let context = Context {
             name: "Office".to_string(),
-            description: None,
+            notes: None,
         };
 
         assert_eq!(context.name, "Office");
-        assert_eq!(context.description, None);
+        assert_eq!(context.notes, None);
     }
 
     // コンテキストの説明付き作成テスト
@@ -1172,12 +1172,12 @@ mod tests {
     fn test_context_with_description() {
         let context = Context {
             name: "Office".to_string(),
-            description: Some("Work environment with desk and computer".to_string()),
+            notes: Some("Work environment with desk and computer".to_string()),
         };
 
         assert_eq!(context.name, "Office");
         assert_eq!(
-            context.description,
+            context.notes,
             Some("Work environment with desk and computer".to_string())
         );
     }
@@ -1189,7 +1189,7 @@ mod tests {
         let mut data = GtdData::new();
         let context = Context {
             name: "Office".to_string(),
-            description: None,
+            notes: None,
         };
 
         data.add_context(context.clone());
@@ -1207,7 +1207,7 @@ mod tests {
         for name in contexts {
             let context = Context {
                 name: name.to_string(),
-                description: None,
+                notes: None,
             };
             data.add_context(context);
         }
@@ -1250,8 +1250,8 @@ mod tests {
         let mut data = GtdData::new();
         let project = Project {
             id: "project-1".to_string(),
-            name: "Test Project".to_string(),
-            description: Some("Test description".to_string()),
+            title: "Test Project".to_string(),
+            notes: Some("Test description".to_string()),
             status: ProjectStatus::active,
             context: None,
         };
@@ -1263,8 +1263,8 @@ mod tests {
 
         let deserialized_project = deserialized.projects.get("project-1").unwrap();
         assert_eq!(project.id, deserialized_project.id);
-        assert_eq!(project.name, deserialized_project.name);
-        assert_eq!(project.description, deserialized_project.description);
+        assert_eq!(project.title, deserialized_project.title);
+        assert_eq!(project.notes, deserialized_project.notes);
         assert_eq!(project.status, deserialized_project.status);
     }
 
@@ -1275,7 +1275,7 @@ mod tests {
     fn test_context_serialization() {
         let context = Context {
             name: "Office".to_string(),
-            description: None,
+            notes: None,
         };
 
         let serialized = toml::to_string(&context).unwrap();
@@ -1288,7 +1288,7 @@ mod tests {
         let deserialized: Context = toml::from_str(&serialized).unwrap();
         // standalone でデシリアライズすると name は空文字列になる（default）
         assert_eq!(deserialized.name, "");
-        assert_eq!(deserialized.description, None);
+        assert_eq!(deserialized.notes, None);
     }
 
     // GtdData全体のシリアライゼーションテスト
@@ -1312,8 +1312,8 @@ mod tests {
 
         let project = Project {
             id: "project-1".to_string(),
-            name: "Test Project".to_string(),
-            description: None,
+            title: "Test Project".to_string(),
+            notes: None,
             status: ProjectStatus::active,
             context: None,
         };
@@ -1321,7 +1321,7 @@ mod tests {
 
         let context = Context {
             name: "Office".to_string(),
-            description: None,
+            notes: None,
         };
         data.add_context(context);
 
@@ -1513,8 +1513,8 @@ mod tests {
 
         let project = Project {
             id: "project-1".to_string(),
-            name: "Test Project".to_string(),
-            description: None,
+            title: "Test Project".to_string(),
+            notes: None,
             status: ProjectStatus::on_hold,
             context: None,
         };
@@ -1580,8 +1580,12 @@ mod tests {
         for i in 1..=2 {
             data.add_project(Project {
                 id: format!("project-{}", i),
-                name: format!("Project {}", i),
-                description: None,
+                title: format!(
+                    "Project {
+}",
+                    i
+                ),
+                notes: None,
                 status: ProjectStatus::active,
                 context: None,
             });
@@ -1638,8 +1642,8 @@ mod tests {
         // 全フィールドを設定したプロジェクトを追加
         data.add_project(Project {
             id: "project-001".to_string(),
-            name: "Documentation Project".to_string(),
-            description: Some("Comprehensive project documentation update".to_string()),
+            title: "Documentation Project".to_string(),
+            notes: Some("Comprehensive project documentation update".to_string()),
             status: ProjectStatus::active,
             context: None,
         });
@@ -1647,7 +1651,7 @@ mod tests {
         // 説明付きコンテキストを追加
         data.add_context(Context {
             name: "Office".to_string(),
-            description: Some("Work environment with desk and computer".to_string()),
+            notes: Some("Work environment with desk and computer".to_string()),
         });
 
         // TOML出力を生成
@@ -1679,12 +1683,12 @@ created_at = "2024-01-01"
 updated_at = "2024-01-01"
 
 [projects.project-001]
-name = "Documentation Project"
-description = "Comprehensive project documentation update"
+title = "Documentation Project"
+notes = "Comprehensive project documentation update"
 status = "active"
 
 [contexts.Office]
-description = "Work environment with desk and computer"
+notes = "Work environment with desk and computer"
 "#;
 
         // TOML出力が期待される形式と完全一致することを確認
@@ -1721,9 +1725,9 @@ description = "Work environment with desk and computer"
         assert_eq!(deserialized.projects.len(), 1);
         let project1 = deserialized.projects.get("project-001").unwrap();
         assert_eq!(project1.id, "project-001");
-        assert_eq!(project1.name, "Documentation Project");
+        assert_eq!(project1.title, "Documentation Project");
         assert_eq!(
-            project1.description,
+            project1.notes,
             Some("Comprehensive project documentation update".to_string())
         );
         assert!(matches!(project1.status, ProjectStatus::active));
@@ -1734,7 +1738,7 @@ description = "Work environment with desk and computer"
         let context_office = deserialized.contexts.get("Office").unwrap();
         assert_eq!(context_office.name, "Office");
         assert_eq!(
-            context_office.description,
+            context_office.notes,
             Some("Work environment with desk and computer".to_string())
         );
     }
@@ -1751,7 +1755,7 @@ status = "inbox"
 
 [contexts.Office]
 name = "Office"
-description = "Work environment with desk and computer"
+notes = "Work environment with desk and computer"
 
 [contexts.Home]
 name = "Home"
@@ -1766,14 +1770,14 @@ name = "Home"
         let office = deserialized.contexts.get("Office").unwrap();
         assert_eq!(office.name, "Office");
         assert_eq!(
-            office.description,
+            office.notes,
             Some("Work environment with desk and computer".to_string())
         );
 
         // Homeコンテキストを検証
         let home = deserialized.contexts.get("Home").unwrap();
         assert_eq!(home.name, "Home");
-        assert_eq!(home.description, None);
+        assert_eq!(home.notes, None);
 
         // 再シリアライズすると新形式（nameフィールドなし）になることを確認
         let reserialized = toml::to_string_pretty(&deserialized).unwrap();
@@ -1795,8 +1799,8 @@ name = "Home"
 
         data.add_project(Project {
             id: "project-1".to_string(),
-            name: "Test Project".to_string(),
-            description: None,
+            title: "Test Project".to_string(),
+            notes: None,
             status: ProjectStatus::active,
             context: None,
         });
@@ -1866,7 +1870,7 @@ name = "Home"
 
         data.add_context(Context {
             name: "Office".to_string(),
-            description: None,
+            notes: None,
         });
 
         let task = Task {
@@ -1934,15 +1938,15 @@ name = "Home"
 
         data.add_project(Project {
             id: "project-1".to_string(),
-            name: "Test Project".to_string(),
-            description: None,
+            title: "Test Project".to_string(),
+            notes: None,
             status: ProjectStatus::active,
             context: None,
         });
 
         data.add_context(Context {
             name: "Office".to_string(),
-            description: None,
+            notes: None,
         });
 
         let task = Task {
@@ -1968,7 +1972,7 @@ name = "Home"
 
         data.add_context(Context {
             name: "Office".to_string(),
-            description: None,
+            notes: None,
         });
 
         let task = Task {
@@ -1994,8 +1998,8 @@ name = "Home"
 
         data.add_project(Project {
             id: "project-1".to_string(),
-            name: "Test Project".to_string(),
-            description: None,
+            title: "Test Project".to_string(),
+            notes: None,
             status: ProjectStatus::active,
             context: None,
         });
@@ -2213,13 +2217,13 @@ name = "Home"
 
         data.add_context(Context {
             name: "Office".to_string(),
-            description: None,
+            notes: None,
         });
 
         let project = Project {
             id: "project-1".to_string(),
-            name: "Test Project".to_string(),
-            description: None,
+            title: "Test Project".to_string(),
+            notes: None,
             status: ProjectStatus::active,
             context: Some("Office".to_string()),
         };
@@ -2235,8 +2239,8 @@ name = "Home"
 
         let project = Project {
             id: "project-1".to_string(),
-            name: "Test Project".to_string(),
-            description: None,
+            title: "Test Project".to_string(),
+            notes: None,
             status: ProjectStatus::active,
             context: Some("NonExistent".to_string()),
         };
@@ -2252,8 +2256,8 @@ name = "Home"
 
         let project = Project {
             id: "project-1".to_string(),
-            name: "Test Project".to_string(),
-            description: None,
+            title: "Test Project".to_string(),
+            notes: None,
             status: ProjectStatus::active,
             context: None,
         };
@@ -2269,13 +2273,13 @@ name = "Home"
 
         data.add_context(Context {
             name: "Office".to_string(),
-            description: Some("Work environment".to_string()),
+            notes: Some("Work environment".to_string()),
         });
 
         let project = Project {
             id: "project-1".to_string(),
-            name: "Office Project".to_string(),
-            description: None,
+            title: "Office Project".to_string(),
+            notes: None,
             status: ProjectStatus::active,
             context: Some("Office".to_string()),
         };
@@ -2306,8 +2310,8 @@ name = "Home"
         let toml_str = r#"
 [[projects]]
 id = "project-1"
-name = "Old Project"
-description = "Project without context field"
+title = "Old Project"
+notes = "Project without context field"
 status = "active"
 "#;
 
@@ -2316,7 +2320,7 @@ status = "active"
 
         let project = data.projects.get("project-1").unwrap();
         assert_eq!(project.id, "project-1");
-        assert_eq!(project.name, "Old Project");
+        assert_eq!(project.title, "Old Project");
         assert_eq!(project.context, None);
     }
 
@@ -2328,13 +2332,13 @@ status = "active"
         let old_format_toml = r#"
 [[projects]]
 id = "project-1"
-name = "First Project"
-description = "Original format"
+title = "First Project"
+notes = "Original format"
 status = "active"
 
 [[projects]]
 id = "project-2"
-name = "Second Project"
+title = "Second Project"
 status = "on_hold"
 
 [[inbox]]
@@ -2355,12 +2359,12 @@ updated_at = "2024-01-01"
         // Verify projects are in HashMap
         let project1 = data.projects.get("project-1").unwrap();
         assert_eq!(project1.id, "project-1");
-        assert_eq!(project1.name, "First Project");
-        assert_eq!(project1.description, Some("Original format".to_string()));
+        assert_eq!(project1.title, "First Project");
+        assert_eq!(project1.notes, Some("Original format".to_string()));
 
         let project2 = data.projects.get("project-2").unwrap();
         assert_eq!(project2.id, "project-2");
-        assert_eq!(project2.name, "Second Project");
+        assert_eq!(project2.title, "Second Project");
 
         // Verify task references still work
         assert_eq!(data.inbox.len(), 1);

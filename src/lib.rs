@@ -497,12 +497,12 @@ impl McpServer for GtdServerHandler {
     #[tool]
     async fn add_project(
         &self,
-        /// Project name (e.g., "Website Redesign")
-        name: String,
+        /// Project title (e.g., "Website Redesign")
+        title: String,
         /// Project ID - use meaningful abbreviation (e.g., "website-redesign", "q1-budget")
         id: String,
-        /// Optional project goal description
-        description: Option<String>,
+        /// Optional project goal notes
+        notes: Option<String>,
         /// Optional context where project work happens (e.g., "@office")
         context: Option<String>,
     ) -> McpResult<String> {
@@ -516,8 +516,8 @@ impl McpServer for GtdServerHandler {
 
         let project = Project {
             id: id.clone(),
-            name: name.clone(),
-            description,
+            title: title.clone(),
+            notes,
             status: ProjectStatus::active,
             context,
         };
@@ -531,14 +531,14 @@ impl McpServer for GtdServerHandler {
         data.add_project(project);
         drop(data);
 
-        if let Err(e) = self.save_data_with_message(&format!("Add project: {}", name)) {
+        if let Err(e) = self.save_data_with_message(&format!("Add project: {}", title)) {
             bail!("Failed to save: {}", e);
         }
 
         Ok(format!("Project created with ID: {}", id))
     }
 
-    /// View all projects with status (active/on_hold/completed), descriptions, and contexts. Review regularly for progress tracking.
+    /// View all projects with status (active/on_hold/completed), notes, and contexts. Review regularly for progress tracking.
     #[tool]
     async fn list_projects(&self) -> McpResult<String> {
         let data = self.data.lock().unwrap();
@@ -546,10 +546,10 @@ impl McpServer for GtdServerHandler {
 
         let mut result = String::new();
         for project in projects {
-            let desc_info = project
-                .description
+            let notes_info = project
+                .notes
                 .as_ref()
-                .map(|d| format!(" [desc: {}]", d))
+                .map(|d| format!(" [notes: {}]", d))
                 .unwrap_or_default();
             let context_info = project
                 .context
@@ -558,7 +558,7 @@ impl McpServer for GtdServerHandler {
                 .unwrap_or_default();
             result.push_str(&format!(
                 "- [{}] {} (status: {:?}){}{}\n",
-                project.id, project.name, project.status, desc_info, context_info
+                project.id, project.title, project.status, notes_info, context_info
             ));
         }
 
@@ -673,10 +673,10 @@ impl McpServer for GtdServerHandler {
         project_id: String,
         /// Optional new project ID if renaming
         id: Option<String>,
-        /// Optional new name
-        name: Option<String>,
-        /// Optional new description, or "" to remove
-        description: Option<String>,
+        /// Optional new title
+        title: Option<String>,
+        /// Optional new notes, or "" to remove
+        notes: Option<String>,
         /// Optional new status: "active", "on_hold", "completed"
         status: Option<String>,
         /// Optional new context, or "" to remove
@@ -717,17 +717,17 @@ impl McpServer for GtdServerHandler {
             project.id = new_project_id.clone();
         }
 
-        // Update name if provided
-        if let Some(new_name) = name {
-            project.name = new_name;
+        // Update title if provided
+        if let Some(new_title) = title {
+            project.title = new_title;
         }
 
-        // Update description if provided (empty string removes it)
-        if let Some(new_description) = description {
-            project.description = if new_description.is_empty() {
+        // Update notes if provided (empty string removes it)
+        if let Some(new_notes) = notes {
+            project.notes = if new_notes.is_empty() {
                 None
             } else {
-                Some(new_description)
+                Some(new_notes)
             };
         }
 
@@ -775,7 +775,11 @@ impl McpServer for GtdServerHandler {
             bail!("Failed to save: {}", e);
         }
 
-        Ok(format!("Project {} updated successfully", new_project_id))
+        Ok(format!(
+            "Project {
+} updated successfully",
+            new_project_id
+        ))
     }
 
     /// Delete project if not referenced by any tasks. Ensures data integrity by preventing deletion of projects in use.
@@ -830,7 +834,11 @@ impl McpServer for GtdServerHandler {
             bail!("Failed to save: {}", e);
         }
 
-        Ok(format!("Project {} deleted successfully", project_id))
+        Ok(format!(
+            "Project {
+} deleted successfully",
+            project_id
+        ))
     }
 
     /// Create context to categorize where/how tasks can be done. Contexts are locations, tools, or situations (e.g., "@office", "@home", "@phone"). Use to filter tasks by current situation.
@@ -839,8 +847,8 @@ impl McpServer for GtdServerHandler {
         &self,
         /// Context name (e.g., "@office", "@home", "@phone")
         name: String,
-        /// Optional description
-        description: Option<String>,
+        /// Optional notes
+        notes: Option<String>,
     ) -> McpResult<String> {
         let mut data = self.data.lock().unwrap();
 
@@ -852,7 +860,7 @@ impl McpServer for GtdServerHandler {
 
         let context = gtd::Context {
             name: name.clone(),
-            description,
+            notes,
         };
 
         data.add_context(context);
@@ -865,7 +873,7 @@ impl McpServer for GtdServerHandler {
         Ok(format!("Context created: {}", name))
     }
 
-    /// View all contexts with descriptions. See available contexts for categorizing tasks/projects.
+    /// View all contexts with notes. See available contexts for categorizing tasks/projects.
     #[tool]
     async fn list_contexts(&self) -> McpResult<String> {
         let data = self.data.lock().unwrap();
@@ -879,25 +887,25 @@ impl McpServer for GtdServerHandler {
         contexts.sort_by_key(|c| &c.name);
 
         for context in contexts {
-            let desc = context
-                .description
+            let note = context
+                .notes
                 .as_ref()
                 .map(|d| format!(": {}", d))
                 .unwrap_or_default();
-            result.push_str(&format!("- {}{}\n", context.name, desc));
+            result.push_str(&format!("- {}{}\n", context.name, note));
         }
 
         Ok(result)
     }
 
-    /// Modify context description. Use "" to remove description.
+    /// Modify context notes. Use "" to remove notes.
     #[tool]
     async fn update_context(
         &self,
         /// Context name (e.g., "@office")
         name: String,
-        /// Optional new description, or "" to remove
-        description: Option<String>,
+        /// Optional new notes, or "" to remove
+        notes: Option<String>,
     ) -> McpResult<String> {
         let mut data = self.data.lock().unwrap();
 
@@ -907,13 +915,13 @@ impl McpServer for GtdServerHandler {
             bail!("Context not found: {}", name);
         }
 
-        // Remove and re-add with updated description
+        // Remove and re-add with updated notes
         let context = gtd::Context {
             name: name.clone(),
-            description: if let Some(desc) = description {
-                if desc.is_empty() { None } else { Some(desc) }
+            notes: if let Some(note) = notes {
+                if note.is_empty() { None } else { Some(note) }
             } else {
-                data.contexts.get(&name).and_then(|c| c.description.clone())
+                data.contexts.get(&name).and_then(|c| c.notes.clone())
             },
         };
 
@@ -1595,7 +1603,7 @@ mod tests {
             let mut data = handler.data.lock().unwrap();
             data.add_context(gtd::Context {
                 name: "Office".to_string(),
-                description: None,
+                notes: None,
             });
             drop(data);
             let _ = handler.save_data();
@@ -1872,7 +1880,7 @@ mod tests {
         // Verify update
         let data = handler.data.lock().unwrap();
         let project = data.find_project_by_id(&project_id).unwrap();
-        assert_eq!(project.name, "Updated Name");
+        assert_eq!(project.title, "Updated Name");
     }
 
     #[tokio::test]
@@ -1913,7 +1921,7 @@ mod tests {
         {
             let data = handler.data.lock().unwrap();
             let project = data.find_project_by_id(&project_id).unwrap();
-            assert_eq!(project.description, Some("New description".to_string()));
+            assert_eq!(project.notes, Some("New description".to_string()));
         }
 
         // Remove description
@@ -1932,7 +1940,7 @@ mod tests {
         // Verify description removed
         let data = handler.data.lock().unwrap();
         let project = data.find_project_by_id(&project_id).unwrap();
-        assert_eq!(project.description, None);
+        assert_eq!(project.notes, None);
     }
 
     #[tokio::test]
@@ -2200,7 +2208,7 @@ mod tests {
             let mut data = handler.data.lock().unwrap();
             data.add_context(gtd::Context {
                 name: "Office".to_string(),
-                description: None,
+                notes: None,
             });
             drop(data);
             let _ = handler.save_data();
@@ -2972,7 +2980,7 @@ mod tests {
         assert_eq!(data.contexts.len(), 1);
         let context = data.find_context_by_name("Office").unwrap();
         assert_eq!(context.name, "Office");
-        assert_eq!(context.description, Some("Work environment".to_string()));
+        assert_eq!(context.notes, Some("Work environment".to_string()));
     }
 
     #[tokio::test]
@@ -3030,7 +3038,7 @@ mod tests {
 
         let data = handler.data.lock().unwrap();
         let context = data.find_context_by_name("Office").unwrap();
-        assert_eq!(context.description, Some("New description".to_string()));
+        assert_eq!(context.notes, Some("New description".to_string()));
     }
 
     #[tokio::test]
@@ -3049,7 +3057,7 @@ mod tests {
 
         let data = handler.data.lock().unwrap();
         let context = data.find_context_by_name("Office").unwrap();
-        assert_eq!(context.description, None);
+        assert_eq!(context.notes, None);
     }
 
     #[tokio::test]
@@ -3345,7 +3353,7 @@ mod tests {
         let data = handler.data.lock().unwrap();
         let project = data.projects.values().next().unwrap();
         assert_eq!(project.context, Some("Office".to_string()));
-        assert_eq!(project.name, "Office Project");
+        assert_eq!(project.title, "Office Project");
     }
 
     #[tokio::test]
@@ -3509,7 +3517,7 @@ mod tests {
         let data = handler.data.lock().unwrap();
         let project = data.find_project_by_id("my-custom-id").unwrap();
         assert_eq!(project.id, "my-custom-id");
-        assert_eq!(project.name, "Custom ID Project");
+        assert_eq!(project.title, "Custom ID Project");
     }
 
     #[tokio::test]
@@ -3578,7 +3586,7 @@ mod tests {
         assert!(data.find_project_by_id(&project_id).is_none());
         let project = data.find_project_by_id("new-project-id").unwrap();
         assert_eq!(project.id, "new-project-id");
-        assert_eq!(project.name, "Test Project");
+        assert_eq!(project.title, "Test Project");
     }
 
     #[tokio::test]
