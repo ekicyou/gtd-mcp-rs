@@ -144,6 +144,345 @@ impl Drop for GtdServerHandler {
 impl McpServer for GtdServerHandler {
     /// Capture new task into GTD inbox for later processing. First step in GTD workflow - quickly capture anything needing attention. Task starts in 'inbox' status.
     #[tool]
+    async fn add_task(
+        &self,
+        /// Unique task ID - any string (e.g., "meeting-prep", "call-sarah"). Use meaningful names.
+        id: String,
+        /// Task title describing action (e.g., "Call Sarah about meeting")
+        title: String,
+        /// Optional project ID - use meaningful abbreviation like "website-redesign"
+        project: Option<String>,
+        /// Optional context (e.g., "@office", "@phone") for where/how task can be done
+        context: Option<String>,
+        /// Optional notes for details (Markdown supported)
+        notes: Option<String>,
+        /// Optional start date in YYYY-MM-DD format (e.g., "2024-03-15")
+        start_date: Option<String>,
+    ) -> McpResult<String> {
+        let parsed_start_date = if let Some(date_str) = start_date {
+            match NaiveDate::parse_from_str(&date_str, "%Y-%m-%d") {
+                Ok(date) => Some(date),
+                Err(_) => bail!("Invalid date format. Use YYYY-MM-DD"),
+            }
+        } else {
+            None
+        };
+
+        let mut data = self.data.lock().unwrap();
+
+        // Check for duplicate task ID
+        if data.find_task_by_id(&id).is_some() {
+            drop(data);
+            bail!("Task ID '{}' already exists. Please use a unique ID.", id);
+        }
+
+        let today = local_date_today();
+        let task = Task {
+            id: id.clone(),
+            title: title.clone(),
+            status: NotaStatus::inbox,
+            project,
+            context,
+            notes,
+            start_date: parsed_start_date,
+            created_at: today,
+            updated_at: today,
+        };
+
+        // Validate references before adding the task
+        if !data.validate_task_references(&task) {
+            let mut errors = Vec::new();
+            if !data.validate_task_project(&task) {
+                errors.push("Invalid project reference");
+            }
+            if !data.validate_task_context(&task) {
+                errors.push("Invalid context reference");
+            }
+            drop(data);
+            bail!("Failed to add task: {}", errors.join(", "));
+        }
+
+        let task_id = task.id.clone();
+        data.add_task(task);
+        drop(data);
+
+        if let Err(e) = self.save_data_with_message(&format!("Add task to inbox: {}", title)) {
+            bail!("Failed to save: {}", e);
+        }
+
+        Ok(format!("Task created with ID: {}", task_id))
+    }
+
+    /// View tasks with optional status or date filtering. Filter by status to focus on specific GTD workflow stage.
+    #[tool]
+    async fn list_tasks(
+        &self,
+        /// Optional status filter: "inbox", "next_action", "waiting_for", "someday", "later", "done", "trash", "calendar"
+        status: Option<String>,
+        /// Optional date filter (YYYY-MM-DD) - excludes tasks with future start_date
+        date: Option<String>,
+        /// Optional - exclude notes to reduce tokens (default: false)
+        exclude_notes: Option<bool>,
+    ) -> McpResult<String> {
+        // Parse the date filter if provided
+        let filter_date = if let Some(date_str) = date {
+            match NaiveDate::parse_from_str(&date_str, "%Y-%m-%d") {
+                Ok(date) => Some(date),
+                Err(_) => bail!("Invalid date format. Use YYYY-MM-DD"),
+            }
+        } else {
+            None
+        };
+
+        let data = self.data.lock().unwrap();
+        let mut tasks: Vec<&Task> = Vec::new();
+
+        // Collect tasks from all status lists or just the filtered one
+        if let Some(status_str) = status {
+            // Validate the status string first
+            if let Err(e) = status_str.parse::<NotaStatus>() {
+                drop(data);
+                bail!("{}", e);
+            }
+
+            match status_str.as_str() {
+                "inbox" => tasks.extend(data.inbox.iter()),
+                "next_action" => tasks.extend(data.next_action.iter()),
+                "waiting_for" => tasks.extend(data.waiting_for.iter()),
+                "someday" => tasks.extend(data.someday.iter()),
+                "later" => tasks.extend(data.later.iter()),
+                "done" => tasks.extend(data.done.iter()),
+                "trash" => tasks.extend(data.trash.iter()),
+                "calendar" => tasks.extend(data.calendar.iter()),
+                _ => {
+                    // This should not happen after validation, but handle it anyway
+                    tasks.extend(data.inbox.iter());
+                    tasks.extend(data.next_action.iter());
+                    tasks.extend(data.waiting_for.iter());
+                    tasks.extend(data.someday.iter());
+                    tasks.extend(data.later.iter());
+                    tasks.extend(data.done.iter());
+                    tasks.extend(data.trash.iter());
+                    tasks.extend(data.calendar.iter());
+                }
+            }
+        } else {
+            // No filter, return all tasks
+            tasks.extend(data.inbox.iter());
+            tasks.extend(data.next_action.iter());
+            tasks.extend(data.waiting_for.iter());
+            tasks.extend(data.someday.iter());
+            tasks.extend(data.later.iter());
+            tasks.extend(data.done.iter());
+            tasks.extend(data.trash.iter());
+            tasks.extend(data.calendar.iter());
+        }
+
+        let exclude_notes = exclude_notes.unwrap_or(false);
+        let mut result = String::new();
+        for task in tasks {
+            // Filter by date if specified: exclude tasks with start_date in the future
+            if let Some(ref filter_d) = filter_date
+                && let Some(start_d) = task.start_date
+                && start_d > *filter_d
+            {
+                continue; // Skip this task as its start_date is in the future
+            }
+
+            let date_info = task
+                .start_date
+                .map(|d| format!(" [start: {}]", d))
+                .unwrap_or_default();
+            let project_info = task
+                .project
+                .as_ref()
+                .map(|p| format!(" [project: {}]", p))
+                .unwrap_or_default();
+            let context_info = task
+                .context
+                .as_ref()
+                .map(|c| format!(" [context: {}]", c))
+                .unwrap_or_default();
+            let notes_info = if exclude_notes {
+                String::new()
+            } else {
+                task.notes
+                    .as_ref()
+                    .map(|n| format!(" [notes: {}]", n))
+                    .unwrap_or_default()
+            };
+            result.push_str(&format!(
+                "- [{}] {} (status: {:?}){}{}{}{} [created: {}, updated: {}]\n",
+                task.id,
+                task.title,
+                task.status,
+                date_info,
+                project_info,
+                context_info,
+                notes_info,
+                task.created_at,
+                task.updated_at
+            ));
+        }
+
+        Ok(result)
+    }
+
+    /// Move tasks between GTD workflow statuses. Key GTD statuses: **inbox** (unprocessed), **next_action** (ready to execute), **waiting_for** (blocked/delegated), **someday** (maybe later), **later** (deferred), **calendar** (date-specific, needs start_date), **done** (completed), **trash** (deleted). Process inbox regularly. Be specific with next_action. Review waiting_for weekly. Calendar requires start_date.
+    #[tool]
+    async fn change_task_status(
+        &self,
+        /// Task IDs to change. Format: ["#1", "#2", "#3"]
+        task_ids: Vec<String>,
+        /// Target status: "inbox", "next_action", "waiting_for", "someday", "later", "calendar", "done", "trash"
+        status: String,
+        /// Optional start date (YYYY-MM-DD) - required for "calendar", optional for others
+        start_date: Option<String>,
+    ) -> McpResult<String> {
+        // Parse the target status
+        let target_status = match status.parse::<NotaStatus>() {
+            Ok(s) => s,
+            Err(e) => bail!("{}", e),
+        };
+
+        // Parse date if provided
+        let parsed_start_date = if let Some(date_str) = start_date {
+            match NaiveDate::parse_from_str(&date_str, "%Y-%m-%d") {
+                Ok(date) => Some(date),
+                Err(_) => bail!("Invalid date format. Use YYYY-MM-DD"),
+            }
+        } else {
+            None
+        };
+
+        let mut data = self.data.lock().unwrap();
+
+        let mut successful: Vec<String> = Vec::new();
+        let mut failed: Vec<(String, String)> = Vec::new();
+
+        // Process each task ID
+        for task_id in &task_ids {
+            let task_id = Self::normalize_task_id(task_id.trim());
+
+            // Check if task exists
+            if data.find_task_by_id(&task_id).is_none() {
+                eprintln!("Error: Task not found: {}", task_id);
+                failed.push((task_id.to_string(), "Task not found".to_string()));
+                continue;
+            }
+
+            // Check if calendar status requires start_date
+            if target_status == NotaStatus::calendar {
+                let current_start_date = data.find_task_by_id(&task_id).unwrap().start_date;
+                let final_start_date = parsed_start_date.or(current_start_date);
+
+                if final_start_date.is_none() {
+                    eprintln!("Error: Task {} has no start_date for calendar", task_id);
+                    failed.push((
+                        task_id.to_string(),
+                        "Task must have a start_date for calendar status".to_string(),
+                    ));
+                    continue;
+                }
+            }
+
+            let original_status = data
+                .find_task_by_id(&task_id)
+                .map(|t| format!("{:?}", t.status));
+            eprintln!(
+                "Moving task {} from {:?} to {:?}",
+                task_id, original_status, target_status
+            );
+
+            // Move task to target status
+            if data.move_status(&task_id, target_status.clone()).is_some() {
+                // Update the start_date if provided for calendar, and update timestamp
+                if let Some(task) = data.find_task_by_id_mut(&task_id) {
+                    if let Some(date) = parsed_start_date {
+                        task.start_date = Some(date);
+                    }
+                    task.updated_at = local_date_today();
+                }
+                successful.push(task_id.to_string());
+                eprintln!("Successfully moved task {} to {:?}", task_id, target_status);
+            } else {
+                eprintln!(
+                    "Error: Failed to move task {} to {:?}",
+                    task_id, target_status
+                );
+                failed.push((task_id.to_string(), "Failed to move task".to_string()));
+            }
+        }
+
+        drop(data);
+
+        // Save data if any tasks were successfully moved
+        if !successful.is_empty() {
+            let task_list = successful.join(", ");
+            let commit_message = match target_status {
+                NotaStatus::inbox => format!("Move tasks to inbox: {}", task_list),
+                NotaStatus::next_action => format!("Move tasks to next_action: {}", task_list),
+                NotaStatus::waiting_for => format!("Move tasks to waiting_for: {}", task_list),
+                NotaStatus::someday => format!("Move tasks to someday: {}", task_list),
+                NotaStatus::later => format!("Move tasks to later: {}", task_list),
+                NotaStatus::calendar => format!("Move tasks to calendar: {}", task_list),
+                NotaStatus::done => format!("Mark tasks as done: {}", task_list),
+                NotaStatus::trash => format!("Move tasks to trash: {}", task_list),
+                NotaStatus::context => format!("Change status to context: {}", task_list),
+                NotaStatus::project => format!("Change status to project: {}", task_list),
+            };
+
+            if let Err(e) = self.save_data_with_message(&commit_message) {
+                eprintln!(
+                    "Error: Failed to save data after moving tasks to {:?}: {}",
+                    target_status, e
+                );
+                bail!(
+                    "Failed to save tasks to {:?}: {}. Some tasks may not have been moved.",
+                    target_status,
+                    e
+                );
+            }
+        }
+
+        // Build result message
+        let mut result = String::new();
+        if !successful.is_empty() {
+            let status_display = match target_status {
+                NotaStatus::next_action => "next action",
+                NotaStatus::waiting_for => "waiting for",
+                _ => &status,
+            };
+            result.push_str(&format!(
+                "Successfully moved {} task(s) to {}: {}",
+                successful.len(),
+                status_display,
+                successful.join(", ")
+            ));
+        }
+        if !failed.is_empty() {
+            if !result.is_empty() {
+                result.push('\n');
+            }
+            result.push_str(&format!("Failed to move {} task(s): ", failed.len()));
+            let failures: Vec<String> = failed
+                .iter()
+                .map(|(id, reason)| format!("{} ({})", id, reason))
+                .collect();
+            result.push_str(&failures.join(", "));
+        }
+
+        if successful.is_empty() && !failed.is_empty() {
+            bail!("{}", result);
+        }
+
+        Ok(result)
+    }
+
+    /// **GTD Purge**: Permanently delete trashed notas (irreversible).
+    /// **Use**: Periodic cleanup. Workflow: 1)Move to trash via change_status 2)Review 3)Empty trash.
+    /// **Safety**: Prevents deletion if referenced by other notas (maintains integrity).
+    #[tool]
     async fn empty_trash(&self) -> McpResult<String> {
         let mut data = self.data.lock().unwrap();
 
@@ -160,6 +499,543 @@ impl McpServer for GtdServerHandler {
     }
 
     /// Create project to organize related tasks. Projects are multi-step endeavors (e.g., "Launch website"). Use to group related tasks and track larger goals.
+    #[tool]
+    async fn add_project(
+        &self,
+        /// Project title (e.g., "Website Redesign")
+        title: String,
+        /// Project ID - use meaningful abbreviation (e.g., "website-redesign", "q1-budget")
+        id: String,
+        /// Optional project goal notes
+        notes: Option<String>,
+        /// Optional context where project work happens (e.g., "@office")
+        context: Option<String>,
+    ) -> McpResult<String> {
+        let mut data = self.data.lock().unwrap();
+
+        // Validate that ID doesn't already exist
+        if data.find_project_by_id(&id).is_some() {
+            drop(data);
+            bail!("Project ID already exists: {}", id);
+        }
+
+        let project = Project {
+            id: id.clone(),
+            title: title.clone(),
+            notes,
+            status: ProjectStatus::active,
+            project: None,
+            start_date: None,
+            created_at: local_date_today(),
+            updated_at: local_date_today(),
+            context,
+        };
+
+        // Validate context reference before adding the project
+        if !data.validate_project_context(&project) {
+            drop(data);
+            bail!("Invalid context reference: context does not exist");
+        }
+
+        data.add_project(project);
+        drop(data);
+
+        if let Err(e) = self.save_data_with_message(&format!("Add project: {}", title)) {
+            bail!("Failed to save: {}", e);
+        }
+
+        Ok(format!("Project created with ID: {}", id))
+    }
+
+    /// View all projects with status (active/on_hold/completed), notes, and contexts. Review regularly for progress tracking.
+    #[tool]
+    async fn list_projects(&self) -> McpResult<String> {
+        let data = self.data.lock().unwrap();
+        let projects: Vec<&Project> = data.projects.values().collect();
+
+        let mut result = String::new();
+        for project in projects {
+            let notes_info = project
+                .notes
+                .as_ref()
+                .map(|d| format!(" [notes: {}]", d))
+                .unwrap_or_default();
+            let context_info = project
+                .context
+                .as_ref()
+                .map(|c| format!(" [context: {}]", c))
+                .unwrap_or_default();
+            result.push_str(&format!(
+                "- [{}] {} (status: {:?}){}{}\n",
+                project.id, project.title, project.status, notes_info, context_info
+            ));
+        }
+
+        Ok(result)
+    }
+
+    /// Modify task properties. Update details, reassign projects, change contexts, add notes, or set/update start dates. Use empty string "" to remove optional fields.
+    #[tool]
+    async fn update_task(
+        &self,
+        /// Task ID (e.g., "#1")
+        task_id: String,
+        /// Optional new title
+        title: Option<String>,
+        /// Optional new project ID, or "" to unlink
+        project: Option<String>,
+        /// Optional new context, or "" to remove
+        context: Option<String>,
+        /// Optional new notes, or "" to remove
+        notes: Option<String>,
+        /// Optional new start date (YYYY-MM-DD), or "" to remove
+        start_date: Option<String>,
+    ) -> McpResult<String> {
+        // Normalize task ID to ensure # prefix
+        let task_id = Self::normalize_task_id(&task_id);
+
+        // Parse date first if provided
+        let new_start_date = if let Some(new_date_str) = start_date {
+            if new_date_str.is_empty() {
+                Some(None)
+            } else {
+                match NaiveDate::parse_from_str(&new_date_str, "%Y-%m-%d") {
+                    Ok(date) => Some(Some(date)),
+                    Err(_) => bail!("Invalid date format. Use YYYY-MM-DD"),
+                }
+            }
+        } else {
+            None
+        };
+
+        let mut data = self.data.lock().unwrap();
+
+        // Find the task
+        let task = match data.find_task_by_id_mut(&task_id) {
+            Some(t) => t,
+            None => {
+                drop(data);
+                bail!("Task not found: {}", task_id);
+            }
+        };
+
+        // Update in place
+        if let Some(new_title) = title {
+            task.title = new_title;
+        }
+        if let Some(new_project) = project {
+            task.project = if new_project.is_empty() {
+                None
+            } else {
+                Some(new_project)
+            };
+        }
+        if let Some(new_context) = context {
+            task.context = if new_context.is_empty() {
+                None
+            } else {
+                Some(new_context)
+            };
+        }
+        if let Some(new_notes) = notes {
+            task.notes = if new_notes.is_empty() {
+                None
+            } else {
+                Some(new_notes)
+            };
+        }
+        if let Some(date_opt) = new_start_date {
+            task.start_date = date_opt;
+        }
+        task.updated_at = local_date_today();
+
+        // Clone task for validation
+        let task_clone = task.clone();
+
+        // Validate references
+        if !data.validate_task_references(&task_clone) {
+            let mut errors = Vec::new();
+            if !data.validate_task_project(&task_clone) {
+                errors.push("Invalid project reference");
+            }
+            if !data.validate_task_context(&task_clone) {
+                errors.push("Invalid context reference");
+            }
+            drop(data);
+            bail!("Failed to update task: {}", errors.join(", "));
+        }
+
+        drop(data);
+
+        if let Err(e) = self.save_data_with_message(&format!("Update task {}", task_id)) {
+            bail!("Failed to save: {}", e);
+        }
+
+        Ok(format!("Task {} updated successfully", task_id))
+    }
+
+    /// Modify project properties. Update details, change status (active/on_hold/completed), or reassign contexts. Use "" to remove optional fields.
+    #[tool]
+    async fn update_project(
+        &self,
+        /// Project ID (e.g., "website-redesign")
+        project_id: String,
+        /// Optional new project ID if renaming
+        id: Option<String>,
+        /// Optional new title
+        title: Option<String>,
+        /// Optional new notes, or "" to remove
+        notes: Option<String>,
+        /// Optional new status: "active", "on_hold", "completed"
+        status: Option<String>,
+        /// Optional new context, or "" to remove
+        context: Option<String>,
+    ) -> McpResult<String> {
+        let mut data = self.data.lock().unwrap();
+
+        // Validate project exists
+        if data.find_project_by_id(&project_id).is_none() {
+            drop(data);
+            bail!("Project not found: {}", project_id);
+        }
+
+        // Validate new ID if provided
+        if let Some(ref new_id) = id
+            && new_id != &project_id
+            && data.find_project_by_id(new_id).is_some()
+        {
+            drop(data);
+            bail!("Project ID already exists: {}", new_id);
+        }
+
+        // If ID is changing, we need to remove from old key and insert with new key
+        let new_project_id = id.clone().unwrap_or_else(|| project_id.clone());
+        let id_changed = new_project_id != project_id;
+
+        // Get the project and update fields
+        let mut project = if id_changed {
+            // Remove from old key
+            data.projects.remove(&project_id).unwrap()
+        } else {
+            // Just get mutable reference
+            data.find_project_by_id_mut(&project_id).unwrap().clone()
+        };
+
+        // Update ID if changed
+        if id_changed {
+            project.id = new_project_id.clone();
+        }
+
+        // Update title if provided
+        if let Some(new_title) = title {
+            project.title = new_title;
+        }
+
+        // Update notes if provided (empty string removes it)
+        if let Some(new_notes) = notes {
+            project.notes = if new_notes.is_empty() {
+                None
+            } else {
+                Some(new_notes)
+            };
+        }
+
+        // Update status if provided
+        if let Some(status_str) = status {
+            project.status = match status_str.parse::<ProjectStatus>() {
+                Ok(s) => s,
+                Err(e) => {
+                    drop(data);
+                    bail!("{}", e);
+                }
+            };
+        }
+
+        // Update context if provided (empty string removes it)
+        if let Some(new_context) = context {
+            project.context = if new_context.is_empty() {
+                None
+            } else {
+                Some(new_context)
+            };
+        }
+
+        // Validate context reference
+        if !data.validate_project_context(&project) {
+            drop(data);
+            bail!("Invalid context reference: context does not exist");
+        }
+
+        // Update task references if project ID changed
+        if id_changed {
+            data.update_project_id_in_tasks(&project_id, &new_project_id);
+        }
+
+        // Insert project back (either with new key if ID changed, or update existing)
+        if id_changed {
+            data.projects.insert(new_project_id.clone(), project);
+        } else {
+            *data.find_project_by_id_mut(&project_id).unwrap() = project;
+        }
+
+        drop(data);
+
+        if let Err(e) = self.save_data_with_message(&format!("Update project {}", new_project_id)) {
+            bail!("Failed to save: {}", e);
+        }
+
+        Ok(format!(
+            "Project {
+} updated successfully",
+            new_project_id
+        ))
+    }
+
+    /// Delete project if not referenced by any tasks. Ensures data integrity by preventing deletion of projects in use.
+    #[tool]
+    async fn delete_project(
+        &self,
+        /// Project ID (e.g., "website-redesign")
+        project_id: String,
+    ) -> McpResult<String> {
+        let mut data = self.data.lock().unwrap();
+
+        // Check if project exists
+        if data.find_project_by_id(&project_id).is_none() {
+            drop(data);
+            bail!("Project not found: {}", project_id);
+        }
+
+        // Check if any tasks reference this project
+        let task_lists = [
+            &data.inbox,
+            &data.next_action,
+            &data.waiting_for,
+            &data.later,
+            &data.calendar,
+            &data.someday,
+            &data.done,
+            &data.trash,
+        ];
+
+        for task_list in &task_lists {
+            for task in *task_list {
+                if let Some(ref task_project) = task.project
+                    && task_project == &project_id
+                {
+                    let task_id = task.id.clone();
+                    drop(data);
+                    bail!(
+                        "Cannot delete project '{}': task {} still references it",
+                        project_id,
+                        task_id
+                    );
+                }
+            }
+        }
+
+        // Remove the project
+        data.projects.remove(&project_id);
+
+        drop(data);
+
+        if let Err(e) = self.save_data_with_message(&format!("Delete project {}", project_id)) {
+            bail!("Failed to save: {}", e);
+        }
+
+        Ok(format!(
+            "Project {
+} deleted successfully",
+            project_id
+        ))
+    }
+
+    /// Create context to categorize where/how tasks can be done. Contexts are locations, tools, or situations (e.g., "@office", "@home", "@phone"). Use to filter tasks by current situation.
+    #[tool]
+    async fn add_context(
+        &self,
+        /// Context name (e.g., "@office", "@home", "@phone")
+        name: String,
+        /// Optional notes
+        notes: Option<String>,
+    ) -> McpResult<String> {
+        let mut data = self.data.lock().unwrap();
+
+        // Check if context already exists
+        if data.find_context_by_name(&name).is_some() {
+            drop(data);
+            bail!("Context already exists: {}", name);
+        }
+
+        let context = gtd::Context {
+            name: name.clone(),
+            notes,
+            title: None,
+            status: gtd::NotaStatus::context,
+            project: None,
+            context: None,
+            start_date: None,
+            created_at: None,
+            updated_at: None,
+        };
+
+        data.add_context(context);
+        drop(data);
+
+        if let Err(e) = self.save_data_with_message(&format!("Add context: {}", name)) {
+            bail!("Failed to save: {}", e);
+        }
+
+        Ok(format!("Context created: {}", name))
+    }
+
+    /// View all contexts with notes. See available contexts for categorizing tasks/projects.
+    #[tool]
+    async fn list_contexts(&self) -> McpResult<String> {
+        let data = self.data.lock().unwrap();
+
+        if data.contexts.is_empty() {
+            return Ok("No contexts found".to_string());
+        }
+
+        let mut result = String::new();
+        let mut contexts: Vec<_> = data.contexts.values().collect();
+        contexts.sort_by_key(|c| &c.name);
+
+        for context in contexts {
+            let note = context
+                .notes
+                .as_ref()
+                .map(|d| format!(": {}", d))
+                .unwrap_or_default();
+            result.push_str(&format!("- {}{}\n", context.name, note));
+        }
+
+        Ok(result)
+    }
+
+    /// Modify context notes. Use "" to remove notes.
+    #[tool]
+    async fn update_context(
+        &self,
+        /// Context name (e.g., "@office")
+        name: String,
+        /// Optional new notes, or "" to remove
+        notes: Option<String>,
+    ) -> McpResult<String> {
+        let mut data = self.data.lock().unwrap();
+
+        // Check if context exists
+        if data.find_context_by_name(&name).is_none() {
+            drop(data);
+            bail!("Context not found: {}", name);
+        }
+
+        // Remove and re-add with updated notes
+        let context = gtd::Context {
+            name: name.clone(),
+            notes: if let Some(note) = notes {
+                if note.is_empty() { None } else { Some(note) }
+            } else {
+                data.contexts.get(&name).and_then(|c| c.notes.clone())
+            },
+            title: None,
+            status: gtd::NotaStatus::context,
+            project: None,
+            context: None,
+            start_date: None,
+            created_at: None,
+            updated_at: None,
+        };
+
+        data.contexts.insert(name.clone(), context);
+        drop(data);
+
+        if let Err(e) = self.save_data_with_message(&format!("Update context {}", name)) {
+            bail!("Failed to save: {}", e);
+        }
+
+        Ok(format!("Context {} updated successfully", name))
+    }
+
+    /// Delete context if not referenced by any tasks or projects. Ensures data integrity by preventing deletion of contexts in use.
+    #[tool]
+    async fn delete_context(
+        &self,
+        /// Context name (e.g., "@office")
+        name: String,
+    ) -> McpResult<String> {
+        let mut data = self.data.lock().unwrap();
+
+        // Check if context exists
+        if data.find_context_by_name(&name).is_none() {
+            drop(data);
+            bail!("Context not found: {}", name);
+        }
+
+        // Check if any tasks reference this context
+        let task_lists = [
+            &data.inbox,
+            &data.next_action,
+            &data.waiting_for,
+            &data.later,
+            &data.calendar,
+            &data.someday,
+            &data.done,
+            &data.trash,
+        ];
+
+        for task_list in &task_lists {
+            for task in *task_list {
+                if let Some(ref task_context) = task.context
+                    && task_context == &name
+                {
+                    let task_id = task.id.clone();
+                    drop(data);
+                    bail!(
+                        "Cannot delete context '{}': task {} still references it",
+                        name,
+                        task_id
+                    );
+                }
+            }
+        }
+
+        // Check if any projects reference this context
+        for (project_id, project) in &data.projects {
+            if let Some(ref project_context) = project.context
+                && project_context == &name
+            {
+                let project_id = project_id.clone();
+                drop(data);
+                bail!(
+                    "Cannot delete context '{}': project {} still references it",
+                    name,
+                    project_id
+                );
+            }
+        }
+
+        // Remove the context
+        data.contexts.remove(&name);
+
+        drop(data);
+
+        if let Err(e) = self.save_data_with_message(&format!("Delete context {}", name)) {
+            bail!("Failed to save: {}", e);
+        }
+
+        Ok(format!("Context {} deleted successfully", name))
+    }
+
+    // ==================== Core GTD Tools ====================
+    // 5 unified tools handle all GTD operations (tasks/projects/contexts)
+
+    /// **GTD Capture**: Add nota (task/project/context). Status determines type.
+    /// **Use**: Capture anything needing attention (GTD step 1).
+    /// **Types**: inbox/next_action/etc→task, project→project, context→context
+    /// **Ex**: id="call-sarah" title="Call Sarah" status="inbox"
+    #[allow(clippy::too_many_arguments)]
     #[tool]
     async fn add(
         &self,
@@ -734,6 +1610,58 @@ When done:
             .to_string())
     }
 
+    /// Guide for creating well-formed tasks
+    #[prompt]
+    async fn add_task_guide(&self) -> McpResult<String> {
+        Ok(r#"# Task Creation Best Practices
+
+## Good Task Titles
+
+**Good examples:**
+- "Call Sarah to schedule meeting"
+- "Draft Q1 budget proposal"
+- "Buy new printer ink"
+- "Email team about project status"
+
+**Poor examples (avoid):**
+- "Sarah" (not specific)
+- "Budget" (not an action)
+- "Ink" (not actionable)
+- "Follow up" (too vague)
+
+## Using Optional Fields
+
+**project**: Link to project-1, project-2, etc.
+- Use for multi-step endeavors
+- Keep single tasks unlinked
+
+**context**: Work environment/tools needed
+- @office, @home, @computer, @phone, @errands
+- Helps filter when in specific contexts
+
+**notes**: Additional details (Markdown format recommended)
+- Background information
+- URLs, reference numbers
+- Why this matters
+- Use Markdown for formatting: **bold**, *italic*, lists, links, etc.
+
+**start_date**: For calendar tasks only (YYYY-MM-DD)
+- Events with specific dates
+- Tickler file items
+- Don't use for regular next actions
+
+## Workflow
+
+1. Quick capture to inbox: `add_task` with just title
+2. Later process inbox to clarify and organize
+3. Use `update_task` to add details as needed
+
+**IMPORTANT:** Task IDs use the '#' prefix: #1, #2, #3, etc.
+- Preferred: Use the '#' prefix (e.g., #1 for task 1)
+- Also works: Plain numbers (e.g., 1) are auto-corrected to #1
+- Date format: YYYY-MM-DD (e.g., 2024-03-15)"#
+            .to_string())
+    }
 }
 #[cfg(test)]
 mod tests {
@@ -771,7 +1699,7 @@ mod tests {
             created_at: local_date_today(),
             updated_at: local_date_today(),
         };
-        data.add(task);
+        data.add_task(task);
         drop(data);
 
         // 保存
@@ -820,7 +1748,7 @@ mod tests {
 
         // Create a task in inbox
         let result = handler
-            .add(
+            .add_task(
                 "task-3".to_string(),
                 "Test Task".to_string(),
                 None,
@@ -839,7 +1767,7 @@ mod tests {
 
         // Test moving to next_action
         let result = handler
-            .change_status(vec![task_id.clone()], "next_action".to_string(), None)
+            .change_task_status(vec![task_id.clone()], "next_action".to_string(), None)
             .await;
         assert!(result.is_ok());
         {
@@ -850,7 +1778,7 @@ mod tests {
 
         // Test moving to done
         let result = handler
-            .change_status(vec![task_id.clone()], "done".to_string(), None)
+            .change_task_status(vec![task_id.clone()], "done".to_string(), None)
             .await;
         assert!(result.is_ok());
         {
@@ -861,7 +1789,7 @@ mod tests {
 
         // Test moving to trash
         let result = handler
-            .change_status(vec![task_id.clone()], "trash".to_string(), None)
+            .change_task_status(vec![task_id.clone()], "trash".to_string(), None)
             .await;
         assert!(result.is_ok());
         {
@@ -872,7 +1800,7 @@ mod tests {
 
         // Test invalid status
         let result = handler
-            .change_status(vec![task_id.clone()], "invalid_status".to_string(), None)
+            .change_task_status(vec![task_id.clone()], "invalid_status".to_string(), None)
             .await;
         assert!(result.is_err());
     }
@@ -883,7 +1811,7 @@ mod tests {
 
         // Create a task
         let result = handler
-            .add(
+            .add_task(
                 "task-4".to_string(),
                 "Test Task".to_string(),
                 None,
@@ -902,7 +1830,7 @@ mod tests {
 
         // Test moving to calendar with date
         let result = handler
-            .change_status(
+            .change_task_status(
                 vec![task_id.clone()],
                 "calendar".to_string(),
                 Some("2024-12-25".to_string()),
@@ -926,7 +1854,7 @@ mod tests {
         let mut task_ids = Vec::new();
         for i in 1..=3 {
             let result = handler
-                .add(
+                .add_task(
                     format!("task-{}", 5 - 1 + i),
                     format!("Test Task {}", i),
                     None,
@@ -947,7 +1875,7 @@ mod tests {
 
         // Test batch move to next_action
         let result = handler
-            .change_status(task_ids.clone(), "next_action".to_string(), None)
+            .change_task_status(task_ids.clone(), "next_action".to_string(), None)
             .await;
         assert!(result.is_ok());
 
@@ -966,7 +1894,7 @@ mod tests {
 
         // Add a task with an arbitrary ID
         let result = handler
-            .add(
+            .add_task(
                 "meeting-prep".to_string(),
                 "Prepare for meeting".to_string(),
                 None,
@@ -979,7 +1907,7 @@ mod tests {
 
         // Update task using the arbitrary ID
         let result = handler
-            .update(
+            .update_task(
                 "meeting-prep".to_string(),
                 Some("Updated meeting preparation".to_string()),
                 None,
@@ -1002,7 +1930,7 @@ mod tests {
 
         // Add a task with an arbitrary ID
         let result = handler
-            .add(
+            .add_task(
                 "call-sarah".to_string(),
                 "Call Sarah".to_string(),
                 None,
@@ -1015,7 +1943,7 @@ mod tests {
 
         // Move to next_action using the arbitrary ID
         let result = handler
-            .change_status(
+            .change_task_status(
                 vec!["call-sarah".to_string()],
                 "next_action".to_string(),
                 None,
@@ -1035,7 +1963,7 @@ mod tests {
 
         // Add a task
         let result = handler
-            .add(
+            .add_task(
                 "task-8".to_string(),
                 "Original Title".to_string(),
                 None,
@@ -1056,7 +1984,7 @@ mod tests {
 
         // Update title
         let result = handler
-            .update(
+            .update_task(
                 task_id.clone(),
                 Some("Updated Title".to_string()),
                 None,
@@ -1079,7 +2007,7 @@ mod tests {
 
         // Add a task
         let result = handler
-            .add(
+            .add_task(
                 "task-9".to_string(),
                 "Test Task".to_string(),
                 None,
@@ -1107,7 +2035,7 @@ mod tests {
 
         // Update status to next_action using new method
         let result = handler
-            .change_status(vec![task_id.clone()], "next_action".to_string(), None)
+            .change_task_status(vec![task_id.clone()], "next_action".to_string(), None)
             .await;
         assert!(result.is_ok());
 
@@ -1127,7 +2055,7 @@ mod tests {
 
         // Add a project and context first
         let project_result = handler
-            .add(
+            .add_project(
                 "Test Project".to_string(),
                 "test-project-1".to_string(),
                 None,
@@ -1144,7 +2072,7 @@ mod tests {
 
         {
             let mut data = handler.data.lock().unwrap();
-            data.add(gtd::Context {
+            data.add_context(gtd::Context {
                 name: "Office".to_string(),
                 notes: None,
                 title: None,
@@ -1161,7 +2089,7 @@ mod tests {
 
         // Add a task
         let result = handler
-            .add(
+            .add_task(
                 "task-10".to_string(),
                 "Test Task".to_string(),
                 None,
@@ -1180,7 +2108,7 @@ mod tests {
 
         // Update project and context
         let result = handler
-            .update(
+            .update_task(
                 task_id.clone(),
                 None,
                 Some(project_id.clone()),
@@ -1204,7 +2132,7 @@ mod tests {
 
         // Add a task with optional fields
         let result = handler
-            .add(
+            .add_task(
                 "task-2001".to_string(),
                 "Test Task".to_string(),
                 None,
@@ -1231,7 +2159,7 @@ mod tests {
 
         // Remove optional fields using empty strings
         let result = handler
-            .update(
+            .update_task(
                 task_id.clone(),
                 None,
                 None,
@@ -1255,7 +2183,7 @@ mod tests {
 
         // Add a task
         let result = handler
-            .add(
+            .add_task(
                 "task-11".to_string(),
                 "Test Task".to_string(),
                 None,
@@ -1274,7 +2202,7 @@ mod tests {
 
         // Try to update with invalid date
         let result = handler
-            .update(
+            .update_task(
                 task_id,
                 None,
                 None,
@@ -1292,7 +2220,7 @@ mod tests {
 
         // Add a task
         let result = handler
-            .add(
+            .add_task(
                 "task-12".to_string(),
                 "Test Task".to_string(),
                 None,
@@ -1311,7 +2239,7 @@ mod tests {
 
         // Try to update with non-existent project
         let result = handler
-            .update(
+            .update_task(
                 task_id,
                 None,
                 Some("non-existent-project".to_string()),
@@ -1329,7 +2257,7 @@ mod tests {
 
         // Add a task
         let result = handler
-            .add(
+            .add_task(
                 "task-13".to_string(),
                 "Test Task".to_string(),
                 None,
@@ -1348,7 +2276,7 @@ mod tests {
 
         // Try to update with non-existent context
         let result = handler
-            .update(
+            .update_task(
                 task_id,
                 None,
                 None,
@@ -1366,7 +2294,7 @@ mod tests {
 
         // Try to update non-existent task
         let result = handler
-            .update(
+            .update_task(
                 "non-existent-id".to_string(),
                 Some("New Title".to_string()),
                 None,
@@ -1384,7 +2312,7 @@ mod tests {
 
         // Add a task
         let result = handler
-            .add(
+            .add_task(
                 "task-14".to_string(),
                 "Test Task".to_string(),
                 None,
@@ -1410,7 +2338,7 @@ mod tests {
 
         // Update task
         let result = handler
-            .update(
+            .update_task(
                 task_id.clone(),
                 Some("Updated Title".to_string()),
                 None,
@@ -1435,7 +2363,7 @@ mod tests {
 
         // Add a project
         let result = handler
-            .add(
+            .add_project(
                 "Original Name".to_string(),
                 "test-project-1".to_string(),
                 None,
@@ -1452,7 +2380,7 @@ mod tests {
 
         // Update name
         let result = handler
-            .update(
+            .update_project(
                 project_id.clone(),
                 None,
                 Some("Updated Name".to_string()),
@@ -1475,7 +2403,7 @@ mod tests {
 
         // Add a project
         let result = handler
-            .add(
+            .add_project(
                 "Test Project".to_string(),
                 "test-project-1".to_string(),
                 None,
@@ -1492,7 +2420,7 @@ mod tests {
 
         // Add description
         let result = handler
-            .update(
+            .update_project(
                 project_id.clone(),
                 None,
                 None,
@@ -1512,7 +2440,7 @@ mod tests {
 
         // Remove description
         let result = handler
-            .update(
+            .update_project(
                 project_id.clone(),
                 None,
                 None,
@@ -1535,7 +2463,7 @@ mod tests {
 
         // Add a project
         let result = handler
-            .add(
+            .add_project(
                 "Test Project".to_string(),
                 "test-project-1".to_string(),
                 None,
@@ -1559,7 +2487,7 @@ mod tests {
 
         // Update status to on_hold
         let result = handler
-            .update(
+            .update_project(
                 project_id.clone(),
                 None,
                 None,
@@ -1579,7 +2507,7 @@ mod tests {
 
         // Update status to completed
         let result = handler
-            .update(
+            .update_project(
                 project_id.clone(),
                 None,
                 None,
@@ -1602,7 +2530,7 @@ mod tests {
 
         // Add a project
         let result = handler
-            .add(
+            .add_project(
                 "Test Project".to_string(),
                 "test-project-1".to_string(),
                 None,
@@ -1619,7 +2547,7 @@ mod tests {
 
         // Try to update with invalid status
         let result = handler
-            .update(
+            .update_project(
                 project_id,
                 None,
                 None,
@@ -1637,7 +2565,7 @@ mod tests {
 
         // Try to update non-existent project
         let result = handler
-            .update(
+            .update_project(
                 "non-existent-id".to_string(),
                 None,
                 Some("New Name".to_string()),
@@ -1655,7 +2583,7 @@ mod tests {
 
         // Add a project
         let result = handler
-            .add(
+            .add_project(
                 "Test Project".to_string(),
                 "test-project-1".to_string(),
                 None,
@@ -1689,7 +2617,7 @@ mod tests {
 
         // Add a project
         let result = handler
-            .add(
+            .add_project(
                 "Test Project".to_string(),
                 "test-project-1".to_string(),
                 None,
@@ -1700,7 +2628,7 @@ mod tests {
 
         // Add a task that references the project
         let result = handler
-            .add(
+            .add_task(
                 "task-2002".to_string(),
                 "Test Task".to_string(),
                 Some("test-project-1".to_string()),
@@ -1726,7 +2654,7 @@ mod tests {
 
         // Add a project
         let result = handler
-            .add(
+            .add_project(
                 "Test Project".to_string(),
                 "test-project-1".to_string(),
                 None,
@@ -1737,7 +2665,7 @@ mod tests {
 
         // Add a task that references the project
         let result = handler
-            .add(
+            .add_task(
                 "task-2003".to_string(),
                 "Test Task".to_string(),
                 Some("test-project-1".to_string()),
@@ -1750,7 +2678,7 @@ mod tests {
 
         // Unlink the task from the project
         let result = handler
-            .update(
+            .update_task(
                 "task-2003".to_string(),
                 None,
                 Some("".to_string()), // Empty string removes project
@@ -1776,7 +2704,7 @@ mod tests {
 
         // Add a project
         let project_result = handler
-            .add(
+            .add_project(
                 "Test Project".to_string(),
                 "test-project-1".to_string(),
                 None,
@@ -1794,7 +2722,7 @@ mod tests {
         // Add a context
         {
             let mut data = handler.data.lock().unwrap();
-            data.add(gtd::Context {
+            data.add_context(gtd::Context {
                 name: "Office".to_string(),
                 notes: None,
                 title: None,
@@ -1811,7 +2739,7 @@ mod tests {
 
         // Add a task
         let result = handler
-            .add(
+            .add_task(
                 "task-15".to_string(),
                 "Original Task".to_string(),
                 None,
@@ -1830,7 +2758,7 @@ mod tests {
 
         // Update multiple fields at once
         let result = handler
-            .update(
+            .update_task(
                 task_id.clone(),
                 Some("Updated Task".to_string()),
                 Some(project_id.clone()),
@@ -1843,7 +2771,7 @@ mod tests {
 
         // Change status separately using new method
         let result = handler
-            .change_status(vec![task_id.clone()], "done".to_string(), None)
+            .change_task_status(vec![task_id.clone()], "done".to_string(), None)
             .await;
         assert!(result.is_ok());
 
@@ -1869,7 +2797,7 @@ mod tests {
 
         // Add a task
         let result = handler
-            .add(
+            .add_task(
                 "task-16".to_string(),
                 "Test Task".to_string(),
                 None,
@@ -1888,7 +2816,7 @@ mod tests {
 
         // Move to next_action first
         let result = handler
-            .change_status(vec![task_id.clone()], "next_action".to_string(), None)
+            .change_task_status(vec![task_id.clone()], "next_action".to_string(), None)
             .await;
         assert!(result.is_ok());
 
@@ -1903,7 +2831,7 @@ mod tests {
 
         // Move back to inbox
         let result = handler
-            .change_status(vec![task_id.clone()], "inbox".to_string(), None)
+            .change_task_status(vec![task_id.clone()], "inbox".to_string(), None)
             .await;
         assert!(result.is_ok());
 
@@ -1922,7 +2850,7 @@ mod tests {
         let (handler, _temp_file) = get_test_handler();
 
         let result = handler
-            .add(
+            .add_task(
                 "task-17".to_string(),
                 "Test Task".to_string(),
                 None,
@@ -1940,7 +2868,7 @@ mod tests {
             .to_string();
 
         let result = handler
-            .change_status(vec![task_id.clone()], "next_action".to_string(), None)
+            .change_task_status(vec![task_id.clone()], "next_action".to_string(), None)
             .await;
         assert!(result.is_ok());
 
@@ -1956,7 +2884,7 @@ mod tests {
         let (handler, _temp_file) = get_test_handler();
 
         let result = handler
-            .add(
+            .add_task(
                 "task-18".to_string(),
                 "Test Task".to_string(),
                 None,
@@ -1974,7 +2902,7 @@ mod tests {
             .to_string();
 
         let result = handler
-            .change_status(vec![task_id.clone()], "waiting_for".to_string(), None)
+            .change_task_status(vec![task_id.clone()], "waiting_for".to_string(), None)
             .await;
         assert!(result.is_ok());
 
@@ -1990,7 +2918,7 @@ mod tests {
         let (handler, _temp_file) = get_test_handler();
 
         let result = handler
-            .add(
+            .add_task(
                 "task-19".to_string(),
                 "Test Task".to_string(),
                 None,
@@ -2008,7 +2936,7 @@ mod tests {
             .to_string();
 
         let result = handler
-            .change_status(vec![task_id.clone()], "someday".to_string(), None)
+            .change_task_status(vec![task_id.clone()], "someday".to_string(), None)
             .await;
         assert!(result.is_ok());
 
@@ -2024,7 +2952,7 @@ mod tests {
         let (handler, _temp_file) = get_test_handler();
 
         let result = handler
-            .add(
+            .add_task(
                 "task-20".to_string(),
                 "Test Task".to_string(),
                 None,
@@ -2042,7 +2970,7 @@ mod tests {
             .to_string();
 
         let result = handler
-            .change_status(vec![task_id.clone()], "later".to_string(), None)
+            .change_task_status(vec![task_id.clone()], "later".to_string(), None)
             .await;
         assert!(result.is_ok());
 
@@ -2058,7 +2986,7 @@ mod tests {
         let (handler, _temp_file) = get_test_handler();
 
         let result = handler
-            .add(
+            .add_task(
                 "task-21".to_string(),
                 "Test Task".to_string(),
                 None,
@@ -2076,7 +3004,7 @@ mod tests {
             .to_string();
 
         let result = handler
-            .change_status(vec![task_id.clone()], "done".to_string(), None)
+            .change_task_status(vec![task_id.clone()], "done".to_string(), None)
             .await;
         assert!(result.is_ok());
 
@@ -2092,7 +3020,7 @@ mod tests {
         let (handler, _temp_file) = get_test_handler();
 
         let result = handler
-            .add(
+            .add_task(
                 "task-22".to_string(),
                 "Test Task".to_string(),
                 None,
@@ -2110,7 +3038,7 @@ mod tests {
             .to_string();
 
         let result = handler
-            .change_status(vec![task_id.clone()], "trash".to_string(), None)
+            .change_task_status(vec![task_id.clone()], "trash".to_string(), None)
             .await;
         assert!(result.is_ok(), "Failed to trash task: {:?}", result.err());
 
@@ -2127,7 +3055,7 @@ mod tests {
 
         // Test 1: inbox → trash directly
         let result = handler
-            .add(
+            .add_task(
                 "task-23".to_string(),
                 "Direct Trash Test".to_string(),
                 None,
@@ -2145,13 +3073,13 @@ mod tests {
             .to_string();
 
         let result = handler
-            .change_status(vec![task_id_1.clone()], "trash".to_string(), None)
+            .change_task_status(vec![task_id_1.clone()], "trash".to_string(), None)
             .await;
         assert!(result.is_ok(), "Direct trash failed: {:?}", result.err());
 
         // Test 2: inbox → done → trash (the workflow user reported as working)
         let result = handler
-            .add(
+            .add_task(
                 "task-24".to_string(),
                 "Indirect Trash Test".to_string(),
                 None,
@@ -2169,12 +3097,12 @@ mod tests {
             .to_string();
 
         let result = handler
-            .change_status(vec![task_id_2.clone()], "done".to_string(), None)
+            .change_task_status(vec![task_id_2.clone()], "done".to_string(), None)
             .await;
         assert!(result.is_ok(), "Moving to done failed: {:?}", result.err());
 
         let result = handler
-            .change_status(vec![task_id_2.clone()], "trash".to_string(), None)
+            .change_task_status(vec![task_id_2.clone()], "trash".to_string(), None)
             .await;
         assert!(result.is_ok(), "Trash from done failed: {:?}", result.err());
 
@@ -2199,7 +3127,7 @@ mod tests {
 
         for task_id in test_cases {
             let result = handler
-                .change_status(vec![task_id.to_string()], "trash".to_string(), None)
+                .change_task_status(vec![task_id.to_string()], "trash".to_string(), None)
                 .await;
             assert!(result.is_err(), "Expected error for task_id: {}", task_id);
         }
@@ -2213,7 +3141,7 @@ mod tests {
         let mut task_ids = Vec::new();
         for i in 1..=5 {
             let result = handler
-                .add(
+                .add_task(
                     format!("task-{}", 25 - 1 + i),
                     format!("Test Task {}", i),
                     None,
@@ -2234,7 +3162,7 @@ mod tests {
 
         // 複数のタスクを一度にtrashに移動
         let result = handler
-            .change_status(task_ids.clone(), "trash".to_string(), None)
+            .change_task_status(task_ids.clone(), "trash".to_string(), None)
             .await;
         assert!(
             result.is_ok(),
@@ -2261,7 +3189,7 @@ mod tests {
         let mut task_ids = Vec::new();
         for i in 1..=2 {
             let result = handler
-                .add(
+                .add_task(
                     format!("task-{}", 26 - 1 + i),
                     format!("Test Task {}", i),
                     None,
@@ -2286,7 +3214,7 @@ mod tests {
 
         // 部分的な成功を確認
         let result = handler
-            .change_status(task_ids.clone(), "trash".to_string(), None)
+            .change_task_status(task_ids.clone(), "trash".to_string(), None)
             .await;
         assert!(
             result.is_ok(),
@@ -2317,7 +3245,7 @@ mod tests {
 
         // すべて失敗する場合はエラーを返す
         let result = handler
-            .change_status(task_ids, "trash".to_string(), None)
+            .change_task_status(task_ids, "trash".to_string(), None)
             .await;
         assert!(result.is_err(), "Expected error when all tasks are invalid");
     }
@@ -2330,7 +3258,7 @@ mod tests {
         let task_ids: Vec<String> = Vec::new();
 
         let result = handler
-            .change_status(task_ids, "trash".to_string(), None)
+            .change_task_status(task_ids, "trash".to_string(), None)
             .await;
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), "");
@@ -2342,7 +3270,7 @@ mod tests {
 
         // inboxからタスクを作成
         let result = handler
-            .add(
+            .add_task(
                 "task-27".to_string(),
                 "Inbox Task".to_string(),
                 None,
@@ -2361,7 +3289,7 @@ mod tests {
 
         // next_actionに移動
         let result = handler
-            .add(
+            .add_task(
                 "task-28".to_string(),
                 "Next Action Task".to_string(),
                 None,
@@ -2378,7 +3306,7 @@ mod tests {
             .unwrap()
             .to_string();
         handler
-            .change_status(
+            .change_task_status(
                 vec![next_action_task_id.clone()],
                 "next_action".to_string(),
                 None,
@@ -2388,7 +3316,7 @@ mod tests {
 
         // doneに移動
         let result = handler
-            .add(
+            .add_task(
                 "task-29".to_string(),
                 "Done Task".to_string(),
                 None,
@@ -2405,7 +3333,7 @@ mod tests {
             .unwrap()
             .to_string();
         handler
-            .change_status(vec![done_task_id.clone()], "done".to_string(), None)
+            .change_task_status(vec![done_task_id.clone()], "done".to_string(), None)
             .await
             .unwrap();
 
@@ -2416,7 +3344,7 @@ mod tests {
             done_task_id.clone(),
         ];
         let result = handler
-            .change_status(task_ids, "trash".to_string(), None)
+            .change_task_status(task_ids, "trash".to_string(), None)
             .await;
         assert!(
             result.is_ok(),
@@ -2444,7 +3372,7 @@ mod tests {
         let (handler, _temp_file) = get_test_handler();
 
         let result = handler
-            .add(
+            .add_task(
                 "task-30".to_string(),
                 "Test Task".to_string(),
                 None,
@@ -2462,7 +3390,7 @@ mod tests {
             .to_string();
 
         let result = handler
-            .change_status(
+            .change_task_status(
                 vec![task_id.clone()],
                 "calendar".to_string(),
                 Some("2024-12-25".to_string()),
@@ -2488,7 +3416,7 @@ mod tests {
 
         // タスクを作成（start_dateなし）
         let result = handler
-            .add(
+            .add_task(
                 "task-31".to_string(),
                 "Test Task".to_string(),
                 None,
@@ -2507,7 +3435,7 @@ mod tests {
 
         // start_dateを指定せずにcalendarに移動しようとするとエラー
         let result = handler
-            .change_status(vec![task_id.clone()], "calendar".to_string(), None)
+            .change_task_status(vec![task_id.clone()], "calendar".to_string(), None)
             .await;
         assert!(result.is_err());
     }
@@ -2518,7 +3446,7 @@ mod tests {
 
         // start_date付きのタスクを作成
         let result = handler
-            .add(
+            .add_task(
                 "task-2004".to_string(),
                 "Test Task".to_string(),
                 None,
@@ -2537,7 +3465,7 @@ mod tests {
 
         // start_dateパラメータなしでcalendarに移動（既存のstart_dateを使用）
         let result = handler
-            .change_status(vec![task_id.clone()], "calendar".to_string(), None)
+            .change_task_status(vec![task_id.clone()], "calendar".to_string(), None)
             .await;
         assert!(result.is_ok());
 
@@ -2557,7 +3485,7 @@ mod tests {
 
         // start_date付きのタスクを作成
         let result = handler
-            .add(
+            .add_task(
                 "task-2005".to_string(),
                 "Test Task".to_string(),
                 None,
@@ -2576,7 +3504,7 @@ mod tests {
 
         // 新しいstart_dateを指定してcalendarに移動（既存のstart_dateを上書き）
         let result = handler
-            .change_status(
+            .change_task_status(
                 vec![task_id.clone()],
                 "calendar".to_string(),
                 Some("2024-12-31".to_string()),
@@ -2598,7 +3526,7 @@ mod tests {
         let (handler, _temp_file) = get_test_handler();
 
         let result = handler
-            .add(
+            .add_task(
                 "task-32".to_string(),
                 "Test Task".to_string(),
                 None,
@@ -2617,7 +3545,7 @@ mod tests {
 
         // 無効な日付形式
         let result = handler
-            .change_status(
+            .change_task_status(
                 vec![task_id.clone()],
                 "calendar".to_string(),
                 Some("2024/12/25".to_string()),
@@ -2631,7 +3559,7 @@ mod tests {
         let (handler, _temp_file) = get_test_handler();
 
         let result = handler
-            .add(
+            .add_task(
                 "task-33".to_string(),
                 "Test Task".to_string(),
                 None,
@@ -2656,7 +3584,7 @@ mod tests {
 
         // Move to next_action
         let result = handler
-            .change_status(vec![task_id.clone()], "next_action".to_string(), None)
+            .change_task_status(vec![task_id.clone()], "next_action".to_string(), None)
             .await;
         assert!(result.is_ok());
 
@@ -2671,7 +3599,7 @@ mod tests {
         let (handler, _temp_file) = get_test_handler();
 
         let result = handler
-            .change_status(
+            .change_task_status(
                 vec!["nonexistent-id".to_string()],
                 "next_action".to_string(),
                 None,
@@ -2680,12 +3608,12 @@ mod tests {
         assert!(result.is_err());
 
         let result = handler
-            .change_status(vec!["nonexistent-id".to_string()], "done".to_string(), None)
+            .change_task_status(vec!["nonexistent-id".to_string()], "done".to_string(), None)
             .await;
         assert!(result.is_err());
 
         let result = handler
-            .change_status(
+            .change_task_status(
                 vec!["nonexistent-id".to_string()],
                 "trash".to_string(),
                 None,
@@ -2701,7 +3629,7 @@ mod tests {
         let (handler, _temp_file) = get_test_handler();
 
         let result = handler
-            .add("Office".to_string(), Some("Work environment".to_string()))
+            .add_context("Office".to_string(), Some("Work environment".to_string()))
             .await;
         assert!(result.is_ok());
         assert!(result.unwrap().contains("Office"));
@@ -2717,11 +3645,11 @@ mod tests {
     async fn test_add_context_duplicate() {
         let (handler, _temp_file) = get_test_handler();
 
-        let result = handler.add("Office".to_string(), None).await;
+        let result = handler.add_context("Office".to_string(), None).await;
         assert!(result.is_ok());
 
         // Try to add duplicate
-        let result = handler.add("Office".to_string(), None).await;
+        let result = handler.add_context("Office".to_string(), None).await;
         assert!(result.is_err());
     }
 
@@ -2729,7 +3657,7 @@ mod tests {
     async fn test_list_contexts_empty() {
         let (handler, _temp_file) = get_test_handler();
 
-        let result = handler.list().await;
+        let result = handler.list_contexts().await;
         assert!(result.is_ok());
         assert!(result.unwrap().contains("No contexts found"));
     }
@@ -2739,12 +3667,12 @@ mod tests {
         let (handler, _temp_file) = get_test_handler();
 
         handler
-            .add("Office".to_string(), Some("Work environment".to_string()))
+            .add_context("Office".to_string(), Some("Work environment".to_string()))
             .await
             .unwrap();
-        handler.add("Home".to_string(), None).await.unwrap();
+        handler.add_context("Home".to_string(), None).await.unwrap();
 
-        let result = handler.list().await;
+        let result = handler.list_contexts().await;
         assert!(result.is_ok());
         let output = result.unwrap();
         assert!(output.contains("Office"));
@@ -2757,12 +3685,12 @@ mod tests {
         let (handler, _temp_file) = get_test_handler();
 
         handler
-            .add("Office".to_string(), Some("Old description".to_string()))
+            .add_context("Office".to_string(), Some("Old description".to_string()))
             .await
             .unwrap();
 
         let result = handler
-            .update("Office".to_string(), Some("New description".to_string()))
+            .update_context("Office".to_string(), Some("New description".to_string()))
             .await;
         assert!(result.is_ok());
 
@@ -2776,12 +3704,12 @@ mod tests {
         let (handler, _temp_file) = get_test_handler();
 
         handler
-            .add("Office".to_string(), Some("Old description".to_string()))
+            .add_context("Office".to_string(), Some("Old description".to_string()))
             .await
             .unwrap();
 
         let result = handler
-            .update("Office".to_string(), Some("".to_string()))
+            .update_context("Office".to_string(), Some("".to_string()))
             .await;
         assert!(result.is_ok());
 
@@ -2795,7 +3723,7 @@ mod tests {
         let (handler, _temp_file) = get_test_handler();
 
         let result = handler
-            .update("NonExistent".to_string(), Some("Description".to_string()))
+            .update_context("NonExistent".to_string(), Some("Description".to_string()))
             .await;
         assert!(result.is_err());
     }
@@ -2805,7 +3733,7 @@ mod tests {
         let (handler, _temp_file) = get_test_handler();
 
         handler
-            .add("Office".to_string(), None)
+            .add_context("Office".to_string(), None)
             .await
             .unwrap();
 
@@ -2831,13 +3759,13 @@ mod tests {
 
         // Add a context
         handler
-            .add("Office".to_string(), None)
+            .add_context("Office".to_string(), None)
             .await
             .unwrap();
 
         // Add a task that references the context
         handler
-            .add(
+            .add_task(
                 "task-2006".to_string(),
                 "Office work".to_string(),
                 None,
@@ -2864,13 +3792,13 @@ mod tests {
 
         // Add a context
         handler
-            .add("Office".to_string(), None)
+            .add_context("Office".to_string(), None)
             .await
             .unwrap();
 
         // Add a project that references the context
         handler
-            .add(
+            .add_project(
                 "Office Project".to_string(),
                 "office-proj".to_string(),
                 None,
@@ -2895,13 +3823,13 @@ mod tests {
 
         // Add a context
         handler
-            .add("Office".to_string(), None)
+            .add_context("Office".to_string(), None)
             .await
             .unwrap();
 
         // Add a task that references the context
         handler
-            .add(
+            .add_task(
                 "task-2007".to_string(),
                 "Office work".to_string(),
                 None,
@@ -2914,7 +3842,7 @@ mod tests {
 
         // Add a project that references the context
         handler
-            .add(
+            .add_project(
                 "Office Project".to_string(),
                 "office-proj".to_string(),
                 None,
@@ -2939,13 +3867,13 @@ mod tests {
 
         // Add a context
         handler
-            .add("Office".to_string(), None)
+            .add_context("Office".to_string(), None)
             .await
             .unwrap();
 
         // Add a task that references the context
         let task_id = handler
-            .add(
+            .add_task(
                 "task-2008".to_string(),
                 "Office work".to_string(),
                 None,
@@ -2961,7 +3889,7 @@ mod tests {
 
         // Remove the context reference from the task
         handler
-            .update(task_id, None, None, Some(String::new()), None, None)
+            .update_task(task_id, None, None, Some(String::new()), None, None)
             .await
             .unwrap();
 
@@ -2981,13 +3909,13 @@ mod tests {
 
         // Add a context
         handler
-            .add("Office".to_string(), None)
+            .add_context("Office".to_string(), None)
             .await
             .unwrap();
 
         // Add a project that references the context
         handler
-            .add(
+            .add_project(
                 "Office Project".to_string(),
                 "office-proj".to_string(),
                 None,
@@ -2998,7 +3926,7 @@ mod tests {
 
         // Remove the context reference from the project
         handler
-            .update(
+            .update_project(
                 "office-proj".to_string(),
                 None,
                 None,
@@ -3025,13 +3953,13 @@ mod tests {
 
         // Add a context
         handler
-            .add("Office".to_string(), None)
+            .add_context("Office".to_string(), None)
             .await
             .unwrap();
 
         // Add multiple tasks that reference the context
         handler
-            .add(
+            .add_task(
                 "task-2009".to_string(),
                 "Task 1".to_string(),
                 None,
@@ -3043,7 +3971,7 @@ mod tests {
             .unwrap();
 
         handler
-            .add(
+            .add_task(
                 "task-2010".to_string(),
                 "Task 2".to_string(),
                 None,
@@ -3069,13 +3997,13 @@ mod tests {
 
         // Add a context first
         let result = handler
-            .add("Office".to_string(), Some("Work environment".to_string()))
+            .add_context("Office".to_string(), Some("Work environment".to_string()))
             .await;
         assert!(result.is_ok());
 
         // Add a project with context
         let result = handler
-            .add(
+            .add_project(
                 "Office Project".to_string(),
                 "office-project-1".to_string(),
                 Some("Project description".to_string()),
@@ -3097,7 +4025,7 @@ mod tests {
 
         // Try to add project with non-existent context
         let result = handler
-            .add(
+            .add_project(
                 "Test Project".to_string(),
                 "test-project-1".to_string(),
                 None,
@@ -3113,12 +4041,12 @@ mod tests {
 
         // Add a context
         let _ = handler
-            .add("Office".to_string(), Some("Work environment".to_string()))
+            .add_context("Office".to_string(), Some("Work environment".to_string()))
             .await;
 
         // Add a project without context
         let result = handler
-            .add(
+            .add_project(
                 "Test Project".to_string(),
                 "test-project-1".to_string(),
                 None,
@@ -3135,7 +4063,7 @@ mod tests {
 
         // Update project with context
         let result = handler
-            .update(
+            .update_project(
                 project_id.clone(),
                 None,
                 None,
@@ -3158,12 +4086,12 @@ mod tests {
 
         // Add a context
         let _ = handler
-            .add("Office".to_string(), Some("Work environment".to_string()))
+            .add_context("Office".to_string(), Some("Work environment".to_string()))
             .await;
 
         // Add a project with context
         let result = handler
-            .add(
+            .add_project(
                 "Test Project".to_string(),
                 "test-project-1".to_string(),
                 None,
@@ -3180,7 +4108,7 @@ mod tests {
 
         // Remove context using empty string
         let result = handler
-            .update(
+            .update_project(
                 project_id.clone(),
                 None,
                 None,
@@ -3203,7 +4131,7 @@ mod tests {
 
         // Add a project
         let result = handler
-            .add(
+            .add_project(
                 "Test Project".to_string(),
                 "test-project-1".to_string(),
                 None,
@@ -3220,7 +4148,7 @@ mod tests {
 
         // Try to update with non-existent context
         let result = handler
-            .update(
+            .update_project(
                 project_id,
                 None,
                 None,
@@ -3238,7 +4166,7 @@ mod tests {
 
         // Add a project with custom ID
         let result = handler
-            .add(
+            .add_project(
                 "Custom ID Project".to_string(),
                 "my-custom-id".to_string(),
                 Some("Project with custom ID".to_string()),
@@ -3261,7 +4189,7 @@ mod tests {
 
         // Add first project with custom ID
         let result = handler
-            .add(
+            .add_project(
                 "First Project".to_string(),
                 "duplicate-id".to_string(),
                 None,
@@ -3272,7 +4200,7 @@ mod tests {
 
         // Try to add second project with same ID
         let result = handler
-            .add(
+            .add_project(
                 "Second Project".to_string(),
                 "duplicate-id".to_string(),
                 None,
@@ -3288,7 +4216,7 @@ mod tests {
 
         // Add a project
         let result = handler
-            .add(
+            .add_project(
                 "Test Project".to_string(),
                 "test-project-1".to_string(),
                 None,
@@ -3305,7 +4233,7 @@ mod tests {
 
         // Update project ID
         let result = handler
-            .update(
+            .update_project(
                 project_id.clone(),
                 Some("new-project-id".to_string()),
                 None,
@@ -3330,7 +4258,7 @@ mod tests {
 
         // Add two projects
         let result1 = handler
-            .add("Project 1".to_string(), "project-1".to_string(), None, None)
+            .add_project("Project 1".to_string(), "project-1".to_string(), None, None)
             .await;
         assert!(result1.is_ok());
         let project1_id = result1
@@ -3341,7 +4269,7 @@ mod tests {
             .to_string();
 
         let result2 = handler
-            .add("Project 2".to_string(), "project-2".to_string(), None, None)
+            .add_project("Project 2".to_string(), "project-2".to_string(), None, None)
             .await;
         assert!(result2.is_ok());
         let project2_id = result2
@@ -3353,7 +4281,7 @@ mod tests {
 
         // Try to update project2's ID to project1's ID
         let result = handler
-            .update(
+            .update_project(
                 project2_id,
                 Some(project1_id.clone()),
                 None,
@@ -3371,7 +4299,7 @@ mod tests {
 
         // Add a project
         let result = handler
-            .add(
+            .add_project(
                 "Test Project".to_string(),
                 "test-project-1".to_string(),
                 None,
@@ -3388,7 +4316,7 @@ mod tests {
 
         // Add a task referencing the project
         let result = handler
-            .add(
+            .add_task(
                 "task-2011".to_string(),
                 "Task in project".to_string(),
                 Some(project_id.clone()),
@@ -3415,7 +4343,7 @@ mod tests {
         // Update project ID
         let new_project_id = "updated-project-id".to_string();
         let result = handler
-            .update(
+            .update_project(
                 project_id.clone(),
                 Some(new_project_id.clone()),
                 None,
@@ -3551,7 +4479,7 @@ mod tests {
 
         // タスクを3つ作成: 過去、今日、未来の日付
         let result = handler
-            .add(
+            .add_task(
                 "task-2012".to_string(),
                 "Past Task".to_string(),
                 None,
@@ -3563,7 +4491,7 @@ mod tests {
         assert!(result.is_ok());
 
         let result = handler
-            .add(
+            .add_task(
                 "task-2013".to_string(),
                 "Today Task".to_string(),
                 None,
@@ -3575,7 +4503,7 @@ mod tests {
         assert!(result.is_ok());
 
         let result = handler
-            .add(
+            .add_task(
                 "task-2014".to_string(),
                 "Future Task".to_string(),
                 None,
@@ -3588,7 +4516,7 @@ mod tests {
 
         // 日付フィルタ「2024-06-15」で一覧取得
         let result = handler
-            .list(None, Some("2024-06-15".to_string()), None)
+            .list_tasks(None, Some("2024-06-15".to_string()), None)
             .await;
         assert!(result.is_ok());
         let list = result.unwrap();
@@ -3607,7 +4535,7 @@ mod tests {
 
         // start_dateなしのタスクを作成
         let result = handler
-            .add(
+            .add_task(
                 "task-34".to_string(),
                 "No Date Task".to_string(),
                 None,
@@ -3620,7 +4548,7 @@ mod tests {
 
         // start_date付きのタスクを作成（未来）
         let result = handler
-            .add(
+            .add_task(
                 "task-2015".to_string(),
                 "Future Task".to_string(),
                 None,
@@ -3633,7 +4561,7 @@ mod tests {
 
         // 日付フィルタで一覧取得
         let result = handler
-            .list(None, Some("2024-06-15".to_string()), None)
+            .list_tasks(None, Some("2024-06-15".to_string()), None)
             .await;
         assert!(result.is_ok());
         let list = result.unwrap();
@@ -3651,7 +4579,7 @@ mod tests {
 
         // カレンダータスクを作成（過去と未来）
         let result = handler
-            .add(
+            .add_task(
                 "task-2016".to_string(),
                 "Calendar Past".to_string(),
                 None,
@@ -3669,7 +4597,7 @@ mod tests {
             .to_string();
 
         let result = handler
-            .add(
+            .add_task(
                 "task-2017".to_string(),
                 "Calendar Future".to_string(),
                 None,
@@ -3688,17 +4616,17 @@ mod tests {
 
         // 両方をカレンダーステータスに移動
         let result = handler
-            .change_status(vec![task_id1.clone()], "calendar".to_string(), None)
+            .change_task_status(vec![task_id1.clone()], "calendar".to_string(), None)
             .await;
         assert!(result.is_ok());
         let result = handler
-            .change_status(vec![task_id2.clone()], "calendar".to_string(), None)
+            .change_task_status(vec![task_id2.clone()], "calendar".to_string(), None)
             .await;
         assert!(result.is_ok());
 
         // カレンダーステータスでフィルタリングし、日付フィルタも適用
         let result = handler
-            .list(
+            .list_tasks(
                 Some("calendar".to_string()),
                 Some("2024-06-15".to_string()),
                 None,
@@ -3720,12 +4648,12 @@ mod tests {
 
         // 無効な日付形式
         let result = handler
-            .list(None, Some("2024/06/15".to_string()), None)
+            .list_tasks(None, Some("2024/06/15".to_string()), None)
             .await;
         assert!(result.is_err());
 
         let result = handler
-            .list(None, Some("invalid-date".to_string()), None)
+            .list_tasks(None, Some("invalid-date".to_string()), None)
             .await;
         assert!(result.is_err());
     }
@@ -3737,7 +4665,7 @@ mod tests {
 
         // 未来の日付のタスクを作成
         let result = handler
-            .add(
+            .add_task(
                 "task-2018".to_string(),
                 "Future Task".to_string(),
                 None,
@@ -3749,7 +4677,7 @@ mod tests {
         assert!(result.is_ok());
 
         // 日付フィルタなしで一覧取得
-        let result = handler.list(None, None, None).await;
+        let result = handler.list_tasks(None, None, None).await;
         assert!(result.is_ok());
         let list = result.unwrap();
 
@@ -3764,7 +4692,7 @@ mod tests {
 
         // 指定日と同じ日付のタスクを作成
         let result = handler
-            .add(
+            .add_task(
                 "task-2019".to_string(),
                 "Same Date Task".to_string(),
                 None,
@@ -3777,7 +4705,7 @@ mod tests {
 
         // 同じ日付でフィルタリング
         let result = handler
-            .list(None, Some("2024-06-15".to_string()), None)
+            .list_tasks(None, Some("2024-06-15".to_string()), None)
             .await;
         assert!(result.is_ok());
         let list = result.unwrap();
@@ -3793,7 +4721,7 @@ mod tests {
 
         // notesを持つタスクを作成
         let result = handler
-            .add(
+            .add_task(
                 "task-2020".to_string(),
                 "Task with notes".to_string(),
                 None,
@@ -3806,7 +4734,7 @@ mod tests {
 
         // notesなしのタスクも作成
         let result = handler
-            .add(
+            .add_task(
                 "task-35".to_string(),
                 "Task without notes".to_string(),
                 None,
@@ -3818,7 +4746,7 @@ mod tests {
         assert!(result.is_ok());
 
         // デフォルト（exclude_notes=None）で一覧取得
-        let result = handler.list(None, None, None).await;
+        let result = handler.list_tasks(None, None, None).await;
         assert!(result.is_ok());
         let list = result.unwrap();
 
@@ -3843,7 +4771,7 @@ mod tests {
 
         // notesを持つタスクを作成
         let result = handler
-            .add(
+            .add_task(
                 "task-2021".to_string(),
                 "Task with notes".to_string(),
                 None,
@@ -3855,7 +4783,7 @@ mod tests {
         assert!(result.is_ok());
 
         // exclude_notes=trueで一覧取得
-        let result = handler.list(None, None, Some(true)).await;
+        let result = handler.list_tasks(None, None, Some(true)).await;
         assert!(result.is_ok());
         let list = result.unwrap();
 
@@ -3872,7 +4800,7 @@ mod tests {
 
         // notesを持つタスクを作成
         let result = handler
-            .add(
+            .add_task(
                 "task-2022".to_string(),
                 "Task with notes".to_string(),
                 None,
@@ -3884,7 +4812,7 @@ mod tests {
         assert!(result.is_ok());
 
         // exclude_notes=falseで明示的に一覧取得
-        let result = handler.list(None, None, Some(false)).await;
+        let result = handler.list_tasks(None, None, Some(false)).await;
         assert!(result.is_ok());
         let list = result.unwrap();
 
@@ -3900,7 +4828,7 @@ mod tests {
 
         // 複数行のnotesを持つタスクを作成（改行を含む）
         let result = handler
-            .add(
+            .add_task(
                 "task-2023".to_string(),
                 "Complex task".to_string(),
                 None,
@@ -3912,7 +4840,7 @@ mod tests {
         assert!(result.is_ok());
 
         // デフォルトで一覧取得
-        let result = handler.list(None, None, None).await;
+        let result = handler.list_tasks(None, None, None).await;
         assert!(result.is_ok());
         let list = result.unwrap();
 
@@ -3929,7 +4857,7 @@ mod tests {
         let mut task_ids = Vec::new();
         for i in 1..=3 {
             let result = handler
-                .add(
+                .add_task(
                     format!("task-{}", 36 - 1 + i),
                     format!("Test Task {}", i),
                     None,
@@ -3947,14 +4875,14 @@ mod tests {
                 .to_string();
             // Move to next_action first
             let _ = handler
-                .change_status(vec![task_id.clone()], "next_action".to_string(), None)
+                .change_task_status(vec![task_id.clone()], "next_action".to_string(), None)
                 .await;
             task_ids.push(task_id);
         }
 
         // 複数のタスクを一度にinboxに移動
         let result = handler
-            .change_status(task_ids.clone(), "inbox".to_string(), None)
+            .change_task_status(task_ids.clone(), "inbox".to_string(), None)
             .await;
         assert!(
             result.is_ok(),
@@ -3981,7 +4909,7 @@ mod tests {
         let mut task_ids = Vec::new();
         for i in 1..=4 {
             let result = handler
-                .add(
+                .add_task(
                     format!("task-{}", 37 - 1 + i),
                     format!("Test Task {}", i),
                     None,
@@ -4002,7 +4930,7 @@ mod tests {
 
         // 複数のタスクを一度にnext_actionに移動
         let result = handler
-            .change_status(task_ids.clone(), "next_action".to_string(), None)
+            .change_task_status(task_ids.clone(), "next_action".to_string(), None)
             .await;
         assert!(
             result.is_ok(),
@@ -4029,7 +4957,7 @@ mod tests {
         let mut task_ids = Vec::new();
         for i in 1..=3 {
             let result = handler
-                .add(
+                .add_task(
                     format!("task-{}", 38 - 1 + i),
                     format!("Test Task {}", i),
                     None,
@@ -4050,7 +4978,7 @@ mod tests {
 
         // 複数のタスクを一度にwaiting_forに移動
         let result = handler
-            .change_status(task_ids.clone(), "waiting_for".to_string(), None)
+            .change_task_status(task_ids.clone(), "waiting_for".to_string(), None)
             .await;
         assert!(
             result.is_ok(),
@@ -4077,7 +5005,7 @@ mod tests {
         let mut task_ids = Vec::new();
         for i in 1..=3 {
             let result = handler
-                .add(
+                .add_task(
                     format!("task-{}", 39 - 1 + i),
                     format!("Test Task {}", i),
                     None,
@@ -4098,7 +5026,7 @@ mod tests {
 
         // 複数のタスクを一度にsomedayに移動
         let result = handler
-            .change_status(task_ids.clone(), "someday".to_string(), None)
+            .change_task_status(task_ids.clone(), "someday".to_string(), None)
             .await;
         assert!(
             result.is_ok(),
@@ -4125,7 +5053,7 @@ mod tests {
         let mut task_ids = Vec::new();
         for i in 1..=3 {
             let result = handler
-                .add(
+                .add_task(
                     format!("task-{}", 40 - 1 + i),
                     format!("Test Task {}", i),
                     None,
@@ -4146,7 +5074,7 @@ mod tests {
 
         // 複数のタスクを一度にlaterに移動
         let result = handler
-            .change_status(task_ids.clone(), "later".to_string(), None)
+            .change_task_status(task_ids.clone(), "later".to_string(), None)
             .await;
         assert!(
             result.is_ok(),
@@ -4173,7 +5101,7 @@ mod tests {
         let mut task_ids = Vec::new();
         for i in 1..=3 {
             let result = handler
-                .add(
+                .add_task(
                     format!("task-{}", 41 - 1 + i),
                     format!("Test Task {}", i),
                     None,
@@ -4194,7 +5122,7 @@ mod tests {
 
         // 複数のタスクを一度にdoneに移動
         let result = handler
-            .change_status(task_ids.clone(), "done".to_string(), None)
+            .change_task_status(task_ids.clone(), "done".to_string(), None)
             .await;
         assert!(
             result.is_ok(),
@@ -4221,7 +5149,7 @@ mod tests {
 
         // タスクを作成
         let result = handler
-            .add(
+            .add_task(
                 "task-42".to_string(),
                 "Test Task".to_string(),
                 None,
@@ -4240,7 +5168,7 @@ mod tests {
 
         // 無効なステータス "in_progress" でエラーをテスト（問題として報告されたもの）
         let result = handler
-            .change_status(vec![task_id.clone()], "in_progress".to_string(), None)
+            .change_task_status(vec![task_id.clone()], "in_progress".to_string(), None)
             .await;
         assert!(result.is_err());
         let err_msg = format!("{:?}", result.unwrap_err());
@@ -4261,7 +5189,7 @@ mod tests {
 
         // タスクを作成
         let result = handler
-            .add(
+            .add_task(
                 "task-43".to_string(),
                 "Test Task".to_string(),
                 None,
@@ -4292,7 +5220,7 @@ mod tests {
 
         for invalid_status in invalid_statuses {
             let result = handler
-                .change_status(vec![task_id.clone()], invalid_status.to_string(), None)
+                .change_task_status(vec![task_id.clone()], invalid_status.to_string(), None)
                 .await;
             assert!(
                 result.is_err(),
@@ -4315,7 +5243,7 @@ mod tests {
 
         // 無効なステータスでリストを取得しようとする
         let result = handler
-            .list(Some("in_progress".to_string()), None, None)
+            .list_tasks(Some("in_progress".to_string()), None, None)
             .await;
         assert!(result.is_err());
         let err_msg = format!("{:?}", result.unwrap_err());
@@ -4332,7 +5260,7 @@ mod tests {
 
         for invalid_status in invalid_statuses {
             let result = handler
-                .list(Some(invalid_status.to_string()), None, None)
+                .list_tasks(Some(invalid_status.to_string()), None, None)
                 .await;
             assert!(
                 result.is_err(),
@@ -4354,7 +5282,7 @@ mod tests {
 
         // プロジェクトを作成
         let result = handler
-            .add(
+            .add_project(
                 "Test Project".to_string(),
                 "test-project-1".to_string(),
                 None,
@@ -4365,7 +5293,7 @@ mod tests {
 
         // 無効なステータスで更新しようとする
         let result = handler
-            .update(
+            .update_project(
                 "test-project-1".to_string(),
                 None,
                 None,
@@ -4388,7 +5316,7 @@ mod tests {
 
         // プロジェクトを作成
         let result = handler
-            .add(
+            .add_project(
                 "Test Project".to_string(),
                 "test-project-1".to_string(),
                 None,
@@ -4401,7 +5329,7 @@ mod tests {
 
         for invalid_status in invalid_statuses {
             let result = handler
-                .update(
+                .update_project(
                     "test-project-1".to_string(),
                     None,
                     None,
@@ -4432,7 +5360,7 @@ mod tests {
         let mut task_ids = Vec::new();
         for i in 1..=3 {
             let result = handler
-                .add(
+                .add_task(
                     format!("task-{}", 44 - 1 + i),
                     format!("Test Task {}", i),
                     None,
@@ -4453,7 +5381,7 @@ mod tests {
 
         // 複数のタスクを一度にcalendarに移動（start_date指定）
         let result = handler
-            .change_status(
+            .change_task_status(
                 task_ids.clone(),
                 "calendar".to_string(),
                 Some("2025-01-15".to_string()),
@@ -4488,7 +5416,7 @@ mod tests {
         let mut task_ids = Vec::new();
         for i in 1..=2 {
             let result = handler
-                .add(
+                .add_task(
                     format!("task-{}", 44 + i),
                     format!("Test Task {}", i),
                     None,
@@ -4509,7 +5437,7 @@ mod tests {
 
         // start_dateを指定せずにcalendarに移動（既存のstart_dateを使用）
         let result = handler
-            .change_status(task_ids.clone(), "calendar".to_string(), None)
+            .change_task_status(task_ids.clone(), "calendar".to_string(), None)
             .await;
         assert!(
             result.is_ok(),
@@ -4539,7 +5467,7 @@ mod tests {
 
         // start_dateを持つタスク
         let result = handler
-            .add(
+            .add_task(
                 "task-2024".to_string(),
                 "Task with date".to_string(),
                 None,
@@ -4560,7 +5488,7 @@ mod tests {
 
         // start_dateを持たないタスク
         let result = handler
-            .add(
+            .add_task(
                 "task-46".to_string(),
                 "Task without date".to_string(),
                 None,
@@ -4581,7 +5509,7 @@ mod tests {
 
         // start_dateを指定せずに移動を試みる（部分的な失敗）
         let result = handler
-            .change_status(task_ids.clone(), "calendar".to_string(), None)
+            .change_task_status(task_ids.clone(), "calendar".to_string(), None)
             .await;
         assert!(
             result.is_ok(),
