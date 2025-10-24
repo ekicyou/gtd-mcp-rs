@@ -869,7 +869,7 @@ impl GtdData {
     /// # Arguments
     /// * `nota` - The nota to add
     #[allow(dead_code)]
-    pub fn add_nota(&mut self, nota: Nota) {
+    pub fn add(&mut self, nota: Nota) {
         match nota.status {
             NotaStatus::context => {
                 if let Some(context) = nota.to_context() {
@@ -899,7 +899,7 @@ impl GtdData {
     /// # Returns
     /// An optional Nota if found
     #[allow(dead_code)]
-    pub fn find_nota_by_id(&self, id: &str) -> Option<Nota> {
+    pub fn find_by_id(&self, id: &str) -> Option<Nota> {
         // Try to find as task
         if let Some(task) = self.find_task_by_id(id) {
             return Some(Nota::from_task(task.clone()));
@@ -928,7 +928,7 @@ impl GtdData {
     /// # Returns
     /// The removed Nota if found
     #[allow(dead_code)]
-    pub fn remove_nota(&mut self, id: &str) -> Option<Nota> {
+    pub fn remove(&mut self, id: &str) -> Option<Nota> {
         // Try to remove as task
         if let Some(task) = self.remove_task(id) {
             return Some(Nota::from_task(task));
@@ -955,7 +955,7 @@ impl GtdData {
     /// # Returns
     /// Vector of Nota objects matching the filter
     #[allow(dead_code)]
-    pub fn list_notas(&self, status_filter: Option<NotaStatus>) -> Vec<Nota> {
+    pub fn list_all(&self, status_filter: Option<NotaStatus>) -> Vec<Nota> {
         let mut notas = Vec::new();
 
         // Add tasks
@@ -996,12 +996,12 @@ impl GtdData {
     /// # Returns
     /// `Some(())` if the nota was found and updated, `None` otherwise
     #[allow(dead_code)]
-    pub fn update_nota(&mut self, id: &str, nota: Nota) -> Option<()> {
+    pub fn update(&mut self, id: &str, nota: Nota) -> Option<()> {
         // Remove the old nota
-        let _old_nota = self.remove_nota(id)?;
+        let _old_nota = self.remove(id)?;
 
         // If status changed, this will automatically place it in the correct container
-        self.add_nota(nota);
+        self.add(nota);
 
         Some(())
     }
@@ -1016,7 +1016,7 @@ impl GtdData {
     /// # Returns
     /// True if the ID is referenced by other notas
     #[allow(dead_code)]
-    pub fn is_nota_referenced(&self, id: &str) -> bool {
+    pub fn is_referenced(&self, id: &str) -> bool {
         // Check if any task references this ID
         for task_list in self.all_task_lists() {
             for task in task_list {
@@ -3554,7 +3554,7 @@ updated_at = "2024-01-01"
 
     // Nota追加テスト - タスクとして追加
     #[test]
-    fn test_add_nota_as_task() {
+    fn test_add_as_task() {
         let mut data = GtdData::new();
         let nota = Nota {
             id: "task-1".to_string(),
@@ -3568,18 +3568,18 @@ updated_at = "2024-01-01"
             updated_at: local_date_today(),
         };
 
-        data.add_nota(nota.clone());
+        data.add(nota.clone());
         assert_eq!(data.task_count(), 1);
         assert_eq!(data.inbox.len(), 1);
 
-        let found = data.find_nota_by_id("task-1").unwrap();
+        let found = data.find_by_id("task-1").unwrap();
         assert_eq!(found.title, "Test Task");
         assert!(found.is_task());
     }
 
     // Nota追加テスト - プロジェクトとして追加
     #[test]
-    fn test_add_nota_as_project() {
+    fn test_add_as_project() {
         let mut data = GtdData::new();
         let nota = Nota {
             id: "proj-1".to_string(),
@@ -3593,17 +3593,17 @@ updated_at = "2024-01-01"
             updated_at: local_date_today(),
         };
 
-        data.add_nota(nota.clone());
+        data.add(nota.clone());
         assert_eq!(data.projects.len(), 1);
 
-        let found = data.find_nota_by_id("proj-1").unwrap();
+        let found = data.find_by_id("proj-1").unwrap();
         assert_eq!(found.title, "Test Project");
         assert!(found.is_project());
     }
 
     // Nota追加テスト - コンテキストとして追加
     #[test]
-    fn test_add_nota_as_context() {
+    fn test_add_as_context() {
         let mut data = GtdData::new();
         let nota = Nota {
             id: "Office".to_string(),
@@ -3617,17 +3617,17 @@ updated_at = "2024-01-01"
             updated_at: local_date_today(),
         };
 
-        data.add_nota(nota.clone());
+        data.add(nota.clone());
         assert_eq!(data.contexts.len(), 1);
 
-        let found = data.find_nota_by_id("Office").unwrap();
+        let found = data.find_by_id("Office").unwrap();
         assert_eq!(found.title, "Office Context");
         assert!(found.is_context());
     }
 
     // Nota削除テスト
     #[test]
-    fn test_remove_nota() {
+    fn test_remove() {
         let mut data = GtdData::new();
         let nota = Nota {
             id: "task-1".to_string(),
@@ -3641,21 +3641,21 @@ updated_at = "2024-01-01"
             updated_at: local_date_today(),
         };
 
-        data.add_nota(nota.clone());
+        data.add(nota.clone());
         assert_eq!(data.task_count(), 1);
 
-        let removed = data.remove_nota("task-1").unwrap();
+        let removed = data.remove("task-1").unwrap();
         assert_eq!(removed.title, "Test Task");
         assert_eq!(data.task_count(), 0);
     }
 
     // Nota一覧テスト
     #[test]
-    fn test_list_notas() {
+    fn test_list_all() {
         let mut data = GtdData::new();
 
         // Add a task
-        data.add_nota(Nota {
+        data.add(Nota {
             id: "task-1".to_string(),
             title: "Task".to_string(),
             status: NotaStatus::inbox,
@@ -3668,7 +3668,7 @@ updated_at = "2024-01-01"
         });
 
         // Add a project
-        data.add_nota(Nota {
+        data.add(Nota {
             id: "proj-1".to_string(),
             title: "Project".to_string(),
             status: NotaStatus::project,
@@ -3681,7 +3681,7 @@ updated_at = "2024-01-01"
         });
 
         // Add a context
-        data.add_nota(Nota {
+        data.add(Nota {
             id: "Office".to_string(),
             title: "Office".to_string(),
             status: NotaStatus::context,
@@ -3693,16 +3693,16 @@ updated_at = "2024-01-01"
             updated_at: local_date_today(),
         });
 
-        let all_notas = data.list_notas(None);
+        let all_notas = data.list_all(None);
         assert_eq!(all_notas.len(), 3);
 
-        let tasks_only = data.list_notas(Some(NotaStatus::inbox));
+        let tasks_only = data.list_all(Some(NotaStatus::inbox));
         assert_eq!(tasks_only.len(), 1);
 
-        let projects_only = data.list_notas(Some(NotaStatus::project));
+        let projects_only = data.list_all(Some(NotaStatus::project));
         assert_eq!(projects_only.len(), 1);
 
-        let contexts_only = data.list_notas(Some(NotaStatus::context));
+        let contexts_only = data.list_all(Some(NotaStatus::context));
         assert_eq!(contexts_only.len(), 1);
     }
 
@@ -3712,7 +3712,7 @@ updated_at = "2024-01-01"
         let mut data = GtdData::new();
 
         // Add a project
-        data.add_nota(Nota {
+        data.add(Nota {
             id: "proj-1".to_string(),
             title: "Project".to_string(),
             status: NotaStatus::project,
@@ -3725,7 +3725,7 @@ updated_at = "2024-01-01"
         });
 
         // Add a context
-        data.add_nota(Nota {
+        data.add(Nota {
             id: "Office".to_string(),
             title: "Office".to_string(),
             status: NotaStatus::context,
@@ -3738,7 +3738,7 @@ updated_at = "2024-01-01"
         });
 
         // Add a task that references both
-        data.add_nota(Nota {
+        data.add(Nota {
             id: "task-1".to_string(),
             title: "Task".to_string(),
             status: NotaStatus::inbox,
@@ -3750,18 +3750,18 @@ updated_at = "2024-01-01"
             updated_at: local_date_today(),
         });
 
-        assert!(data.is_nota_referenced("proj-1"));
-        assert!(data.is_nota_referenced("Office"));
-        assert!(!data.is_nota_referenced("task-1"));
+        assert!(data.is_referenced("proj-1"));
+        assert!(data.is_referenced("Office"));
+        assert!(!data.is_referenced("task-1"));
     }
 
     // Nota更新テスト
     #[test]
-    fn test_update_nota() {
+    fn test_update() {
         let mut data = GtdData::new();
 
         // Add a nota
-        data.add_nota(Nota {
+        data.add(Nota {
             id: "task-1".to_string(),
             title: "Old Title".to_string(),
             status: NotaStatus::inbox,
@@ -3786,9 +3786,9 @@ updated_at = "2024-01-01"
             updated_at: local_date_today(),
         };
 
-        data.update_nota("task-1", updated).unwrap();
+        data.update("task-1", updated).unwrap();
 
-        let found = data.find_nota_by_id("task-1").unwrap();
+        let found = data.find_by_id("task-1").unwrap();
         assert_eq!(found.title, "New Title");
         assert_eq!(found.status, NotaStatus::next_action);
         assert_eq!(found.notes, Some("New notes".to_string()));

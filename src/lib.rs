@@ -1031,7 +1031,7 @@ impl McpServer for GtdServerHandler {
     /// Add a new nota (unified task/project/context). Status field determines nota type: task statuses (inbox, next_action, etc.) create tasks, 'project' creates projects, 'context' creates contexts.
     #[allow(clippy::too_many_arguments)]
     #[tool]
-    async fn add_nota(
+    async fn add(
         &self,
         /// Unique nota ID - any meaningful string (e.g., "meeting-prep", "website-redesign", "Office")
         id: String,
@@ -1122,7 +1122,7 @@ impl McpServer for GtdServerHandler {
             updated_at: today,
         };
 
-        data.add_nota(nota);
+        data.add(nota);
         drop(data);
 
         if let Err(e) = self.save_data_with_message(&format!("Add nota {}", id)) {
@@ -1144,7 +1144,7 @@ impl McpServer for GtdServerHandler {
 
     /// List notas with optional status filter. Returns all tasks, projects, and contexts by default. Use status filter to narrow results.
     #[tool]
-    async fn list_notas(
+    async fn list(
         &self,
         /// Optional status filter: inbox, next_action, waiting_for, later, calendar, someday, done, trash, project, context. Leave empty for all notas.
         status: Option<String>,
@@ -1167,7 +1167,7 @@ impl McpServer for GtdServerHandler {
             None
         };
 
-        let notas = data.list_notas(status_filter);
+        let notas = data.list_all(status_filter);
         drop(data);
 
         if notas.is_empty() {
@@ -1209,7 +1209,7 @@ impl McpServer for GtdServerHandler {
     /// Update an existing nota's fields. Provide only the fields you want to change.
     #[allow(clippy::too_many_arguments)]
     #[tool]
-    async fn update_nota(
+    async fn update(
         &self,
         /// Nota ID to update
         id: String,
@@ -1229,7 +1229,7 @@ impl McpServer for GtdServerHandler {
         let mut data = self.data.lock().unwrap();
 
         // Find existing nota
-        let mut nota = match data.find_nota_by_id(&id) {
+        let mut nota = match data.find_by_id(&id) {
             Some(n) => n,
             None => {
                 drop(data);
@@ -1313,7 +1313,7 @@ impl McpServer for GtdServerHandler {
         nota.updated_at = gtd::local_date_today();
 
         // Update the nota
-        if data.update_nota(&id, nota).is_none() {
+        if data.update(&id, nota).is_none() {
             drop(data);
             bail!("Failed to update nota '{}'", id);
         }
@@ -1328,7 +1328,7 @@ impl McpServer for GtdServerHandler {
 
     /// Change a nota's status. This can transform a nota between types (e.g., task->project).
     #[tool]
-    async fn change_nota_status(
+    async fn change_status(
         &self,
         /// Nota ID to update
         id: String,
@@ -1358,7 +1358,7 @@ impl McpServer for GtdServerHandler {
         }
 
         // Find existing nota
-        let mut nota = match data.find_nota_by_id(&id) {
+        let mut nota = match data.find_by_id(&id) {
             Some(n) => n,
             None => {
                 drop(data);
@@ -1386,7 +1386,7 @@ impl McpServer for GtdServerHandler {
         nota.updated_at = gtd::local_date_today();
 
         // Update the nota (this will automatically move it to the correct container)
-        if data.update_nota(&id, nota).is_none() {
+        if data.update(&id, nota).is_none() {
             drop(data);
             bail!("Failed to update nota '{}'", id);
         }
@@ -1406,7 +1406,7 @@ impl McpServer for GtdServerHandler {
 
     /// Delete a nota. Fails if other notas reference this one in their project or context fields.
     #[tool]
-    async fn delete_nota(
+    async fn delete(
         &self,
         /// Nota ID to delete
         id: String,
@@ -1414,13 +1414,13 @@ impl McpServer for GtdServerHandler {
         let mut data = self.data.lock().unwrap();
 
         // Check if nota exists
-        if data.find_nota_by_id(&id).is_none() {
+        if data.find_by_id(&id).is_none() {
             drop(data);
             bail!("Nota '{}' not found", id);
         }
 
         // Check if this nota is referenced by others
-        if data.is_nota_referenced(&id) {
+        if data.is_referenced(&id) {
             drop(data);
             bail!(
                 "Cannot delete nota '{}': it is referenced by other notas in their 'project' or 'context' fields. Please update or delete the referencing notas first.",
@@ -1429,7 +1429,7 @@ impl McpServer for GtdServerHandler {
         }
 
         // Remove the nota
-        if data.remove_nota(&id).is_none() {
+        if data.remove(&id).is_none() {
             drop(data);
             bail!("Failed to delete nota '{}'", id);
         }
