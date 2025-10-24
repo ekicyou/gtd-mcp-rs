@@ -91,32 +91,25 @@ impl GtdServerHandler {
         Ok(())
     }
 
-    /// Normalize task ID by ensuring it starts with '#'
+    /// Normalize task ID by returning it as-is (no transformation)
     ///
-    /// This helper function allows LLMs to omit the '#' prefix when specifying task IDs.
-    /// If the input is a plain number (e.g., "1", "2"), it prepends '#'.
-    /// If the input already starts with '#', it returns it unchanged.
+    /// This helper function previously added '#' prefix for backwards compatibility,
+    /// but now task IDs are arbitrary strings chosen by the MCP client.
     ///
     /// # Arguments
-    /// * `task_id` - The task ID to normalize (e.g., "1" or "#1")
+    /// * `task_id` - The task ID (e.g., "task-1", "meeting-prep")
     ///
     /// # Returns
-    /// The normalized task ID with '#' prefix (e.g., "#1")
+    /// The task ID unchanged
     ///
     /// # Examples
     /// ```
     /// # use gtd_mcp::GtdServerHandler;
-    /// // normalize_task_id("1") -> "#1"
-    /// // normalize_task_id("#1") -> "#1"
-    /// // normalize_task_id("42") -> "#42"
+    /// // normalize_task_id("task-1") -> "task-1"
+    /// // normalize_task_id("meeting-prep") -> "meeting-prep"
     /// ```
     fn normalize_task_id(task_id: &str) -> String {
-        let trimmed = task_id.trim();
-        if trimmed.starts_with('#') {
-            trimmed.to_string()
-        } else {
-            format!("#{}", trimmed)
-        }
+        task_id.trim().to_string()
     }
 }
 
@@ -153,6 +146,8 @@ impl McpServer for GtdServerHandler {
     #[tool]
     async fn add_task(
         &self,
+        /// Unique task ID - any string (e.g., "meeting-prep", "call-sarah"). Use meaningful names.
+        id: String,
         /// Task title describing action (e.g., "Call Sarah about meeting")
         title: String,
         /// Optional project ID - use meaningful abbreviation like "website-redesign"
@@ -175,9 +170,15 @@ impl McpServer for GtdServerHandler {
 
         let mut data = self.data.lock().unwrap();
 
+        // Check for duplicate task ID
+        if data.find_task_by_id(&id).is_some() {
+            drop(data);
+            bail!("Task ID '{}' already exists. Please use a unique ID.", id);
+        }
+
         let today = local_date_today();
         let task = Task {
-            id: data.generate_task_id(),
+            id: id.clone(),
             title: title.clone(),
             status: TaskStatus::inbox,
             project,
@@ -1308,20 +1309,27 @@ mod tests {
 
     #[test]
     fn test_normalize_task_id() {
-        // Test with plain numbers
-        assert_eq!(GtdServerHandler::normalize_task_id("1"), "#1");
-        assert_eq!(GtdServerHandler::normalize_task_id("42"), "#42");
-        assert_eq!(GtdServerHandler::normalize_task_id("123"), "#123");
+        // Test with arbitrary task IDs - normalize should just trim
+        assert_eq!(GtdServerHandler::normalize_task_id("task-1"), "task-1");
+        assert_eq!(
+            GtdServerHandler::normalize_task_id("meeting-prep"),
+            "meeting-prep"
+        );
+        assert_eq!(
+            GtdServerHandler::normalize_task_id("call-sarah"),
+            "call-sarah"
+        );
 
-        // Test with # prefix already present
+        // Test with whitespace - should be trimmed
+        assert_eq!(GtdServerHandler::normalize_task_id(" task-1 "), "task-1");
+        assert_eq!(
+            GtdServerHandler::normalize_task_id("  meeting-prep  "),
+            "meeting-prep"
+        );
+
+        // Old-style IDs with # are also valid
         assert_eq!(GtdServerHandler::normalize_task_id("#1"), "#1");
-        assert_eq!(GtdServerHandler::normalize_task_id("#42"), "#42");
-        assert_eq!(GtdServerHandler::normalize_task_id("#123"), "#123");
-
-        // Test with whitespace
-        assert_eq!(GtdServerHandler::normalize_task_id(" 1 "), "#1");
-        assert_eq!(GtdServerHandler::normalize_task_id(" #1 "), "#1");
-        assert_eq!(GtdServerHandler::normalize_task_id("  42  "), "#42");
+        assert_eq!(GtdServerHandler::normalize_task_id(" #42 "), "#42");
     }
 
     #[tokio::test]
@@ -1330,7 +1338,14 @@ mod tests {
 
         // Create a task in inbox
         let result = handler
-            .add_task("Test Task".to_string(), None, None, None, None)
+            .add_task(
+                "task-3".to_string(),
+                "Test Task".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
             .await;
         assert!(result.is_ok());
         let task_id = result
@@ -1386,7 +1401,14 @@ mod tests {
 
         // Create a task
         let result = handler
-            .add_task("Test Task".to_string(), None, None, None, None)
+            .add_task(
+                "task-4".to_string(),
+                "Test Task".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
             .await;
         assert!(result.is_ok());
         let task_id = result
@@ -1422,7 +1444,14 @@ mod tests {
         let mut task_ids = Vec::new();
         for i in 1..=3 {
             let result = handler
-                .add_task(format!("Test Task {}", i), None, None, None, None)
+                .add_task(
+                    format!("task-{}", 5 - 1 + i),
+                    format!("Test Task {}", i),
+                    None,
+                    None,
+                    None,
+                    None,
+                )
                 .await;
             assert!(result.is_ok());
             let task_id = result
@@ -1450,20 +1479,27 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_update_task_with_plain_number_id() {
+    async fn test_update_task_with_arbitrary_id() {
         let (handler, _temp_file) = get_test_handler();
 
-        // Add a task
+        // Add a task with an arbitrary ID
         let result = handler
-            .add_task("Test Task".to_string(), None, None, None, None)
+            .add_task(
+                "meeting-prep".to_string(),
+                "Prepare for meeting".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
             .await;
         assert!(result.is_ok());
 
-        // Update task using plain number (without #)
+        // Update task using the arbitrary ID
         let result = handler
             .update_task(
-                "1".to_string(), // Using "1" instead of "#1"
-                Some("Updated Title".to_string()),
+                "meeting-prep".to_string(),
+                Some("Updated meeting preparation".to_string()),
                 None,
                 None,
                 None,
@@ -1474,29 +1510,40 @@ mod tests {
 
         // Verify the update worked
         let data = handler.data.lock().unwrap();
-        let task = data.find_task_by_id("#1").unwrap();
-        assert_eq!(task.title, "Updated Title");
+        let task = data.find_task_by_id("meeting-prep").unwrap();
+        assert_eq!(task.title, "Updated meeting preparation");
     }
 
     #[tokio::test]
-    async fn test_status_movement_with_plain_number_id() {
+    async fn test_status_movement_with_arbitrary_id() {
         let (handler, _temp_file) = get_test_handler();
 
-        // Add a task
+        // Add a task with an arbitrary ID
         let result = handler
-            .add_task("Test Task".to_string(), None, None, None, None)
+            .add_task(
+                "call-sarah".to_string(),
+                "Call Sarah".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
             .await;
         assert!(result.is_ok());
 
-        // Move to next_action using plain number
+        // Move to next_action using the arbitrary ID
         let result = handler
-            .change_task_status(vec!["1".to_string()], "next_action".to_string(), None)
+            .change_task_status(
+                vec!["call-sarah".to_string()],
+                "next_action".to_string(),
+                None,
+            )
             .await;
         assert!(result.is_ok());
 
         // Verify the task moved
         let data = handler.data.lock().unwrap();
-        let task = data.find_task_by_id("#1").unwrap();
+        let task = data.find_task_by_id("call-sarah").unwrap();
         assert_eq!(task.status, TaskStatus::next_action);
     }
 
@@ -1506,7 +1553,14 @@ mod tests {
 
         // Add a task
         let result = handler
-            .add_task("Original Title".to_string(), None, None, None, None)
+            .add_task(
+                "task-8".to_string(),
+                "Original Title".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
             .await;
         assert!(result.is_ok());
 
@@ -1543,7 +1597,14 @@ mod tests {
 
         // Add a task
         let result = handler
-            .add_task("Test Task".to_string(), None, None, None, None)
+            .add_task(
+                "task-9".to_string(),
+                "Test Task".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
             .await;
         assert!(result.is_ok());
         let task_id = result
@@ -1611,7 +1672,14 @@ mod tests {
 
         // Add a task
         let result = handler
-            .add_task("Test Task".to_string(), None, None, None, None)
+            .add_task(
+                "task-10".to_string(),
+                "Test Task".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
             .await;
         assert!(result.is_ok());
         let task_id = result
@@ -1648,6 +1716,7 @@ mod tests {
         // Add a task with optional fields
         let result = handler
             .add_task(
+                "task-2001".to_string(),
                 "Test Task".to_string(),
                 None,
                 None,
@@ -1697,7 +1766,14 @@ mod tests {
 
         // Add a task
         let result = handler
-            .add_task("Test Task".to_string(), None, None, None, None)
+            .add_task(
+                "task-11".to_string(),
+                "Test Task".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
             .await;
         assert!(result.is_ok());
         let task_id = result
@@ -1727,7 +1803,14 @@ mod tests {
 
         // Add a task
         let result = handler
-            .add_task("Test Task".to_string(), None, None, None, None)
+            .add_task(
+                "task-12".to_string(),
+                "Test Task".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
             .await;
         assert!(result.is_ok());
         let task_id = result
@@ -1757,7 +1840,14 @@ mod tests {
 
         // Add a task
         let result = handler
-            .add_task("Test Task".to_string(), None, None, None, None)
+            .add_task(
+                "task-13".to_string(),
+                "Test Task".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
             .await;
         assert!(result.is_ok());
         let task_id = result
@@ -1805,7 +1895,14 @@ mod tests {
 
         // Add a task
         let result = handler
-            .add_task("Test Task".to_string(), None, None, None, None)
+            .add_task(
+                "task-14".to_string(),
+                "Test Task".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
             .await;
         assert!(result.is_ok());
         let task_id = result
@@ -2115,6 +2212,7 @@ mod tests {
         // Add a task that references the project
         let result = handler
             .add_task(
+                "task-2002".to_string(),
                 "Test Task".to_string(),
                 Some("test-project-1".to_string()),
                 None,
@@ -2151,6 +2249,7 @@ mod tests {
         // Add a task that references the project
         let result = handler
             .add_task(
+                "task-2003".to_string(),
                 "Test Task".to_string(),
                 Some("test-project-1".to_string()),
                 None,
@@ -2163,7 +2262,7 @@ mod tests {
         // Unlink the task from the project
         let result = handler
             .update_task(
-                "#1".to_string(),
+                "task-2003".to_string(),
                 None,
                 Some("".to_string()), // Empty string removes project
                 None,
@@ -2216,7 +2315,14 @@ mod tests {
 
         // Add a task
         let result = handler
-            .add_task("Original Task".to_string(), None, None, None, None)
+            .add_task(
+                "task-15".to_string(),
+                "Original Task".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
             .await;
         assert!(result.is_ok());
         let task_id = result
@@ -2267,7 +2373,14 @@ mod tests {
 
         // Add a task
         let result = handler
-            .add_task("Test Task".to_string(), None, None, None, None)
+            .add_task(
+                "task-16".to_string(),
+                "Test Task".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
             .await;
         assert!(result.is_ok());
         let task_id = result
@@ -2313,7 +2426,14 @@ mod tests {
         let (handler, _temp_file) = get_test_handler();
 
         let result = handler
-            .add_task("Test Task".to_string(), None, None, None, None)
+            .add_task(
+                "task-17".to_string(),
+                "Test Task".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
             .await;
         assert!(result.is_ok());
         let task_id = result
@@ -2340,7 +2460,14 @@ mod tests {
         let (handler, _temp_file) = get_test_handler();
 
         let result = handler
-            .add_task("Test Task".to_string(), None, None, None, None)
+            .add_task(
+                "task-18".to_string(),
+                "Test Task".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
             .await;
         assert!(result.is_ok());
         let task_id = result
@@ -2367,7 +2494,14 @@ mod tests {
         let (handler, _temp_file) = get_test_handler();
 
         let result = handler
-            .add_task("Test Task".to_string(), None, None, None, None)
+            .add_task(
+                "task-19".to_string(),
+                "Test Task".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
             .await;
         assert!(result.is_ok());
         let task_id = result
@@ -2394,7 +2528,14 @@ mod tests {
         let (handler, _temp_file) = get_test_handler();
 
         let result = handler
-            .add_task("Test Task".to_string(), None, None, None, None)
+            .add_task(
+                "task-20".to_string(),
+                "Test Task".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
             .await;
         assert!(result.is_ok());
         let task_id = result
@@ -2421,7 +2562,14 @@ mod tests {
         let (handler, _temp_file) = get_test_handler();
 
         let result = handler
-            .add_task("Test Task".to_string(), None, None, None, None)
+            .add_task(
+                "task-21".to_string(),
+                "Test Task".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
             .await;
         assert!(result.is_ok());
         let task_id = result
@@ -2448,7 +2596,14 @@ mod tests {
         let (handler, _temp_file) = get_test_handler();
 
         let result = handler
-            .add_task("Test Task".to_string(), None, None, None, None)
+            .add_task(
+                "task-22".to_string(),
+                "Test Task".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
             .await;
         assert!(result.is_ok());
         let task_id = result
@@ -2476,7 +2631,14 @@ mod tests {
 
         // Test 1: inbox → trash directly
         let result = handler
-            .add_task("Direct Trash Test".to_string(), None, None, None, None)
+            .add_task(
+                "task-23".to_string(),
+                "Direct Trash Test".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
             .await;
         assert!(result.is_ok());
         let task_id_1 = result
@@ -2493,7 +2655,14 @@ mod tests {
 
         // Test 2: inbox → done → trash (the workflow user reported as working)
         let result = handler
-            .add_task("Indirect Trash Test".to_string(), None, None, None, None)
+            .add_task(
+                "task-24".to_string(),
+                "Indirect Trash Test".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
             .await;
         assert!(result.is_ok());
         let task_id_2 = result
@@ -2548,7 +2717,14 @@ mod tests {
         let mut task_ids = Vec::new();
         for i in 1..=5 {
             let result = handler
-                .add_task(format!("Test Task {}", i), None, None, None, None)
+                .add_task(
+                    format!("task-{}", 25 - 1 + i),
+                    format!("Test Task {}", i),
+                    None,
+                    None,
+                    None,
+                    None,
+                )
                 .await;
             assert!(result.is_ok());
             let task_id = result
@@ -2589,7 +2765,14 @@ mod tests {
         let mut task_ids = Vec::new();
         for i in 1..=2 {
             let result = handler
-                .add_task(format!("Test Task {}", i), None, None, None, None)
+                .add_task(
+                    format!("task-{}", 26 - 1 + i),
+                    format!("Test Task {}", i),
+                    None,
+                    None,
+                    None,
+                    None,
+                )
                 .await;
             assert!(result.is_ok());
             let task_id = result
@@ -2663,7 +2846,14 @@ mod tests {
 
         // inboxからタスクを作成
         let result = handler
-            .add_task("Inbox Task".to_string(), None, None, None, None)
+            .add_task(
+                "task-27".to_string(),
+                "Inbox Task".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
             .await;
         assert!(result.is_ok());
         let inbox_task_id = result
@@ -2675,7 +2865,14 @@ mod tests {
 
         // next_actionに移動
         let result = handler
-            .add_task("Next Action Task".to_string(), None, None, None, None)
+            .add_task(
+                "task-28".to_string(),
+                "Next Action Task".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
             .await;
         assert!(result.is_ok());
         let next_action_task_id = result
@@ -2695,7 +2892,14 @@ mod tests {
 
         // doneに移動
         let result = handler
-            .add_task("Done Task".to_string(), None, None, None, None)
+            .add_task(
+                "task-29".to_string(),
+                "Done Task".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
             .await;
         assert!(result.is_ok());
         let done_task_id = result
@@ -2744,7 +2948,14 @@ mod tests {
         let (handler, _temp_file) = get_test_handler();
 
         let result = handler
-            .add_task("Test Task".to_string(), None, None, None, None)
+            .add_task(
+                "task-30".to_string(),
+                "Test Task".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
             .await;
         assert!(result.is_ok());
         let task_id = result
@@ -2781,7 +2992,14 @@ mod tests {
 
         // タスクを作成（start_dateなし）
         let result = handler
-            .add_task("Test Task".to_string(), None, None, None, None)
+            .add_task(
+                "task-31".to_string(),
+                "Test Task".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
             .await;
         assert!(result.is_ok());
         let task_id = result
@@ -2805,6 +3023,7 @@ mod tests {
         // start_date付きのタスクを作成
         let result = handler
             .add_task(
+                "task-2004".to_string(),
                 "Test Task".to_string(),
                 None,
                 None,
@@ -2843,6 +3062,7 @@ mod tests {
         // start_date付きのタスクを作成
         let result = handler
             .add_task(
+                "task-2005".to_string(),
                 "Test Task".to_string(),
                 None,
                 None,
@@ -2882,7 +3102,14 @@ mod tests {
         let (handler, _temp_file) = get_test_handler();
 
         let result = handler
-            .add_task("Test Task".to_string(), None, None, None, None)
+            .add_task(
+                "task-32".to_string(),
+                "Test Task".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
             .await;
         assert!(result.is_ok());
         let task_id = result
@@ -2908,7 +3135,14 @@ mod tests {
         let (handler, _temp_file) = get_test_handler();
 
         let result = handler
-            .add_task("Test Task".to_string(), None, None, None, None)
+            .add_task(
+                "task-33".to_string(),
+                "Test Task".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
             .await;
         assert!(result.is_ok());
         let task_id = result
@@ -3108,6 +3342,7 @@ mod tests {
         // Add a task that references the context
         handler
             .add_task(
+                "task-2006".to_string(),
                 "Office work".to_string(),
                 None,
                 Some("Office".to_string()),
@@ -3171,6 +3406,7 @@ mod tests {
         // Add a task that references the context
         handler
             .add_task(
+                "task-2007".to_string(),
                 "Office work".to_string(),
                 None,
                 Some("Office".to_string()),
@@ -3214,6 +3450,7 @@ mod tests {
         // Add a task that references the context
         let task_id = handler
             .add_task(
+                "task-2008".to_string(),
                 "Office work".to_string(),
                 None,
                 Some("Office".to_string()),
@@ -3299,6 +3536,7 @@ mod tests {
         // Add multiple tasks that reference the context
         handler
             .add_task(
+                "task-2009".to_string(),
                 "Task 1".to_string(),
                 None,
                 Some("Office".to_string()),
@@ -3310,6 +3548,7 @@ mod tests {
 
         handler
             .add_task(
+                "task-2010".to_string(),
                 "Task 2".to_string(),
                 None,
                 Some("Office".to_string()),
@@ -3654,6 +3893,7 @@ mod tests {
         // Add a task referencing the project
         let result = handler
             .add_task(
+                "task-2011".to_string(),
                 "Task in project".to_string(),
                 Some(project_id.clone()),
                 None,
@@ -3816,6 +4056,7 @@ mod tests {
         // タスクを3つ作成: 過去、今日、未来の日付
         let result = handler
             .add_task(
+                "task-2012".to_string(),
                 "Past Task".to_string(),
                 None,
                 None,
@@ -3827,6 +4068,7 @@ mod tests {
 
         let result = handler
             .add_task(
+                "task-2013".to_string(),
                 "Today Task".to_string(),
                 None,
                 None,
@@ -3838,6 +4080,7 @@ mod tests {
 
         let result = handler
             .add_task(
+                "task-2014".to_string(),
                 "Future Task".to_string(),
                 None,
                 None,
@@ -3868,13 +4111,21 @@ mod tests {
 
         // start_dateなしのタスクを作成
         let result = handler
-            .add_task("No Date Task".to_string(), None, None, None, None)
+            .add_task(
+                "task-34".to_string(),
+                "No Date Task".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
             .await;
         assert!(result.is_ok());
 
         // start_date付きのタスクを作成（未来）
         let result = handler
             .add_task(
+                "task-2015".to_string(),
                 "Future Task".to_string(),
                 None,
                 None,
@@ -3905,6 +4156,7 @@ mod tests {
         // カレンダータスクを作成（過去と未来）
         let result = handler
             .add_task(
+                "task-2016".to_string(),
                 "Calendar Past".to_string(),
                 None,
                 None,
@@ -3922,6 +4174,7 @@ mod tests {
 
         let result = handler
             .add_task(
+                "task-2017".to_string(),
                 "Calendar Future".to_string(),
                 None,
                 None,
@@ -3989,6 +4242,7 @@ mod tests {
         // 未来の日付のタスクを作成
         let result = handler
             .add_task(
+                "task-2018".to_string(),
                 "Future Task".to_string(),
                 None,
                 None,
@@ -4015,6 +4269,7 @@ mod tests {
         // 指定日と同じ日付のタスクを作成
         let result = handler
             .add_task(
+                "task-2019".to_string(),
                 "Same Date Task".to_string(),
                 None,
                 None,
@@ -4043,6 +4298,7 @@ mod tests {
         // notesを持つタスクを作成
         let result = handler
             .add_task(
+                "task-2020".to_string(),
                 "Task with notes".to_string(),
                 None,
                 None,
@@ -4054,7 +4310,14 @@ mod tests {
 
         // notesなしのタスクも作成
         let result = handler
-            .add_task("Task without notes".to_string(), None, None, None, None)
+            .add_task(
+                "task-35".to_string(),
+                "Task without notes".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
             .await;
         assert!(result.is_ok());
 
@@ -4085,6 +4348,7 @@ mod tests {
         // notesを持つタスクを作成
         let result = handler
             .add_task(
+                "task-2021".to_string(),
                 "Task with notes".to_string(),
                 None,
                 None,
@@ -4113,6 +4377,7 @@ mod tests {
         // notesを持つタスクを作成
         let result = handler
             .add_task(
+                "task-2022".to_string(),
                 "Task with notes".to_string(),
                 None,
                 None,
@@ -4140,6 +4405,7 @@ mod tests {
         // 複数行のnotesを持つタスクを作成（改行を含む）
         let result = handler
             .add_task(
+                "task-2023".to_string(),
                 "Complex task".to_string(),
                 None,
                 None,
@@ -4167,7 +4433,14 @@ mod tests {
         let mut task_ids = Vec::new();
         for i in 1..=3 {
             let result = handler
-                .add_task(format!("Test Task {}", i), None, None, None, None)
+                .add_task(
+                    format!("task-{}", 36 - 1 + i),
+                    format!("Test Task {}", i),
+                    None,
+                    None,
+                    None,
+                    None,
+                )
                 .await;
             assert!(result.is_ok());
             let task_id = result
@@ -4212,7 +4485,14 @@ mod tests {
         let mut task_ids = Vec::new();
         for i in 1..=4 {
             let result = handler
-                .add_task(format!("Test Task {}", i), None, None, None, None)
+                .add_task(
+                    format!("task-{}", 37 - 1 + i),
+                    format!("Test Task {}", i),
+                    None,
+                    None,
+                    None,
+                    None,
+                )
                 .await;
             assert!(result.is_ok());
             let task_id = result
@@ -4253,7 +4533,14 @@ mod tests {
         let mut task_ids = Vec::new();
         for i in 1..=3 {
             let result = handler
-                .add_task(format!("Test Task {}", i), None, None, None, None)
+                .add_task(
+                    format!("task-{}", 38 - 1 + i),
+                    format!("Test Task {}", i),
+                    None,
+                    None,
+                    None,
+                    None,
+                )
                 .await;
             assert!(result.is_ok());
             let task_id = result
@@ -4294,7 +4581,14 @@ mod tests {
         let mut task_ids = Vec::new();
         for i in 1..=3 {
             let result = handler
-                .add_task(format!("Test Task {}", i), None, None, None, None)
+                .add_task(
+                    format!("task-{}", 39 - 1 + i),
+                    format!("Test Task {}", i),
+                    None,
+                    None,
+                    None,
+                    None,
+                )
                 .await;
             assert!(result.is_ok());
             let task_id = result
@@ -4335,7 +4629,14 @@ mod tests {
         let mut task_ids = Vec::new();
         for i in 1..=3 {
             let result = handler
-                .add_task(format!("Test Task {}", i), None, None, None, None)
+                .add_task(
+                    format!("task-{}", 40 - 1 + i),
+                    format!("Test Task {}", i),
+                    None,
+                    None,
+                    None,
+                    None,
+                )
                 .await;
             assert!(result.is_ok());
             let task_id = result
@@ -4376,7 +4677,14 @@ mod tests {
         let mut task_ids = Vec::new();
         for i in 1..=3 {
             let result = handler
-                .add_task(format!("Test Task {}", i), None, None, None, None)
+                .add_task(
+                    format!("task-{}", 41 - 1 + i),
+                    format!("Test Task {}", i),
+                    None,
+                    None,
+                    None,
+                    None,
+                )
                 .await;
             assert!(result.is_ok());
             let task_id = result
@@ -4417,7 +4725,14 @@ mod tests {
 
         // タスクを作成
         let result = handler
-            .add_task("Test Task".to_string(), None, None, None, None)
+            .add_task(
+                "task-42".to_string(),
+                "Test Task".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
             .await;
         assert!(result.is_ok());
         let task_id = result
@@ -4450,7 +4765,14 @@ mod tests {
 
         // タスクを作成
         let result = handler
-            .add_task("Test Task".to_string(), None, None, None, None)
+            .add_task(
+                "task-43".to_string(),
+                "Test Task".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
             .await;
         assert!(result.is_ok());
         let task_id = result
@@ -4614,7 +4936,14 @@ mod tests {
         let mut task_ids = Vec::new();
         for i in 1..=3 {
             let result = handler
-                .add_task(format!("Test Task {}", i), None, None, None, None)
+                .add_task(
+                    format!("task-{}", 44 - 1 + i),
+                    format!("Test Task {}", i),
+                    None,
+                    None,
+                    None,
+                    None,
+                )
                 .await;
             assert!(result.is_ok());
             let task_id = result
@@ -4664,6 +4993,7 @@ mod tests {
         for i in 1..=2 {
             let result = handler
                 .add_task(
+                    format!("task-{}", 44 + i),
                     format!("Test Task {}", i),
                     None,
                     None,
@@ -4714,6 +5044,7 @@ mod tests {
         // start_dateを持つタスク
         let result = handler
             .add_task(
+                "task-2024".to_string(),
                 "Task with date".to_string(),
                 None,
                 None,
@@ -4733,7 +5064,14 @@ mod tests {
 
         // start_dateを持たないタスク
         let result = handler
-            .add_task("Task without date".to_string(), None, None, None, None)
+            .add_task(
+                "task-46".to_string(),
+                "Task without date".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
             .await;
         assert!(result.is_ok());
         task_ids.push(
