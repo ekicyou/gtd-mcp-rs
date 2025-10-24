@@ -64,6 +64,10 @@ pub enum TaskStatus {
     done,
     /// Deleted or discarded tasks
     trash,
+    /// Context nota (represents a location, tool, or situation)
+    context,
+    /// Project nota (represents a multi-step outcome)
+    project,
 }
 
 impl FromStr for TaskStatus {
@@ -79,8 +83,10 @@ impl FromStr for TaskStatus {
             "calendar" => Ok(TaskStatus::calendar),
             "done" => Ok(TaskStatus::done),
             "trash" => Ok(TaskStatus::trash),
+            "context" => Ok(TaskStatus::context),
+            "project" => Ok(TaskStatus::project),
             _ => Err(format!(
-                "Invalid status '{}'. Valid options are: inbox, next_action, waiting_for, someday, later, calendar, done, trash",
+                "Invalid status '{}'. Valid options are: inbox, next_action, waiting_for, someday, later, calendar, done, trash, context, project",
                 s
             )),
         }
@@ -184,6 +190,157 @@ pub struct Context {
     /// Last update date
     #[serde(skip_serializing_if = "Option::is_none", default)]
     pub updated_at: Option<NaiveDate>,
+}
+
+/// A unified nota (note) in the GTD system
+///
+/// Nota unifies Task, Project, and Context into a single structure.
+/// The `status` field determines what type of nota it is:
+/// - status = "context": represents a Context
+/// - status = "project": represents a Project
+/// - other statuses (inbox, next_action, etc.): represents a Task
+///
+/// This design is inspired by TiddlyWiki's tiddler concept.
+#[allow(dead_code)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Nota {
+    /// Unique identifier (e.g., "meeting-prep", "website-redesign", "Office")
+    pub id: String,
+    /// Title describing the nota
+    pub title: String,
+    /// Current status (inbox, next_action, waiting_for, later, calendar, someday, done, trash, context, project)
+    pub status: TaskStatus,
+    /// Optional parent project ID
+    pub project: Option<String>,
+    /// Optional context where this nota applies
+    pub context: Option<String>,
+    /// Optional additional notes in Markdown format
+    pub notes: Option<String>,
+    /// Optional start date (format: YYYY-MM-DD)
+    pub start_date: Option<NaiveDate>,
+    /// Date when the nota was created
+    pub created_at: NaiveDate,
+    /// Date when the nota was last updated
+    pub updated_at: NaiveDate,
+}
+
+#[allow(dead_code)]
+impl Nota {
+    /// Create a Nota from a Task
+    pub fn from_task(task: Task) -> Self {
+        Self {
+            id: task.id,
+            title: task.title,
+            status: task.status,
+            project: task.project,
+            context: task.context,
+            notes: task.notes,
+            start_date: task.start_date,
+            created_at: task.created_at,
+            updated_at: task.updated_at,
+        }
+    }
+
+    /// Create a Nota from a Project
+    pub fn from_project(project: Project) -> Self {
+        Self {
+            id: project.id,
+            title: project.title,
+            status: TaskStatus::project,
+            project: project.project,
+            context: project.context,
+            notes: project.notes,
+            start_date: project.start_date,
+            created_at: project.created_at,
+            updated_at: project.updated_at,
+        }
+    }
+
+    /// Create a Nota from a Context
+    pub fn from_context(context: Context) -> Self {
+        Self {
+            id: context.name.clone(),
+            title: context.title.unwrap_or(context.name),
+            status: TaskStatus::context,
+            project: context.project,
+            context: context.context,
+            notes: context.notes,
+            start_date: context.start_date,
+            created_at: context.created_at.unwrap_or_else(local_date_today),
+            updated_at: context.updated_at.unwrap_or_else(local_date_today),
+        }
+    }
+
+    /// Convert this Nota to a Task (if status is task-related)
+    pub fn to_task(&self) -> Option<Task> {
+        match self.status {
+            TaskStatus::context | TaskStatus::project => None,
+            _ => Some(Task {
+                id: self.id.clone(),
+                title: self.title.clone(),
+                status: self.status.clone(),
+                project: self.project.clone(),
+                context: self.context.clone(),
+                notes: self.notes.clone(),
+                start_date: self.start_date,
+                created_at: self.created_at,
+                updated_at: self.updated_at,
+            }),
+        }
+    }
+
+    /// Convert this Nota to a Project (if status is project)
+    pub fn to_project(&self) -> Option<Project> {
+        if self.status == TaskStatus::project {
+            Some(Project {
+                id: self.id.clone(),
+                title: self.title.clone(),
+                notes: self.notes.clone(),
+                status: ProjectStatus::active, // Default to active
+                project: self.project.clone(),
+                context: self.context.clone(),
+                start_date: self.start_date,
+                created_at: self.created_at,
+                updated_at: self.updated_at,
+            })
+        } else {
+            None
+        }
+    }
+
+    /// Convert this Nota to a Context (if status is context)
+    pub fn to_context(&self) -> Option<Context> {
+        if self.status == TaskStatus::context {
+            Some(Context {
+                name: self.id.clone(),
+                title: Some(self.title.clone()),
+                notes: self.notes.clone(),
+                status: Some("context".to_string()),
+                project: self.project.clone(),
+                context: self.context.clone(),
+                start_date: self.start_date,
+                created_at: Some(self.created_at),
+                updated_at: Some(self.updated_at),
+            })
+        } else {
+            None
+        }
+    }
+
+    /// Check if this nota is a task
+    pub fn is_task(&self) -> bool {
+        !matches!(self.status, TaskStatus::context | TaskStatus::project)
+    }
+
+    /// Check if this nota is a project
+    pub fn is_project(&self) -> bool {
+        self.status == TaskStatus::project
+    }
+
+    /// Check if this nota is a context
+    pub fn is_context(&self) -> bool {
+        self.status == TaskStatus::context
+    }
 }
 
 /// The main GTD data structure
@@ -409,6 +566,9 @@ impl GtdData {
             TaskStatus::done => &self.done,
             TaskStatus::trash => &self.trash,
             TaskStatus::calendar => &self.calendar,
+            TaskStatus::context | TaskStatus::project => {
+                panic!("context and project statuses are not task statuses")
+            }
         }
     }
 
@@ -423,6 +583,9 @@ impl GtdData {
             TaskStatus::done => &mut self.done,
             TaskStatus::trash => &mut self.trash,
             TaskStatus::calendar => &mut self.calendar,
+            TaskStatus::context | TaskStatus::project => {
+                panic!("context and project statuses are not task statuses")
+            }
         }
     }
 
@@ -1122,6 +1285,9 @@ mod tests {
                 TaskStatus::done => assert!(matches!(task.status, TaskStatus::done)),
                 TaskStatus::trash => assert!(matches!(task.status, TaskStatus::trash)),
                 TaskStatus::calendar => assert!(matches!(task.status, TaskStatus::calendar)),
+                TaskStatus::context | TaskStatus::project => {
+                    panic!("context and project are not task statuses")
+                }
             }
         }
     }
@@ -3028,5 +3194,164 @@ updated_at = "2024-01-01"
         assert!(task2_pos < task3_pos);
         assert!(task3_pos < task4_pos);
         assert!(task4_pos < task5_pos);
+    }
+
+    // Tests for Nota structure (Step 6)
+    #[test]
+    fn test_nota_from_task() {
+        let task = Task {
+            id: "task-1".to_string(),
+            title: "Test Task".to_string(),
+            status: TaskStatus::inbox,
+            project: Some("project-1".to_string()),
+            context: Some("Office".to_string()),
+            notes: Some("Test notes".to_string()),
+            start_date: None,
+            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            updated_at: NaiveDate::from_ymd_opt(2024, 1, 2).unwrap(),
+        };
+
+        let nota = Nota::from_task(task.clone());
+
+        assert_eq!(nota.id, task.id);
+        assert_eq!(nota.title, task.title);
+        assert_eq!(nota.status, task.status);
+        assert_eq!(nota.project, task.project);
+        assert_eq!(nota.context, task.context);
+        assert_eq!(nota.notes, task.notes);
+        assert!(nota.is_task());
+        assert!(!nota.is_project());
+        assert!(!nota.is_context());
+    }
+
+    #[test]
+    fn test_nota_from_project() {
+        let project = Project {
+            id: "proj-1".to_string(),
+            title: "Test Project".to_string(),
+            notes: Some("Project notes".to_string()),
+            status: ProjectStatus::active,
+            project: None,
+            context: Some("Office".to_string()),
+            start_date: None,
+            created_at: local_date_today(),
+            updated_at: local_date_today(),
+        };
+
+        let nota = Nota::from_project(project.clone());
+
+        assert_eq!(nota.id, project.id);
+        assert_eq!(nota.title, project.title);
+        assert_eq!(nota.status, TaskStatus::project);
+        assert_eq!(nota.context, project.context);
+        assert_eq!(nota.notes, project.notes);
+        assert!(!nota.is_task());
+        assert!(nota.is_project());
+        assert!(!nota.is_context());
+    }
+
+    #[test]
+    fn test_nota_from_context() {
+        let context = Context {
+            name: "Office".to_string(),
+            title: Some("Office Context".to_string()),
+            notes: Some("Office location".to_string()),
+            status: None,
+            project: None,
+            context: None,
+            start_date: None,
+            created_at: Some(NaiveDate::from_ymd_opt(2024, 1, 1).unwrap()),
+            updated_at: Some(NaiveDate::from_ymd_opt(2024, 1, 2).unwrap()),
+        };
+
+        let nota = Nota::from_context(context.clone());
+
+        assert_eq!(nota.id, context.name);
+        assert_eq!(nota.title, "Office Context");
+        assert_eq!(nota.status, TaskStatus::context);
+        assert_eq!(nota.notes, context.notes);
+        assert!(!nota.is_task());
+        assert!(!nota.is_project());
+        assert!(nota.is_context());
+    }
+
+    #[test]
+    fn test_nota_to_task() {
+        let nota = Nota {
+            id: "task-1".to_string(),
+            title: "Test Task".to_string(),
+            status: TaskStatus::next_action,
+            project: Some("proj-1".to_string()),
+            context: Some("Office".to_string()),
+            notes: Some("Notes".to_string()),
+            start_date: None,
+            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            updated_at: NaiveDate::from_ymd_opt(2024, 1, 2).unwrap(),
+        };
+
+        let task = nota.to_task().unwrap();
+
+        assert_eq!(task.id, nota.id);
+        assert_eq!(task.title, nota.title);
+        assert_eq!(task.status, nota.status);
+    }
+
+    #[test]
+    fn test_nota_to_task_fails_for_project() {
+        let nota = Nota {
+            id: "proj-1".to_string(),
+            title: "Project".to_string(),
+            status: TaskStatus::project,
+            project: None,
+            context: None,
+            notes: None,
+            start_date: None,
+            created_at: local_date_today(),
+            updated_at: local_date_today(),
+        };
+
+        assert!(nota.to_task().is_none());
+    }
+
+    #[test]
+    fn test_nota_to_project() {
+        let nota = Nota {
+            id: "proj-1".to_string(),
+            title: "Test Project".to_string(),
+            status: TaskStatus::project,
+            project: None,
+            context: Some("Office".to_string()),
+            notes: Some("Project notes".to_string()),
+            start_date: None,
+            created_at: local_date_today(),
+            updated_at: local_date_today(),
+        };
+
+        let project = nota.to_project().unwrap();
+
+        assert_eq!(project.id, nota.id);
+        assert_eq!(project.title, nota.title);
+        assert_eq!(project.context, nota.context);
+    }
+
+    #[test]
+    fn test_nota_to_context() {
+        let nota = Nota {
+            id: "Office".to_string(),
+            title: "Office Context".to_string(),
+            status: TaskStatus::context,
+            project: None,
+            context: None,
+            notes: Some("Office location".to_string()),
+            start_date: None,
+            created_at: local_date_today(),
+            updated_at: local_date_today(),
+        };
+
+        let context = nota.to_context().unwrap();
+
+        assert_eq!(context.name, nota.id);
+        assert_eq!(context.title, Some(nota.title));
+        assert_eq!(context.notes, nota.notes);
     }
 }

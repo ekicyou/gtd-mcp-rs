@@ -428,6 +428,8 @@ impl McpServer for GtdServerHandler {
                 TaskStatus::calendar => format!("Move tasks to calendar: {}", task_list),
                 TaskStatus::done => format!("Mark tasks as done: {}", task_list),
                 TaskStatus::trash => format!("Move tasks to trash: {}", task_list),
+                TaskStatus::context => format!("Change status to context: {}", task_list),
+                TaskStatus::project => format!("Change status to project: {}", task_list),
             };
 
             if let Err(e) = self.save_data_with_message(&commit_message) {

@@ -1089,7 +1089,7 @@ mod tests {
 #[cfg(test)]
 mod test_line_ending_normalization {
     #[allow(unused_imports)]
-use crate::gtd::{GtdData, local_date_today};
+    use crate::gtd::{GtdData, local_date_today};
 
     // Test that CR normalization works for project descriptions
     #[test]
