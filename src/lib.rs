@@ -479,7 +479,9 @@ impl McpServer for GtdServerHandler {
         Ok(result)
     }
 
-    /// Permanently delete all trashed tasks (irreversible). Use when certain you don't need those tasks.
+    /// **GTD Purge**: Permanently delete trashed notas (irreversible).
+    /// **Use**: Periodic cleanup. Workflow: 1)Move to trash via change_status 2)Review 3)Empty trash.
+    /// **Safety**: Prevents deletion if referenced by other notas (maintains integrity).
     #[tool]
     async fn empty_trash(&self) -> McpResult<String> {
         let mut data = self.data.lock().unwrap();
@@ -1026,9 +1028,13 @@ impl McpServer for GtdServerHandler {
         Ok(format!("Context {} deleted successfully", name))
     }
 
-    // ==================== Unified Nota Tools ====================
+    // ==================== Core GTD Tools ====================
+    // 5 unified tools handle all GTD operations (tasks/projects/contexts)
 
-    /// Add a new nota (unified task/project/context). Status field determines nota type: task statuses (inbox, next_action, etc.) create tasks, 'project' creates projects, 'context' creates contexts.
+    /// **GTD Capture**: Add nota (task/project/context). Status determines type.
+    /// **Use**: Capture anything needing attention (GTD step 1).
+    /// **Types**: inbox/next_action/etc→task, project→project, context→context
+    /// **Ex**: id="call-sarah" title="Call Sarah" status="inbox"
     #[allow(clippy::too_many_arguments)]
     #[tool]
     async fn add(
@@ -1142,7 +1148,9 @@ impl McpServer for GtdServerHandler {
         ))
     }
 
-    /// List notas with optional status filter. Returns all tasks, projects, and contexts by default. Use status filter to narrow results.
+    /// **GTD Review**: List notas, optionally filter by status.
+    /// **Use**: Daily/weekly review. No filter=all, status="inbox"=needing process, "next_action"=ready tasks.
+    /// **GTD**: Clarify what needs attention during review.
     #[tool]
     async fn list(
         &self,
@@ -1206,7 +1214,9 @@ impl McpServer for GtdServerHandler {
         Ok(result)
     }
 
-    /// Update an existing nota's fields. Provide only the fields you want to change.
+    /// **GTD Clarify/Organize**: Update nota fields. Only specify fields to change.
+    /// **Use**: Clarify captured items, add details, transform types.
+    /// **Transform**: Change status converts type (inbox→project elevates to project, any→trash discards).
     #[allow(clippy::too_many_arguments)]
     #[tool]
     async fn update(
@@ -1326,7 +1336,9 @@ impl McpServer for GtdServerHandler {
         Ok(format!("Nota {} updated successfully", id))
     }
 
-    /// Change a nota's status. This can transform a nota between types (e.g., task->project).
+    /// **GTD Do/Move**: Change nota status through workflow stages.
+    /// **Use**: inbox→next_action="doable now", →someday="later", →done="completed", →trash="discard".
+    /// **Transform**: Change to "project" or "context" converts type. Status=workflow stage, not urgency.
     #[tool]
     async fn change_status(
         &self,
