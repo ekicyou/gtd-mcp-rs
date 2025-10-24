@@ -1404,44 +1404,6 @@ impl McpServer for GtdServerHandler {
         ))
     }
 
-    /// Delete a nota. Fails if other notas reference this one in their project or context fields.
-    #[tool]
-    async fn delete(
-        &self,
-        /// Nota ID to delete
-        id: String,
-    ) -> McpResult<String> {
-        let mut data = self.data.lock().unwrap();
-
-        // Check if nota exists
-        if data.find_by_id(&id).is_none() {
-            drop(data);
-            bail!("Nota '{}' not found", id);
-        }
-
-        // Check if this nota is referenced by others
-        if data.is_referenced(&id) {
-            drop(data);
-            bail!(
-                "Cannot delete nota '{}': it is referenced by other notas in their 'project' or 'context' fields. Please update or delete the referencing notas first.",
-                id
-            );
-        }
-
-        // Remove the nota
-        if data.remove(&id).is_none() {
-            drop(data);
-            bail!("Failed to delete nota '{}'", id);
-        }
-        drop(data);
-
-        if let Err(e) = self.save_data_with_message(&format!("Delete nota {}", id)) {
-            bail!("Failed to save: {}", e);
-        }
-
-        Ok(format!("Nota {} deleted successfully", id))
-    }
-
     // ==================== Prompts ====================
 
     /// GTD system overview and available tools
