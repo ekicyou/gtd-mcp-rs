@@ -172,9 +172,9 @@ pub struct Context {
     pub title: Option<String>,
     /// Optional notes about the context
     pub notes: Option<String>,
-    /// Status (will be used when contexts become notas with status="context")
+    /// Status (will be used when contexts become notas with status=TaskStatus::context)
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub status: Option<String>,
+    pub status: Option<TaskStatus>,
     /// Parent project (None for contexts)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub project: Option<String>,
@@ -315,7 +315,7 @@ impl Nota {
                 name: self.id.clone(),
                 title: Some(self.title.clone()),
                 notes: self.notes.clone(),
-                status: Some("context".to_string()),
+                status: Some(TaskStatus::context),
                 project: self.project.clone(),
                 context: self.context.clone(),
                 start_date: self.start_date,
