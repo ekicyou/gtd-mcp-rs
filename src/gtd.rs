@@ -2757,4 +2757,89 @@ updated_at = "2024-01-01"
         assert_eq!(data.task_map.get("task-1"), Some(&TaskStatus::inbox));
         assert_eq!(data.task_map.get("task-2"), Some(&TaskStatus::next_action));
     }
+
+    // Step 4: Test HashMap serialization order
+    #[test]
+    fn test_hashmap_serialization_order() {
+        use std::collections::HashMap;
+
+        // Create a HashMap with tasks
+        let mut tasks_map: HashMap<String, Task> = HashMap::new();
+
+        // Add tasks in a specific order
+        for i in 1..=5 {
+            let task = Task {
+                id: format!("task-{}", i),
+                title: format!("Task {}", i),
+                status: TaskStatus::inbox,
+                project: None,
+                context: None,
+                notes: None,
+                start_date: None,
+                created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+                updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            };
+            tasks_map.insert(task.id.clone(), task);
+        }
+
+        // Serialize to TOML
+        let toml_str = toml::to_string_pretty(&tasks_map).unwrap();
+        println!("HashMap serialization order:\n{}", toml_str);
+
+        // HashMap in Rust does NOT guarantee order
+        // This test documents that HashMap does NOT maintain insertion order
+        // Therefore, we should keep Vec-based serialization for TOML readability
+        assert!(toml_str.contains("task-1"));
+        assert!(toml_str.contains("task-2"));
+        assert!(toml_str.contains("task-3"));
+        assert!(toml_str.contains("task-4"));
+        assert!(toml_str.contains("task-5"));
+    }
+
+    #[test]
+    fn test_vec_serialization_maintains_order() {
+        use serde::Serialize;
+
+        #[derive(Serialize)]
+        struct TestContainer {
+            tasks: Vec<Task>,
+        }
+
+        // Create a Vec with tasks in order
+        let mut tasks_vec: Vec<Task> = Vec::new();
+
+        for i in 1..=5 {
+            let task = Task {
+                id: format!("task-{}", i),
+                title: format!("Task {}", i),
+                status: TaskStatus::inbox,
+                project: None,
+                context: None,
+                notes: None,
+                start_date: None,
+                created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+                updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            };
+            tasks_vec.push(task);
+        }
+
+        let container = TestContainer { tasks: tasks_vec };
+
+        // Serialize to TOML
+        let toml_str = toml::to_string_pretty(&container).unwrap();
+        println!("Vec serialization order:\n{}", toml_str);
+
+        // Vec maintains order - verify tasks appear in sequential order
+        let task1_pos = toml_str.find("task-1").unwrap();
+        let task2_pos = toml_str.find("task-2").unwrap();
+        let task3_pos = toml_str.find("task-3").unwrap();
+        let task4_pos = toml_str.find("task-4").unwrap();
+        let task5_pos = toml_str.find("task-5").unwrap();
+
+        // Verify tasks appear in order
+        assert!(task1_pos < task2_pos);
+        assert!(task2_pos < task3_pos);
+        assert!(task3_pos < task4_pos);
+        assert!(task4_pos < task5_pos);
+    }
 }
