@@ -103,8 +103,20 @@ pub struct Project {
     pub notes: Option<String>,
     /// Current status of the project
     pub status: ProjectStatus,
+    /// Optional parent project (None for projects, as projects don't have parent projects)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub project: Option<String>,
     /// Optional context where this project can be worked on
     pub context: Option<String>,
+    /// Optional start date (for scheduled projects)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub start_date: Option<NaiveDate>,
+    /// Creation date
+    #[serde(default = "local_date_today")]
+    pub created_at: NaiveDate,
+    /// Last update date
+    #[serde(default = "local_date_today")]
+    pub updated_at: NaiveDate,
 }
 
 /// Project status
@@ -146,11 +158,32 @@ impl FromStr for ProjectStatus {
 /// to avoid redundancy with the HashMap key in GtdData.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Context {
-    /// Context name (e.g., "Office", "Home") - not serialized to TOML
+    /// Context name (e.g., "Office", "Home") - not serialized to TOML (serves as ID)
     #[serde(skip_serializing, default)]
     pub name: String,
+    /// Context title (same as name for contexts)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
     /// Optional notes about the context
     pub notes: Option<String>,
+    /// Status (will be used when contexts become notas with status="context")
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
+    /// Parent project (None for contexts)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub project: Option<String>,
+    /// Parent context (None for contexts)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub context: Option<String>,
+    /// Optional start date
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub start_date: Option<NaiveDate>,
+    /// Creation date
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub created_at: Option<NaiveDate>,
+    /// Last update date
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub updated_at: Option<NaiveDate>,
 }
 
 /// The main GTD data structure
@@ -1102,6 +1135,10 @@ mod tests {
             title: "Test Project".to_string(),
             notes: Some("Test description".to_string()),
             status: ProjectStatus::active,
+            project: None,
+            start_date: None,
+            created_at: local_date_today(),
+            updated_at: local_date_today(),
             context: None,
         };
 
@@ -1120,6 +1157,10 @@ mod tests {
             title: "Test Project".to_string(),
             notes: None,
             status: ProjectStatus::active,
+            project: None,
+            start_date: None,
+            created_at: local_date_today(),
+            updated_at: local_date_today(),
             context: None,
         };
 
@@ -1142,6 +1183,10 @@ mod tests {
                 title: "Test Project".to_string(),
                 notes: None,
                 status: status.clone(),
+                project: None,
+                start_date: None,
+                created_at: local_date_today(),
+                updated_at: local_date_today(),
                 context: None,
             };
 
@@ -1165,6 +1210,10 @@ mod tests {
             title: "Test Project".to_string(),
             notes: None,
             status: ProjectStatus::active,
+            project: None,
+            start_date: None,
+            created_at: local_date_today(),
+            updated_at: local_date_today(),
             context: None,
         };
 
@@ -1187,6 +1236,10 @@ mod tests {
             title: "Test Project".to_string(),
             notes: None,
             status: ProjectStatus::active,
+            project: None,
+            start_date: None,
+            created_at: local_date_today(),
+            updated_at: local_date_today(),
             context: None,
         };
 
@@ -1210,6 +1263,13 @@ mod tests {
         let context = Context {
             name: "Office".to_string(),
             notes: None,
+            title: None,
+            status: None,
+            project: None,
+            context: None,
+            start_date: None,
+            created_at: None,
+            updated_at: None,
         };
 
         assert_eq!(context.name, "Office");
@@ -1223,6 +1283,13 @@ mod tests {
         let context = Context {
             name: "Office".to_string(),
             notes: Some("Work environment with desk and computer".to_string()),
+            title: None,
+            status: None,
+            project: None,
+            context: None,
+            start_date: None,
+            created_at: None,
+            updated_at: None,
         };
 
         assert_eq!(context.name, "Office");
@@ -1240,6 +1307,13 @@ mod tests {
         let context = Context {
             name: "Office".to_string(),
             notes: None,
+            title: None,
+            status: None,
+            project: None,
+            context: None,
+            start_date: None,
+            created_at: None,
+            updated_at: None,
         };
 
         data.add_context(context.clone());
@@ -1258,6 +1332,13 @@ mod tests {
             let context = Context {
                 name: name.to_string(),
                 notes: None,
+                title: None,
+                status: None,
+                project: None,
+                context: None,
+                start_date: None,
+                created_at: None,
+                updated_at: None,
             };
             data.add_context(context);
         }
@@ -1303,6 +1384,10 @@ mod tests {
             title: "Test Project".to_string(),
             notes: Some("Test description".to_string()),
             status: ProjectStatus::active,
+            project: None,
+            start_date: None,
+            created_at: local_date_today(),
+            updated_at: local_date_today(),
             context: None,
         };
 
@@ -1326,6 +1411,13 @@ mod tests {
         let context = Context {
             name: "Office".to_string(),
             notes: None,
+            title: None,
+            status: None,
+            project: None,
+            context: None,
+            start_date: None,
+            created_at: None,
+            updated_at: None,
         };
 
         let serialized = toml::to_string(&context).unwrap();
@@ -1365,6 +1457,10 @@ mod tests {
             title: "Test Project".to_string(),
             notes: None,
             status: ProjectStatus::active,
+            project: None,
+            start_date: None,
+            created_at: local_date_today(),
+            updated_at: local_date_today(),
             context: None,
         };
         data.add_project(project);
@@ -1372,6 +1468,13 @@ mod tests {
         let context = Context {
             name: "Office".to_string(),
             notes: None,
+            title: None,
+            status: None,
+            project: None,
+            context: None,
+            start_date: None,
+            created_at: None,
+            updated_at: None,
         };
         data.add_context(context);
 
@@ -1566,6 +1669,10 @@ mod tests {
             title: "Test Project".to_string(),
             notes: None,
             status: ProjectStatus::on_hold,
+            project: None,
+            start_date: None,
+            created_at: local_date_today(),
+            updated_at: local_date_today(),
             context: None,
         };
 
@@ -1637,7 +1744,11 @@ mod tests {
                 ),
                 notes: None,
                 status: ProjectStatus::active,
+                project: None,
                 context: None,
+                start_date: None,
+                created_at: local_date_today(),
+                updated_at: local_date_today(),
             });
         }
 
@@ -1695,6 +1806,10 @@ mod tests {
             title: "Documentation Project".to_string(),
             notes: Some("Comprehensive project documentation update".to_string()),
             status: ProjectStatus::active,
+            project: None,
+            start_date: None,
+            created_at: local_date_today(),
+            updated_at: local_date_today(),
             context: None,
         });
 
@@ -1702,6 +1817,13 @@ mod tests {
         data.add_context(Context {
             name: "Office".to_string(),
             notes: Some("Work environment with desk and computer".to_string()),
+            title: None,
+            status: None,
+            project: None,
+            context: None,
+            start_date: None,
+            created_at: None,
+            updated_at: None,
         });
 
         // TOML出力を生成
@@ -1736,6 +1858,8 @@ updated_at = "2024-01-01"
 title = "Documentation Project"
 notes = "Comprehensive project documentation update"
 status = "active"
+created_at = "2025-10-24"
+updated_at = "2025-10-24"
 
 [contexts.Office]
 notes = "Work environment with desk and computer"
@@ -1852,6 +1976,10 @@ name = "Home"
             title: "Test Project".to_string(),
             notes: None,
             status: ProjectStatus::active,
+            project: None,
+            start_date: None,
+            created_at: local_date_today(),
+            updated_at: local_date_today(),
             context: None,
         });
 
@@ -1921,6 +2049,13 @@ name = "Home"
         data.add_context(Context {
             name: "Office".to_string(),
             notes: None,
+            title: None,
+            status: None,
+            project: None,
+            context: None,
+            start_date: None,
+            created_at: None,
+            updated_at: None,
         });
 
         let task = Task {
@@ -1991,12 +2126,23 @@ name = "Home"
             title: "Test Project".to_string(),
             notes: None,
             status: ProjectStatus::active,
+            project: None,
+            start_date: None,
+            created_at: local_date_today(),
+            updated_at: local_date_today(),
             context: None,
         });
 
         data.add_context(Context {
             name: "Office".to_string(),
             notes: None,
+            title: None,
+            status: None,
+            project: None,
+            context: None,
+            start_date: None,
+            created_at: None,
+            updated_at: None,
         });
 
         let task = Task {
@@ -2023,6 +2169,13 @@ name = "Home"
         data.add_context(Context {
             name: "Office".to_string(),
             notes: None,
+            title: None,
+            status: None,
+            project: None,
+            context: None,
+            start_date: None,
+            created_at: None,
+            updated_at: None,
         });
 
         let task = Task {
@@ -2051,6 +2204,10 @@ name = "Home"
             title: "Test Project".to_string(),
             notes: None,
             status: ProjectStatus::active,
+            project: None,
+            start_date: None,
+            created_at: local_date_today(),
+            updated_at: local_date_today(),
             context: None,
         });
 
@@ -2268,6 +2425,13 @@ name = "Home"
         data.add_context(Context {
             name: "Office".to_string(),
             notes: None,
+            title: None,
+            status: None,
+            project: None,
+            context: None,
+            start_date: None,
+            created_at: None,
+            updated_at: None,
         });
 
         let project = Project {
@@ -2275,6 +2439,10 @@ name = "Home"
             title: "Test Project".to_string(),
             notes: None,
             status: ProjectStatus::active,
+            project: None,
+            start_date: None,
+            created_at: local_date_today(),
+            updated_at: local_date_today(),
             context: Some("Office".to_string()),
         };
 
@@ -2292,6 +2460,10 @@ name = "Home"
             title: "Test Project".to_string(),
             notes: None,
             status: ProjectStatus::active,
+            project: None,
+            start_date: None,
+            created_at: local_date_today(),
+            updated_at: local_date_today(),
             context: Some("NonExistent".to_string()),
         };
 
@@ -2309,6 +2481,10 @@ name = "Home"
             title: "Test Project".to_string(),
             notes: None,
             status: ProjectStatus::active,
+            project: None,
+            start_date: None,
+            created_at: local_date_today(),
+            updated_at: local_date_today(),
             context: None,
         };
 
@@ -2324,6 +2500,13 @@ name = "Home"
         data.add_context(Context {
             name: "Office".to_string(),
             notes: Some("Work environment".to_string()),
+            title: None,
+            status: None,
+            project: None,
+            context: None,
+            start_date: None,
+            created_at: None,
+            updated_at: None,
         });
 
         let project = Project {
@@ -2331,6 +2514,10 @@ name = "Home"
             title: "Office Project".to_string(),
             notes: None,
             status: ProjectStatus::active,
+            project: None,
+            start_date: None,
+            created_at: local_date_today(),
+            updated_at: local_date_today(),
             context: Some("Office".to_string()),
         };
         data.add_project(project.clone());

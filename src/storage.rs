@@ -1,5 +1,6 @@
 use crate::git_ops::GitOps;
-use crate::gtd::GtdData;
+#[allow(unused_imports)]
+use crate::gtd::{GtdData, local_date_today};
 use anyhow::Result;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -278,6 +279,10 @@ mod tests {
             title: "Test Project".to_string(),
             notes: Some("Test description".to_string()),
             status: ProjectStatus::active,
+            project: None,
+            start_date: None,
+            created_at: local_date_today(),
+            updated_at: local_date_today(),
             context: None,
         };
         data.add_project(project.clone());
@@ -313,6 +318,13 @@ mod tests {
         let context = Context {
             name: "Office".to_string(),
             notes: None,
+            title: None,
+            status: None,
+            project: None,
+            context: None,
+            start_date: None,
+            created_at: None,
+            updated_at: None,
         };
         data.add_context(context.clone());
 
@@ -370,7 +382,11 @@ mod tests {
                 ),
                 notes: None,
                 status: ProjectStatus::active,
+                project: None,
                 context: None,
+                start_date: None,
+                created_at: local_date_today(),
+                updated_at: local_date_today(),
             };
             data.add_project(project);
         }
@@ -384,6 +400,13 @@ mod tests {
                     i
                 ),
                 notes: None,
+                title: None,
+                status: None,
+                project: None,
+                context: None,
+                start_date: None,
+                created_at: None,
+                updated_at: None,
             };
             data.add_context(context);
         }
@@ -1065,7 +1088,8 @@ mod tests {
 
 #[cfg(test)]
 mod test_line_ending_normalization {
-    use crate::gtd::GtdData;
+    #[allow(unused_imports)]
+use crate::gtd::{GtdData, local_date_today};
 
     // Test that CR normalization works for project descriptions
     #[test]

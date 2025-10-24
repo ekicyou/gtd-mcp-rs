@@ -16,7 +16,8 @@
 //! - **Version 1**: Projects stored as `Vec<Project>` (TOML: `[[projects]]`)
 //! - **Version 2**: Projects stored as `HashMap<String, Project>` (TOML: `[projects.id]`)
 
-use crate::gtd::{Context, Project, Task};
+#[allow(unused_imports)]
+use crate::gtd::{Context, Project, Task, local_date_today};
 use serde::Deserialize;
 use std::collections::HashMap;
 
@@ -202,6 +203,10 @@ mod tests {
                 title: "First Project".to_string(),
                 notes: Some("Notes 1".to_string()),
                 status: ProjectStatus::active,
+                project: None,
+                start_date: None,
+                created_at: local_date_today(),
+                updated_at: local_date_today(),
                 context: None,
             },
             Project {
@@ -209,6 +214,10 @@ mod tests {
                 title: "Second Project".to_string(),
                 notes: None,
                 status: ProjectStatus::on_hold,
+                project: None,
+                start_date: None,
+                created_at: local_date_today(),
+                updated_at: local_date_today(),
                 context: Some("Office".to_string()),
             },
         ];
@@ -254,6 +263,10 @@ mod tests {
                 title: "Test".to_string(),
                 notes: None,
                 status: ProjectStatus::active,
+                project: None,
+                start_date: None,
+                created_at: local_date_today(),
+                updated_at: local_date_today(),
                 context: None,
             },
         );

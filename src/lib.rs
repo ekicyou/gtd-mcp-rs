@@ -520,6 +520,10 @@ impl McpServer for GtdServerHandler {
             title: title.clone(),
             notes,
             status: ProjectStatus::active,
+            project: None,
+            start_date: None,
+            created_at: local_date_today(),
+            updated_at: local_date_today(),
             context,
         };
 
@@ -862,6 +866,13 @@ impl McpServer for GtdServerHandler {
         let context = gtd::Context {
             name: name.clone(),
             notes,
+            title: None,
+            status: None,
+            project: None,
+            context: None,
+            start_date: None,
+            created_at: None,
+            updated_at: None,
         };
 
         data.add_context(context);
@@ -924,6 +935,13 @@ impl McpServer for GtdServerHandler {
             } else {
                 data.contexts.get(&name).and_then(|c| c.notes.clone())
             },
+            title: None,
+            status: None,
+            project: None,
+            context: None,
+            start_date: None,
+            created_at: None,
+            updated_at: None,
         };
 
         data.contexts.insert(name.clone(), context);
@@ -1665,6 +1683,13 @@ mod tests {
             data.add_context(gtd::Context {
                 name: "Office".to_string(),
                 notes: None,
+                title: None,
+                status: None,
+                project: None,
+                context: None,
+                start_date: None,
+                created_at: None,
+                updated_at: None,
             });
             drop(data);
             let _ = handler.save_data();
@@ -2308,6 +2333,13 @@ mod tests {
             data.add_context(gtd::Context {
                 name: "Office".to_string(),
                 notes: None,
+                title: None,
+                status: None,
+                project: None,
+                context: None,
+                start_date: None,
+                created_at: None,
+                updated_at: None,
             });
             drop(data);
             let _ = handler.save_data();
