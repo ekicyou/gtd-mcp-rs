@@ -16,7 +16,7 @@ pub struct Task {
     pub title: String,
     /// Current status of the task (inbox, next_action, waiting_for, etc.)
     #[serde(skip, default = "default_task_status")]
-    pub status: TaskStatus,
+    pub status: NotaStatus,
     /// Optional project ID this task belongs to
     pub project: Option<String>,
     /// Optional context where this task can be performed (e.g., "@office", "@home")
@@ -32,18 +32,18 @@ pub struct Task {
 }
 
 /// Default task status for deserialization
-fn default_task_status() -> TaskStatus {
-    TaskStatus::inbox
+fn default_task_status() -> NotaStatus {
+    NotaStatus::inbox
 }
 
 /// Default context status for deserialization
-fn default_context_status() -> TaskStatus {
-    TaskStatus::context
+fn default_context_status() -> NotaStatus {
+    NotaStatus::context
 }
 
 /// Check if status is context (for skipping serialization)
-fn is_context_status(status: &TaskStatus) -> bool {
-    *status == TaskStatus::context
+fn is_context_status(status: &NotaStatus) -> bool {
+    *status == NotaStatus::context
 }
 
 /// Get the current date in local timezone
@@ -57,14 +57,14 @@ pub fn local_date_today() -> NaiveDate {
 /// Uses snake_case naming to match TOML serialization format.
 #[allow(non_camel_case_types)]
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum TaskStatus {
-    /// Tasks that have not been processed yet
+pub enum NotaStatus {
+    /// Unprocessed items
     inbox,
-    /// Tasks that are ready to be done immediately
+    /// Tasks to do now
     next_action,
     /// Tasks waiting for someone else or an external event
     waiting_for,
-    /// Tasks to be done later (not immediately actionable)
+    /// Tasks to do later (not immediately actionable)
     later,
     /// Tasks scheduled for a specific date
     calendar,
@@ -72,29 +72,29 @@ pub enum TaskStatus {
     someday,
     /// Completed tasks
     done,
-    /// Deleted or discarded tasks
-    trash,
     /// Context nota (represents a location, tool, or situation)
     context,
     /// Project nota (represents a multi-step outcome)
     project,
+    /// Deleted or discarded items
+    trash,
 }
 
-impl FromStr for TaskStatus {
+impl FromStr for NotaStatus {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
-            "inbox" => Ok(TaskStatus::inbox),
-            "next_action" => Ok(TaskStatus::next_action),
-            "waiting_for" => Ok(TaskStatus::waiting_for),
-            "someday" => Ok(TaskStatus::someday),
-            "later" => Ok(TaskStatus::later),
-            "calendar" => Ok(TaskStatus::calendar),
-            "done" => Ok(TaskStatus::done),
-            "trash" => Ok(TaskStatus::trash),
-            "context" => Ok(TaskStatus::context),
-            "project" => Ok(TaskStatus::project),
+            "inbox" => Ok(NotaStatus::inbox),
+            "next_action" => Ok(NotaStatus::next_action),
+            "waiting_for" => Ok(NotaStatus::waiting_for),
+            "someday" => Ok(NotaStatus::someday),
+            "later" => Ok(NotaStatus::later),
+            "calendar" => Ok(NotaStatus::calendar),
+            "done" => Ok(NotaStatus::done),
+            "trash" => Ok(NotaStatus::trash),
+            "context" => Ok(NotaStatus::context),
+            "project" => Ok(NotaStatus::project),
             _ => Err(format!(
                 "Invalid status '{}'. Valid options are: inbox, next_action, waiting_for, someday, later, calendar, done, trash, context, project",
                 s
@@ -182,9 +182,12 @@ pub struct Context {
     pub title: Option<String>,
     /// Optional notes about the context
     pub notes: Option<String>,
-    /// Status (always TaskStatus::context for context notas)
-    #[serde(default = "default_context_status", skip_serializing_if = "is_context_status")]
-    pub status: TaskStatus,
+    /// Status (always NotaStatus::context for context notas)
+    #[serde(
+        default = "default_context_status",
+        skip_serializing_if = "is_context_status"
+    )]
+    pub status: NotaStatus,
     /// Parent project (None for contexts)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub project: Option<String>,
@@ -219,7 +222,7 @@ pub struct Nota {
     /// Title describing the nota
     pub title: String,
     /// Current status (inbox, next_action, waiting_for, later, calendar, someday, done, trash, context, project)
-    pub status: TaskStatus,
+    pub status: NotaStatus,
     /// Optional parent project ID
     pub project: Option<String>,
     /// Optional context where this nota applies
@@ -256,7 +259,7 @@ impl Nota {
         Self {
             id: project.id,
             title: project.title,
-            status: TaskStatus::project,
+            status: NotaStatus::project,
             project: project.project,
             context: project.context,
             notes: project.notes,
@@ -271,7 +274,7 @@ impl Nota {
         Self {
             id: context.name.clone(),
             title: context.title.unwrap_or(context.name),
-            status: TaskStatus::context,
+            status: NotaStatus::context,
             project: context.project,
             context: context.context,
             notes: context.notes,
@@ -284,7 +287,7 @@ impl Nota {
     /// Convert this Nota to a Task (if status is task-related)
     pub fn to_task(&self) -> Option<Task> {
         match self.status {
-            TaskStatus::context | TaskStatus::project => None,
+            NotaStatus::context | NotaStatus::project => None,
             _ => Some(Task {
                 id: self.id.clone(),
                 title: self.title.clone(),
@@ -301,7 +304,7 @@ impl Nota {
 
     /// Convert this Nota to a Project (if status is project)
     pub fn to_project(&self) -> Option<Project> {
-        if self.status == TaskStatus::project {
+        if self.status == NotaStatus::project {
             Some(Project {
                 id: self.id.clone(),
                 title: self.title.clone(),
@@ -320,12 +323,12 @@ impl Nota {
 
     /// Convert this Nota to a Context (if status is context)
     pub fn to_context(&self) -> Option<Context> {
-        if self.status == TaskStatus::context {
+        if self.status == NotaStatus::context {
             Some(Context {
                 name: self.id.clone(),
                 title: Some(self.title.clone()),
                 notes: self.notes.clone(),
-                status: TaskStatus::context,
+                status: NotaStatus::context,
                 project: self.project.clone(),
                 context: self.context.clone(),
                 start_date: self.start_date,
@@ -339,17 +342,17 @@ impl Nota {
 
     /// Check if this nota is a task
     pub fn is_task(&self) -> bool {
-        !matches!(self.status, TaskStatus::context | TaskStatus::project)
+        !matches!(self.status, NotaStatus::context | NotaStatus::project)
     }
 
     /// Check if this nota is a project
     pub fn is_project(&self) -> bool {
-        self.status == TaskStatus::project
+        self.status == NotaStatus::project
     }
 
     /// Check if this nota is a context
     pub fn is_context(&self) -> bool {
-        self.status == TaskStatus::context
+        self.status == NotaStatus::context
     }
 }
 
@@ -405,7 +408,7 @@ pub struct GtdData {
     pub contexts: HashMap<String, Context>,
     /// Internal map of all tasks by ID for duplicate checking (not serialized)
     #[serde(skip)]
-    pub(crate) task_map: HashMap<String, TaskStatus>,
+    pub(crate) task_map: HashMap<String, NotaStatus>,
     /// Counter for generating unique task IDs
     #[serde(default, skip_serializing_if = "is_zero")]
     pub task_counter: u32,
@@ -482,55 +485,55 @@ impl<'de> Deserialize<'de> for GtdData {
 
         // Set the status field for each task based on which collection it's in
         for task in &mut helper.inbox {
-            task.status = TaskStatus::inbox;
+            task.status = NotaStatus::inbox;
         }
         for task in &mut helper.next_action {
-            task.status = TaskStatus::next_action;
+            task.status = NotaStatus::next_action;
         }
         for task in &mut helper.waiting_for {
-            task.status = TaskStatus::waiting_for;
+            task.status = NotaStatus::waiting_for;
         }
         for task in &mut helper.later {
-            task.status = TaskStatus::later;
+            task.status = NotaStatus::later;
         }
         for task in &mut helper.calendar {
-            task.status = TaskStatus::calendar;
+            task.status = NotaStatus::calendar;
         }
         for task in &mut helper.someday {
-            task.status = TaskStatus::someday;
+            task.status = NotaStatus::someday;
         }
         for task in &mut helper.done {
-            task.status = TaskStatus::done;
+            task.status = NotaStatus::done;
         }
         for task in &mut helper.trash {
-            task.status = TaskStatus::trash;
+            task.status = NotaStatus::trash;
         }
 
         // Build task_map from all tasks for duplicate checking
         let mut task_map = HashMap::new();
         for task in &helper.inbox {
-            task_map.insert(task.id.clone(), TaskStatus::inbox);
+            task_map.insert(task.id.clone(), NotaStatus::inbox);
         }
         for task in &helper.next_action {
-            task_map.insert(task.id.clone(), TaskStatus::next_action);
+            task_map.insert(task.id.clone(), NotaStatus::next_action);
         }
         for task in &helper.waiting_for {
-            task_map.insert(task.id.clone(), TaskStatus::waiting_for);
+            task_map.insert(task.id.clone(), NotaStatus::waiting_for);
         }
         for task in &helper.later {
-            task_map.insert(task.id.clone(), TaskStatus::later);
+            task_map.insert(task.id.clone(), NotaStatus::later);
         }
         for task in &helper.calendar {
-            task_map.insert(task.id.clone(), TaskStatus::calendar);
+            task_map.insert(task.id.clone(), NotaStatus::calendar);
         }
         for task in &helper.someday {
-            task_map.insert(task.id.clone(), TaskStatus::someday);
+            task_map.insert(task.id.clone(), NotaStatus::someday);
         }
         for task in &helper.done {
-            task_map.insert(task.id.clone(), TaskStatus::done);
+            task_map.insert(task.id.clone(), NotaStatus::done);
         }
         for task in &helper.trash {
-            task_map.insert(task.id.clone(), TaskStatus::trash);
+            task_map.insert(task.id.clone(), NotaStatus::trash);
         }
 
         Ok(GtdData {
@@ -566,34 +569,34 @@ impl GtdData {
 
     /// Get a reference to the task list for the given status
     #[allow(dead_code)]
-    fn get_task_list(&self, status: &TaskStatus) -> &Vec<Task> {
+    fn get_task_list(&self, status: &NotaStatus) -> &Vec<Task> {
         match status {
-            TaskStatus::inbox => &self.inbox,
-            TaskStatus::next_action => &self.next_action,
-            TaskStatus::waiting_for => &self.waiting_for,
-            TaskStatus::someday => &self.someday,
-            TaskStatus::later => &self.later,
-            TaskStatus::done => &self.done,
-            TaskStatus::trash => &self.trash,
-            TaskStatus::calendar => &self.calendar,
-            TaskStatus::context | TaskStatus::project => {
+            NotaStatus::inbox => &self.inbox,
+            NotaStatus::next_action => &self.next_action,
+            NotaStatus::waiting_for => &self.waiting_for,
+            NotaStatus::someday => &self.someday,
+            NotaStatus::later => &self.later,
+            NotaStatus::done => &self.done,
+            NotaStatus::trash => &self.trash,
+            NotaStatus::calendar => &self.calendar,
+            NotaStatus::context | NotaStatus::project => {
                 panic!("context and project statuses are not task statuses")
             }
         }
     }
 
     /// Get a mutable reference to the task list for the given status
-    fn get_task_list_mut(&mut self, status: &TaskStatus) -> &mut Vec<Task> {
+    fn get_task_list_mut(&mut self, status: &NotaStatus) -> &mut Vec<Task> {
         match status {
-            TaskStatus::inbox => &mut self.inbox,
-            TaskStatus::next_action => &mut self.next_action,
-            TaskStatus::waiting_for => &mut self.waiting_for,
-            TaskStatus::someday => &mut self.someday,
-            TaskStatus::later => &mut self.later,
-            TaskStatus::done => &mut self.done,
-            TaskStatus::trash => &mut self.trash,
-            TaskStatus::calendar => &mut self.calendar,
-            TaskStatus::context | TaskStatus::project => {
+            NotaStatus::inbox => &mut self.inbox,
+            NotaStatus::next_action => &mut self.next_action,
+            NotaStatus::waiting_for => &mut self.waiting_for,
+            NotaStatus::someday => &mut self.someday,
+            NotaStatus::later => &mut self.later,
+            NotaStatus::done => &mut self.done,
+            NotaStatus::trash => &mut self.trash,
+            NotaStatus::calendar => &mut self.calendar,
+            NotaStatus::context | NotaStatus::project => {
                 panic!("context and project statuses are not task statuses")
             }
         }
@@ -737,7 +740,7 @@ impl GtdData {
     ///
     /// # Returns
     /// `Some(())` if the task was found and moved, `None` otherwise
-    pub fn move_status(&mut self, id: &str, new_status: TaskStatus) -> Option<()> {
+    pub fn move_status(&mut self, id: &str, new_status: NotaStatus) -> Option<()> {
         // Remove task from its current container
         let mut task = self.remove_task(id)?;
 
@@ -886,7 +889,7 @@ mod tests {
         let task = Task {
             id: "task-1".to_string(),
             title: "Test Task".to_string(),
-            status: TaskStatus::inbox,
+            status: NotaStatus::inbox,
             project: None,
             context: None,
             notes: None,
@@ -911,7 +914,7 @@ mod tests {
             let task = Task {
                 id: format!("task-{}", i),
                 title: format!("Test Task {}", i),
-                status: TaskStatus::inbox,
+                status: NotaStatus::inbox,
                 project: None,
                 context: None,
                 notes: None,
@@ -935,7 +938,7 @@ mod tests {
         let task = Task {
             id: task_id.clone(),
             title: "Test Task".to_string(),
-            status: TaskStatus::inbox,
+            status: NotaStatus::inbox,
             project: None,
             context: None,
             notes: None,
@@ -948,12 +951,12 @@ mod tests {
 
         // Update status
         if let Some(task) = data.find_task_by_id_mut(&task_id) {
-            task.status = TaskStatus::next_action;
+            task.status = NotaStatus::next_action;
         }
 
         assert!(matches!(
             data.find_task_by_id(&task_id).unwrap().status,
-            TaskStatus::next_action
+            NotaStatus::next_action
         ));
     }
 
@@ -966,7 +969,7 @@ mod tests {
         let task = Task {
             id: task_id.clone(),
             title: "Test Task".to_string(),
-            status: TaskStatus::inbox,
+            status: NotaStatus::inbox,
             project: None,
             context: None,
             notes: None,
@@ -993,7 +996,7 @@ mod tests {
         let task = Task {
             id: task_id.clone(),
             title: "Test Task".to_string(),
-            status: TaskStatus::inbox,
+            status: NotaStatus::inbox,
             project: None,
             context: None,
             notes: None,
@@ -1007,7 +1010,7 @@ mod tests {
         assert_eq!(data.trash.len(), 0);
 
         // Move task to trash
-        let result = data.move_status(&task_id, TaskStatus::trash);
+        let result = data.move_status(&task_id, NotaStatus::trash);
         assert!(result.is_some());
 
         // Verify task was moved
@@ -1017,7 +1020,7 @@ mod tests {
 
         // Verify task status was updated
         let moved_task = data.find_task_by_id(&task_id).unwrap();
-        assert!(matches!(moved_task.status, TaskStatus::trash));
+        assert!(matches!(moved_task.status, NotaStatus::trash));
     }
 
     // ステータス移動テスト - next_action から done への移動
@@ -1029,7 +1032,7 @@ mod tests {
         let task = Task {
             id: task_id.clone(),
             title: "Test Task".to_string(),
-            status: TaskStatus::next_action,
+            status: NotaStatus::next_action,
             project: None,
             context: None,
             notes: None,
@@ -1043,7 +1046,7 @@ mod tests {
         assert_eq!(data.done.len(), 0);
 
         // Move task to done
-        let result = data.move_status(&task_id, TaskStatus::done);
+        let result = data.move_status(&task_id, NotaStatus::done);
         assert!(result.is_some());
 
         // Verify task was moved
@@ -1053,7 +1056,7 @@ mod tests {
 
         // Verify task status was updated
         let moved_task = data.find_task_by_id(&task_id).unwrap();
-        assert!(matches!(moved_task.status, TaskStatus::done));
+        assert!(matches!(moved_task.status, NotaStatus::done));
     }
 
     // ステータス移動テスト - 複数のステータス間の移動
@@ -1065,7 +1068,7 @@ mod tests {
         let task = Task {
             id: task_id.clone(),
             title: "Test Task".to_string(),
-            status: TaskStatus::inbox,
+            status: NotaStatus::inbox,
             project: None,
             context: None,
             notes: None,
@@ -1077,39 +1080,39 @@ mod tests {
         data.add_task(task);
 
         // inbox -> next_action
-        data.move_status(&task_id, TaskStatus::next_action);
+        data.move_status(&task_id, NotaStatus::next_action);
         assert_eq!(data.inbox.len(), 0);
         assert_eq!(data.next_action.len(), 1);
         assert!(matches!(
             data.find_task_by_id(&task_id).unwrap().status,
-            TaskStatus::next_action
+            NotaStatus::next_action
         ));
 
         // next_action -> waiting_for
-        data.move_status(&task_id, TaskStatus::waiting_for);
+        data.move_status(&task_id, NotaStatus::waiting_for);
         assert_eq!(data.next_action.len(), 0);
         assert_eq!(data.waiting_for.len(), 1);
         assert!(matches!(
             data.find_task_by_id(&task_id).unwrap().status,
-            TaskStatus::waiting_for
+            NotaStatus::waiting_for
         ));
 
         // waiting_for -> done
-        data.move_status(&task_id, TaskStatus::done);
+        data.move_status(&task_id, NotaStatus::done);
         assert_eq!(data.waiting_for.len(), 0);
         assert_eq!(data.done.len(), 1);
         assert!(matches!(
             data.find_task_by_id(&task_id).unwrap().status,
-            TaskStatus::done
+            NotaStatus::done
         ));
 
         // done -> trash
-        data.move_status(&task_id, TaskStatus::trash);
+        data.move_status(&task_id, NotaStatus::trash);
         assert_eq!(data.done.len(), 0);
         assert_eq!(data.trash.len(), 1);
         assert!(matches!(
             data.find_task_by_id(&task_id).unwrap().status,
-            TaskStatus::trash
+            NotaStatus::trash
         ));
     }
 
@@ -1123,7 +1126,7 @@ mod tests {
         let task = Task {
             id: task_id.clone(),
             title: "Future Task".to_string(),
-            status: TaskStatus::inbox,
+            status: NotaStatus::inbox,
             project: None,
             context: None,
             notes: None,
@@ -1136,13 +1139,13 @@ mod tests {
         assert_eq!(data.inbox.len(), 1);
 
         // inbox -> calendar
-        let result = data.move_status(&task_id, TaskStatus::calendar);
+        let result = data.move_status(&task_id, NotaStatus::calendar);
         assert!(result.is_some());
         assert_eq!(data.inbox.len(), 0);
         assert_eq!(data.calendar.len(), 1);
 
         let moved_task = data.find_task_by_id(&task_id).unwrap();
-        assert!(matches!(moved_task.status, TaskStatus::calendar));
+        assert!(matches!(moved_task.status, NotaStatus::calendar));
         assert_eq!(moved_task.start_date.unwrap(), date);
     }
 
@@ -1151,7 +1154,7 @@ mod tests {
     #[test]
     fn test_gtd_data_move_status_nonexistent_task() {
         let mut data = GtdData::new();
-        let result = data.move_status("nonexistent-id", TaskStatus::trash);
+        let result = data.move_status("nonexistent-id", NotaStatus::trash);
         assert!(result.is_none());
     }
 
@@ -1164,7 +1167,7 @@ mod tests {
         let task = Task {
             id: task_id.clone(),
             title: "Important Task".to_string(),
-            status: TaskStatus::inbox,
+            status: NotaStatus::inbox,
             project: Some("project-1".to_string()),
             context: Some("Office".to_string()),
             notes: Some("Important notes".to_string()),
@@ -1176,7 +1179,7 @@ mod tests {
         data.add_task(task);
 
         // Move task to next_action
-        data.move_status(&task_id, TaskStatus::next_action);
+        data.move_status(&task_id, NotaStatus::next_action);
 
         // Verify all properties are preserved
         let moved_task = data.find_task_by_id(&task_id).unwrap();
@@ -1193,7 +1196,7 @@ mod tests {
             moved_task.updated_at,
             NaiveDate::from_ymd_opt(2024, 1, 1).unwrap()
         );
-        assert!(matches!(moved_task.status, TaskStatus::next_action));
+        assert!(matches!(moved_task.status, NotaStatus::next_action));
     }
 
     // プロジェクトとコンテキスト付きタスクのテスト
@@ -1203,7 +1206,7 @@ mod tests {
         let task = Task {
             id: "task-1".to_string(),
             title: "Test Task".to_string(),
-            status: TaskStatus::inbox,
+            status: NotaStatus::inbox,
             project: Some("project-1".to_string()),
             context: Some("context-1".to_string()),
             notes: Some("Test notes".to_string()),
@@ -1225,7 +1228,7 @@ mod tests {
         let task = Task {
             id: "task-1".to_string(),
             title: "Test Task".to_string(),
-            status: TaskStatus::inbox,
+            status: NotaStatus::inbox,
             project: None,
             context: None,
             notes: None,
@@ -1245,7 +1248,7 @@ mod tests {
         let task = Task {
             id: "task-1".to_string(),
             title: "Christmas Task".to_string(),
-            status: TaskStatus::calendar,
+            status: NotaStatus::calendar,
             project: None,
             context: None,
             notes: None,
@@ -1254,7 +1257,7 @@ mod tests {
             updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
         };
 
-        assert!(matches!(task.status, TaskStatus::calendar));
+        assert!(matches!(task.status, NotaStatus::calendar));
         assert_eq!(task.start_date.unwrap(), date);
     }
 
@@ -1263,14 +1266,14 @@ mod tests {
     #[test]
     fn test_task_status_variants() {
         let statuses = vec![
-            TaskStatus::inbox,
-            TaskStatus::next_action,
-            TaskStatus::waiting_for,
-            TaskStatus::someday,
-            TaskStatus::later,
-            TaskStatus::done,
-            TaskStatus::trash,
-            TaskStatus::calendar,
+            NotaStatus::inbox,
+            NotaStatus::next_action,
+            NotaStatus::waiting_for,
+            NotaStatus::someday,
+            NotaStatus::later,
+            NotaStatus::done,
+            NotaStatus::trash,
+            NotaStatus::calendar,
         ];
 
         for status in statuses {
@@ -1287,15 +1290,15 @@ mod tests {
             };
 
             match status {
-                TaskStatus::inbox => assert!(matches!(task.status, TaskStatus::inbox)),
-                TaskStatus::next_action => assert!(matches!(task.status, TaskStatus::next_action)),
-                TaskStatus::waiting_for => assert!(matches!(task.status, TaskStatus::waiting_for)),
-                TaskStatus::someday => assert!(matches!(task.status, TaskStatus::someday)),
-                TaskStatus::later => assert!(matches!(task.status, TaskStatus::later)),
-                TaskStatus::done => assert!(matches!(task.status, TaskStatus::done)),
-                TaskStatus::trash => assert!(matches!(task.status, TaskStatus::trash)),
-                TaskStatus::calendar => assert!(matches!(task.status, TaskStatus::calendar)),
-                TaskStatus::context | TaskStatus::project => {
+                NotaStatus::inbox => assert!(matches!(task.status, NotaStatus::inbox)),
+                NotaStatus::next_action => assert!(matches!(task.status, NotaStatus::next_action)),
+                NotaStatus::waiting_for => assert!(matches!(task.status, NotaStatus::waiting_for)),
+                NotaStatus::someday => assert!(matches!(task.status, NotaStatus::someday)),
+                NotaStatus::later => assert!(matches!(task.status, NotaStatus::later)),
+                NotaStatus::done => assert!(matches!(task.status, NotaStatus::done)),
+                NotaStatus::trash => assert!(matches!(task.status, NotaStatus::trash)),
+                NotaStatus::calendar => assert!(matches!(task.status, NotaStatus::calendar)),
+                NotaStatus::context | NotaStatus::project => {
                     panic!("context and project are not task statuses")
                 }
             }
@@ -1440,7 +1443,7 @@ mod tests {
             name: "Office".to_string(),
             notes: None,
             title: None,
-            status: TaskStatus::context,
+            status: NotaStatus::context,
             project: None,
             context: None,
             start_date: None,
@@ -1460,7 +1463,7 @@ mod tests {
             name: "Office".to_string(),
             notes: Some("Work environment with desk and computer".to_string()),
             title: None,
-            status: TaskStatus::context,
+            status: NotaStatus::context,
             project: None,
             context: None,
             start_date: None,
@@ -1484,7 +1487,7 @@ mod tests {
             name: "Office".to_string(),
             notes: None,
             title: None,
-            status: TaskStatus::context,
+            status: NotaStatus::context,
             project: None,
             context: None,
             start_date: None,
@@ -1509,7 +1512,7 @@ mod tests {
                 name: name.to_string(),
                 notes: None,
                 title: None,
-                status: TaskStatus::context,
+                status: NotaStatus::context,
                 project: None,
                 context: None,
                 start_date: None,
@@ -1529,7 +1532,7 @@ mod tests {
         let task = Task {
             id: "task-1".to_string(),
             title: "Test Task".to_string(),
-            status: TaskStatus::inbox,
+            status: NotaStatus::inbox,
             project: Some("project-1".to_string()),
             context: Some("context-1".to_string()),
             notes: Some("Test notes".to_string()),
@@ -1588,7 +1591,7 @@ mod tests {
             name: "Office".to_string(),
             notes: None,
             title: None,
-            status: TaskStatus::context,
+            status: NotaStatus::context,
             project: None,
             context: None,
             start_date: None,
@@ -1618,7 +1621,7 @@ mod tests {
         let task = Task {
             id: "task-1".to_string(),
             title: "Test Task".to_string(),
-            status: TaskStatus::inbox,
+            status: NotaStatus::inbox,
             project: None,
             context: None,
             notes: None,
@@ -1645,7 +1648,7 @@ mod tests {
             name: "Office".to_string(),
             notes: None,
             title: None,
-            status: TaskStatus::context,
+            status: NotaStatus::context,
             project: None,
             context: None,
             start_date: None,
@@ -1669,14 +1672,14 @@ mod tests {
         let mut data = GtdData::new();
 
         let statuses = [
-            TaskStatus::inbox,
-            TaskStatus::next_action,
-            TaskStatus::waiting_for,
-            TaskStatus::someday,
-            TaskStatus::later,
-            TaskStatus::done,
-            TaskStatus::trash,
-            TaskStatus::calendar,
+            NotaStatus::inbox,
+            NotaStatus::next_action,
+            NotaStatus::waiting_for,
+            NotaStatus::someday,
+            NotaStatus::later,
+            NotaStatus::done,
+            NotaStatus::trash,
+            NotaStatus::calendar,
         ];
 
         for (i, status) in statuses.iter().enumerate() {
@@ -1714,7 +1717,7 @@ mod tests {
             let task = Task {
                 id: format!("task-{}", i),
                 title: format!("Task {}", i),
-                status: TaskStatus::inbox,
+                status: NotaStatus::inbox,
                 project: if i % 2 == 0 {
                     Some("project-1".to_string())
                 } else {
@@ -1747,7 +1750,7 @@ mod tests {
             let task = Task {
                 id: format!("task-{}", i),
                 title: format!("Task {}", i),
-                status: TaskStatus::inbox,
+                status: NotaStatus::inbox,
                 project: None,
                 context: if i % 2 == 0 {
                     Some("context-1".to_string())
@@ -1800,7 +1803,7 @@ mod tests {
         let task1 = Task {
             id: "task-1".to_string(),
             title: "Test Task".to_string(),
-            status: TaskStatus::inbox,
+            status: NotaStatus::inbox,
             project: Some("project-1".to_string()),
             context: Some("context-1".to_string()),
             notes: Some("Test notes".to_string()),
@@ -1825,7 +1828,7 @@ mod tests {
         data.add_task(Task {
             id: "task-1".to_string(),
             title: "Test Task".to_string(),
-            status: TaskStatus::next_action,
+            status: NotaStatus::next_action,
             project: None,
             context: None,
             notes: None,
@@ -1870,7 +1873,7 @@ mod tests {
             let task = Task {
                 id: format!("task-{}", i),
                 title: format!("Task {}", i),
-                status: TaskStatus::inbox,
+                status: NotaStatus::inbox,
                 project: None,
                 context: None,
                 notes: None,
@@ -1900,7 +1903,7 @@ mod tests {
             data.add_task(Task {
                 id: format!("task-{}", i),
                 title: format!("Task {}", i),
-                status: TaskStatus::inbox,
+                status: NotaStatus::inbox,
                 project: None,
                 context: None,
                 notes: None,
@@ -1954,7 +1957,7 @@ mod tests {
         data.add_task(Task {
             id: "task-001".to_string(),
             title: "Complete project documentation".to_string(),
-            status: TaskStatus::next_action,
+            status: NotaStatus::next_action,
             project: Some("project-001".to_string()),
             context: Some("Office".to_string()),
             notes: Some("Review all sections and update examples".to_string()),
@@ -1967,7 +1970,7 @@ mod tests {
         data.add_task(Task {
             id: "task-002".to_string(),
             title: "Quick task".to_string(),
-            status: TaskStatus::inbox,
+            status: NotaStatus::inbox,
             project: None,
             context: None,
             notes: None,
@@ -1994,7 +1997,7 @@ mod tests {
             name: "Office".to_string(),
             notes: Some("Work environment with desk and computer".to_string()),
             title: None,
-            status: TaskStatus::context,
+            status: NotaStatus::context,
             project: None,
             context: None,
             start_date: None,
@@ -2057,12 +2060,12 @@ notes = "Work environment with desk and computer"
         let task_inbox = &deserialized.inbox[0];
         assert_eq!(task_inbox.id, "task-002");
         assert_eq!(task_inbox.title, "Quick task");
-        assert!(matches!(task_inbox.status, TaskStatus::inbox));
+        assert!(matches!(task_inbox.status, NotaStatus::inbox));
 
         let task1 = &deserialized.next_action[0];
         assert_eq!(task1.id, "task-001");
         assert_eq!(task1.title, "Complete project documentation");
-        assert!(matches!(task1.status, TaskStatus::next_action));
+        assert!(matches!(task1.status, NotaStatus::next_action));
         assert_eq!(task1.project, Some("project-001".to_string()));
         assert_eq!(task1.context, Some("Office".to_string()));
         assert_eq!(
@@ -2162,7 +2165,7 @@ name = "Home"
         let task = Task {
             id: "task-1".to_string(),
             title: "Test Task".to_string(),
-            status: TaskStatus::inbox,
+            status: NotaStatus::inbox,
             project: Some("project-1".to_string()),
             context: None,
             notes: None,
@@ -2183,7 +2186,7 @@ name = "Home"
         let task = Task {
             id: "task-1".to_string(),
             title: "Test Task".to_string(),
-            status: TaskStatus::inbox,
+            status: NotaStatus::inbox,
             project: Some("non-existent-project".to_string()),
             context: None,
             notes: None,
@@ -2204,7 +2207,7 @@ name = "Home"
         let task = Task {
             id: "task-1".to_string(),
             title: "Test Task".to_string(),
-            status: TaskStatus::inbox,
+            status: NotaStatus::inbox,
             project: None,
             context: None,
             notes: None,
@@ -2226,7 +2229,7 @@ name = "Home"
             name: "Office".to_string(),
             notes: None,
             title: None,
-            status: TaskStatus::context,
+            status: NotaStatus::context,
             project: None,
             context: None,
             start_date: None,
@@ -2237,7 +2240,7 @@ name = "Home"
         let task = Task {
             id: "task-1".to_string(),
             title: "Test Task".to_string(),
-            status: TaskStatus::inbox,
+            status: NotaStatus::inbox,
             project: None,
             context: Some("Office".to_string()),
             notes: None,
@@ -2258,7 +2261,7 @@ name = "Home"
         let task = Task {
             id: "task-1".to_string(),
             title: "Test Task".to_string(),
-            status: TaskStatus::inbox,
+            status: NotaStatus::inbox,
             project: None,
             context: Some("NonExistent".to_string()),
             notes: None,
@@ -2279,7 +2282,7 @@ name = "Home"
         let task = Task {
             id: "task-1".to_string(),
             title: "Test Task".to_string(),
-            status: TaskStatus::inbox,
+            status: NotaStatus::inbox,
             project: None,
             context: None,
             notes: None,
@@ -2313,7 +2316,7 @@ name = "Home"
             name: "Office".to_string(),
             notes: None,
             title: None,
-            status: TaskStatus::context,
+            status: NotaStatus::context,
             project: None,
             context: None,
             start_date: None,
@@ -2324,7 +2327,7 @@ name = "Home"
         let task = Task {
             id: "task-1".to_string(),
             title: "Test Task".to_string(),
-            status: TaskStatus::inbox,
+            status: NotaStatus::inbox,
             project: Some("project-1".to_string()),
             context: Some("Office".to_string()),
             notes: None,
@@ -2346,7 +2349,7 @@ name = "Home"
             name: "Office".to_string(),
             notes: None,
             title: None,
-            status: TaskStatus::context,
+            status: NotaStatus::context,
             project: None,
             context: None,
             start_date: None,
@@ -2357,7 +2360,7 @@ name = "Home"
         let task = Task {
             id: "task-1".to_string(),
             title: "Test Task".to_string(),
-            status: TaskStatus::inbox,
+            status: NotaStatus::inbox,
             project: Some("non-existent-project".to_string()),
             context: Some("Office".to_string()),
             notes: None,
@@ -2390,7 +2393,7 @@ name = "Home"
         let task = Task {
             id: "task-1".to_string(),
             title: "Test Task".to_string(),
-            status: TaskStatus::inbox,
+            status: NotaStatus::inbox,
             project: Some("project-1".to_string()),
             context: Some("NonExistent".to_string()),
             notes: None,
@@ -2411,7 +2414,7 @@ name = "Home"
         let task = Task {
             id: "task-1".to_string(),
             title: "Test Task".to_string(),
-            status: TaskStatus::inbox,
+            status: NotaStatus::inbox,
             project: Some("non-existent-project".to_string()),
             context: Some("NonExistent".to_string()),
             notes: None,
@@ -2431,7 +2434,7 @@ name = "Home"
         let task = Task {
             id: "task-1".to_string(),
             title: "Test Task".to_string(),
-            status: TaskStatus::inbox,
+            status: NotaStatus::inbox,
             project: None,
             context: None,
             notes: None,
@@ -2455,7 +2458,7 @@ name = "Home"
         let mut task = Task {
             id: "task-1".to_string(),
             title: "Test Task".to_string(),
-            status: TaskStatus::inbox,
+            status: NotaStatus::inbox,
             project: None,
             context: None,
             notes: None,
@@ -2465,7 +2468,7 @@ name = "Home"
         };
 
         // タスクを更新
-        task.status = TaskStatus::next_action;
+        task.status = NotaStatus::next_action;
         task.updated_at = updated_date;
 
         assert_eq!(task.created_at, created_date);
@@ -2484,7 +2487,7 @@ name = "Home"
         let task = Task {
             id: task_id.clone(),
             title: "Test Task".to_string(),
-            status: TaskStatus::inbox,
+            status: NotaStatus::inbox,
             project: None,
             context: None,
             notes: None,
@@ -2497,7 +2500,7 @@ name = "Home"
 
         // タスクのステータスを更新
         if let Some(task) = data.find_task_by_id_mut(&task_id) {
-            task.status = TaskStatus::next_action;
+            task.status = NotaStatus::next_action;
             task.updated_at = NaiveDate::from_ymd_opt(2024, 3, 20).unwrap();
         }
 
@@ -2514,7 +2517,7 @@ name = "Home"
         let task = Task {
             id: "task-1".to_string(),
             title: "Test Task".to_string(),
-            status: TaskStatus::inbox,
+            status: NotaStatus::inbox,
             project: None,
             context: None,
             notes: None,
@@ -2602,7 +2605,7 @@ name = "Home"
             name: "Office".to_string(),
             notes: None,
             title: None,
-            status: TaskStatus::context,
+            status: NotaStatus::context,
             project: None,
             context: None,
             start_date: None,
@@ -2677,7 +2680,7 @@ name = "Home"
             name: "Office".to_string(),
             notes: Some("Work environment".to_string()),
             title: None,
-            status: TaskStatus::context,
+            status: NotaStatus::context,
             project: None,
             context: None,
             start_date: None,
@@ -2701,7 +2704,7 @@ name = "Home"
         let task = Task {
             id: "task-1".to_string(),
             title: "Office Task".to_string(),
-            status: TaskStatus::next_action,
+            status: NotaStatus::next_action,
             project: Some("project-1".to_string()),
             context: Some("Office".to_string()),
             notes: None,
@@ -2800,37 +2803,37 @@ updated_at = "2024-01-01"
         assert!(reloaded.projects.contains_key("project-2"));
     }
 
-    // TaskStatus::from_strのテスト - 有効なステータス
+    // NotaStatus::from_strのテスト - 有効なステータス
     // 全ての有効なステータス文字列が正しくパースされることを確認
     #[test]
     fn test_task_status_from_str_valid() {
-        assert_eq!(TaskStatus::from_str("inbox").unwrap(), TaskStatus::inbox);
+        assert_eq!(NotaStatus::from_str("inbox").unwrap(), NotaStatus::inbox);
         assert_eq!(
-            TaskStatus::from_str("next_action").unwrap(),
-            TaskStatus::next_action
+            NotaStatus::from_str("next_action").unwrap(),
+            NotaStatus::next_action
         );
         assert_eq!(
-            TaskStatus::from_str("waiting_for").unwrap(),
-            TaskStatus::waiting_for
+            NotaStatus::from_str("waiting_for").unwrap(),
+            NotaStatus::waiting_for
         );
         assert_eq!(
-            TaskStatus::from_str("someday").unwrap(),
-            TaskStatus::someday
+            NotaStatus::from_str("someday").unwrap(),
+            NotaStatus::someday
         );
-        assert_eq!(TaskStatus::from_str("later").unwrap(), TaskStatus::later);
+        assert_eq!(NotaStatus::from_str("later").unwrap(), NotaStatus::later);
         assert_eq!(
-            TaskStatus::from_str("calendar").unwrap(),
-            TaskStatus::calendar
+            NotaStatus::from_str("calendar").unwrap(),
+            NotaStatus::calendar
         );
-        assert_eq!(TaskStatus::from_str("done").unwrap(), TaskStatus::done);
-        assert_eq!(TaskStatus::from_str("trash").unwrap(), TaskStatus::trash);
+        assert_eq!(NotaStatus::from_str("done").unwrap(), NotaStatus::done);
+        assert_eq!(NotaStatus::from_str("trash").unwrap(), NotaStatus::trash);
     }
 
-    // TaskStatus::from_strのテスト - 無効なステータス
+    // NotaStatus::from_strのテスト - 無効なステータス
     // 無効なステータス文字列が適切なエラーメッセージを返すことを確認
     #[test]
     fn test_task_status_from_str_invalid() {
-        let result = TaskStatus::from_str("invalid_status");
+        let result = NotaStatus::from_str("invalid_status");
         assert!(result.is_err());
         let err_msg = result.unwrap_err();
         assert!(err_msg.contains("Invalid status 'invalid_status'"));
@@ -2844,32 +2847,32 @@ updated_at = "2024-01-01"
         assert!(err_msg.contains("trash"));
     }
 
-    // TaskStatus::from_strのテスト - 大文字小文字の違い
+    // NotaStatus::from_strのテスト - 大文字小文字の違い
     // 大文字小文字が異なる場合はエラーになることを確認（厳密な一致が必要）
     #[test]
     fn test_task_status_from_str_case_sensitive() {
-        assert!(TaskStatus::from_str("Inbox").is_err());
-        assert!(TaskStatus::from_str("INBOX").is_err());
-        assert!(TaskStatus::from_str("Next_Action").is_err());
-        assert!(TaskStatus::from_str("NEXT_ACTION").is_err());
+        assert!(NotaStatus::from_str("Inbox").is_err());
+        assert!(NotaStatus::from_str("INBOX").is_err());
+        assert!(NotaStatus::from_str("Next_Action").is_err());
+        assert!(NotaStatus::from_str("NEXT_ACTION").is_err());
     }
 
-    // TaskStatus::from_strのテスト - 存在しない一般的な名前
+    // NotaStatus::from_strのテスト - 存在しない一般的な名前
     // よくある誤りのステータス名がエラーになることを確認
     #[test]
     fn test_task_status_from_str_common_mistakes() {
         // 問題として報告された "in_progress" をテスト
-        let result = TaskStatus::from_str("in_progress");
+        let result = NotaStatus::from_str("in_progress");
         assert!(result.is_err());
         let err_msg = result.unwrap_err();
         assert!(err_msg.contains("Invalid status 'in_progress'"));
 
         // その他の一般的な誤り
-        assert!(TaskStatus::from_str("complete").is_err());
-        assert!(TaskStatus::from_str("completed").is_err());
-        assert!(TaskStatus::from_str("pending").is_err());
-        assert!(TaskStatus::from_str("todo").is_err());
-        assert!(TaskStatus::from_str("in-progress").is_err());
+        assert!(NotaStatus::from_str("complete").is_err());
+        assert!(NotaStatus::from_str("completed").is_err());
+        assert!(NotaStatus::from_str("pending").is_err());
+        assert!(NotaStatus::from_str("todo").is_err());
+        assert!(NotaStatus::from_str("in-progress").is_err());
     }
 
     // ProjectStatus::from_strのテスト - 有効なステータス
@@ -2915,21 +2918,21 @@ updated_at = "2024-01-01"
     }
 
     // タスクステータスの順序がTOMLシリアライズに反映されることを確認
-    // TaskStatus enumの順序とGtdDataフィールドの順序が一致し、TOML出力もその順序になることを検証
+    // NotaStatus enumの順序とGtdDataフィールドの順序が一致し、TOML出力もその順序になることを検証
     #[test]
     fn test_task_status_order_in_toml_serialization() {
         let mut data = GtdData::new();
 
         // Add one task for each status in enum order
         let statuses = [
-            TaskStatus::inbox,
-            TaskStatus::next_action,
-            TaskStatus::waiting_for,
-            TaskStatus::later,
-            TaskStatus::calendar,
-            TaskStatus::someday,
-            TaskStatus::done,
-            TaskStatus::trash,
+            NotaStatus::inbox,
+            NotaStatus::next_action,
+            NotaStatus::waiting_for,
+            NotaStatus::later,
+            NotaStatus::calendar,
+            NotaStatus::someday,
+            NotaStatus::done,
+            NotaStatus::trash,
         ];
 
         for (i, status) in statuses.iter().enumerate() {
@@ -2954,7 +2957,7 @@ updated_at = "2024-01-01"
             .filter(|line| line.starts_with("[["))
             .collect();
 
-        // Verify the order matches TaskStatus enum order
+        // Verify the order matches NotaStatus enum order
         let expected_sections = [
             "[[inbox]]",
             "[[next_action]]",
@@ -2992,7 +2995,7 @@ updated_at = "2024-01-01"
         let task1 = Task {
             id: "test-task".to_string(),
             title: "Test Task 1".to_string(),
-            status: TaskStatus::inbox,
+            status: NotaStatus::inbox,
             project: None,
             context: None,
             notes: None,
@@ -3004,13 +3007,13 @@ updated_at = "2024-01-01"
 
         // Verify task is in map
         assert!(data.task_map.contains_key("test-task"));
-        assert_eq!(data.task_map.get("test-task"), Some(&TaskStatus::inbox));
+        assert_eq!(data.task_map.get("test-task"), Some(&NotaStatus::inbox));
 
         // Try to add another task with same ID in a different status
         let task2 = Task {
             id: "test-task".to_string(),
             title: "Test Task 2".to_string(),
-            status: TaskStatus::next_action,
+            status: NotaStatus::next_action,
             project: None,
             context: None,
             notes: None,
@@ -3027,7 +3030,7 @@ updated_at = "2024-01-01"
         // The task_map should now show the new status (last one wins)
         assert_eq!(
             data.task_map.get("test-task"),
-            Some(&TaskStatus::next_action)
+            Some(&NotaStatus::next_action)
         );
 
         // But there are actually TWO tasks with same ID (one in inbox, one in next_action)
@@ -3043,7 +3046,7 @@ updated_at = "2024-01-01"
         let task = Task {
             id: "remove-test".to_string(),
             title: "Test Task".to_string(),
-            status: TaskStatus::inbox,
+            status: NotaStatus::inbox,
             project: None,
             context: None,
             notes: None,
@@ -3071,7 +3074,7 @@ updated_at = "2024-01-01"
         let task = Task {
             id: "status-test".to_string(),
             title: "Test Task".to_string(),
-            status: TaskStatus::inbox,
+            status: NotaStatus::inbox,
             project: None,
             context: None,
             notes: None,
@@ -3082,15 +3085,15 @@ updated_at = "2024-01-01"
         data.add_task(task);
 
         // Verify initial status
-        assert_eq!(data.task_map.get("status-test"), Some(&TaskStatus::inbox));
+        assert_eq!(data.task_map.get("status-test"), Some(&NotaStatus::inbox));
 
         // Move to next_action
-        data.move_status("status-test", TaskStatus::next_action);
+        data.move_status("status-test", NotaStatus::next_action);
 
         // Verify status updated in map
         assert_eq!(
             data.task_map.get("status-test"),
-            Some(&TaskStatus::next_action)
+            Some(&NotaStatus::next_action)
         );
     }
 
@@ -3117,8 +3120,8 @@ updated_at = "2024-01-01"
 
         // Verify both tasks are in task_map with correct statuses
         assert_eq!(data.task_map.len(), 2);
-        assert_eq!(data.task_map.get("task-1"), Some(&TaskStatus::inbox));
-        assert_eq!(data.task_map.get("task-2"), Some(&TaskStatus::next_action));
+        assert_eq!(data.task_map.get("task-1"), Some(&NotaStatus::inbox));
+        assert_eq!(data.task_map.get("task-2"), Some(&NotaStatus::next_action));
     }
 
     // Step 4: Test HashMap serialization order
@@ -3134,7 +3137,7 @@ updated_at = "2024-01-01"
             let task = Task {
                 id: format!("task-{}", i),
                 title: format!("Task {}", i),
-                status: TaskStatus::inbox,
+                status: NotaStatus::inbox,
                 project: None,
                 context: None,
                 notes: None,
@@ -3175,7 +3178,7 @@ updated_at = "2024-01-01"
             let task = Task {
                 id: format!("task-{}", i),
                 title: format!("Task {}", i),
-                status: TaskStatus::inbox,
+                status: NotaStatus::inbox,
                 project: None,
                 context: None,
                 notes: None,
@@ -3212,7 +3215,7 @@ updated_at = "2024-01-01"
         let task = Task {
             id: "task-1".to_string(),
             title: "Test Task".to_string(),
-            status: TaskStatus::inbox,
+            status: NotaStatus::inbox,
             project: Some("project-1".to_string()),
             context: Some("Office".to_string()),
             notes: Some("Test notes".to_string()),
@@ -3252,7 +3255,7 @@ updated_at = "2024-01-01"
 
         assert_eq!(nota.id, project.id);
         assert_eq!(nota.title, project.title);
-        assert_eq!(nota.status, TaskStatus::project);
+        assert_eq!(nota.status, NotaStatus::project);
         assert_eq!(nota.context, project.context);
         assert_eq!(nota.notes, project.notes);
         assert!(!nota.is_task());
@@ -3266,7 +3269,7 @@ updated_at = "2024-01-01"
             name: "Office".to_string(),
             title: Some("Office Context".to_string()),
             notes: Some("Office location".to_string()),
-            status: TaskStatus::context,
+            status: NotaStatus::context,
             project: None,
             context: None,
             start_date: None,
@@ -3278,7 +3281,7 @@ updated_at = "2024-01-01"
 
         assert_eq!(nota.id, context.name);
         assert_eq!(nota.title, "Office Context");
-        assert_eq!(nota.status, TaskStatus::context);
+        assert_eq!(nota.status, NotaStatus::context);
         assert_eq!(nota.notes, context.notes);
         assert!(!nota.is_task());
         assert!(!nota.is_project());
@@ -3290,7 +3293,7 @@ updated_at = "2024-01-01"
         let nota = Nota {
             id: "task-1".to_string(),
             title: "Test Task".to_string(),
-            status: TaskStatus::next_action,
+            status: NotaStatus::next_action,
             project: Some("proj-1".to_string()),
             context: Some("Office".to_string()),
             notes: Some("Notes".to_string()),
@@ -3311,7 +3314,7 @@ updated_at = "2024-01-01"
         let nota = Nota {
             id: "proj-1".to_string(),
             title: "Project".to_string(),
-            status: TaskStatus::project,
+            status: NotaStatus::project,
             project: None,
             context: None,
             notes: None,
@@ -3328,7 +3331,7 @@ updated_at = "2024-01-01"
         let nota = Nota {
             id: "proj-1".to_string(),
             title: "Test Project".to_string(),
-            status: TaskStatus::project,
+            status: NotaStatus::project,
             project: None,
             context: Some("Office".to_string()),
             notes: Some("Project notes".to_string()),
@@ -3349,7 +3352,7 @@ updated_at = "2024-01-01"
         let nota = Nota {
             id: "Office".to_string(),
             title: "Office Context".to_string(),
-            status: TaskStatus::context,
+            status: NotaStatus::context,
             project: None,
             context: None,
             notes: Some("Office location".to_string()),

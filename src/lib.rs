@@ -38,7 +38,7 @@ use mcp_attr::{Result as McpResult, bail};
 use std::sync::Mutex;
 
 // Re-export commonly used types
-pub use gtd::{Context, GtdData, Project, ProjectStatus, Task, TaskStatus};
+pub use gtd::{Context, GtdData, NotaStatus, Project, ProjectStatus, Task};
 pub use storage::Storage;
 
 /// MCP Server handler for GTD task management
@@ -180,7 +180,7 @@ impl McpServer for GtdServerHandler {
         let task = Task {
             id: id.clone(),
             title: title.clone(),
-            status: TaskStatus::inbox,
+            status: NotaStatus::inbox,
             project,
             context,
             notes,
@@ -240,7 +240,7 @@ impl McpServer for GtdServerHandler {
         // Collect tasks from all status lists or just the filtered one
         if let Some(status_str) = status {
             // Validate the status string first
-            if let Err(e) = status_str.parse::<TaskStatus>() {
+            if let Err(e) = status_str.parse::<NotaStatus>() {
                 drop(data);
                 bail!("{}", e);
             }
@@ -340,7 +340,7 @@ impl McpServer for GtdServerHandler {
         start_date: Option<String>,
     ) -> McpResult<String> {
         // Parse the target status
-        let target_status = match status.parse::<TaskStatus>() {
+        let target_status = match status.parse::<NotaStatus>() {
             Ok(s) => s,
             Err(e) => bail!("{}", e),
         };
@@ -372,7 +372,7 @@ impl McpServer for GtdServerHandler {
             }
 
             // Check if calendar status requires start_date
-            if target_status == TaskStatus::calendar {
+            if target_status == NotaStatus::calendar {
                 let current_start_date = data.find_task_by_id(&task_id).unwrap().start_date;
                 let final_start_date = parsed_start_date.or(current_start_date);
 
@@ -420,16 +420,16 @@ impl McpServer for GtdServerHandler {
         if !successful.is_empty() {
             let task_list = successful.join(", ");
             let commit_message = match target_status {
-                TaskStatus::inbox => format!("Move tasks to inbox: {}", task_list),
-                TaskStatus::next_action => format!("Move tasks to next_action: {}", task_list),
-                TaskStatus::waiting_for => format!("Move tasks to waiting_for: {}", task_list),
-                TaskStatus::someday => format!("Move tasks to someday: {}", task_list),
-                TaskStatus::later => format!("Move tasks to later: {}", task_list),
-                TaskStatus::calendar => format!("Move tasks to calendar: {}", task_list),
-                TaskStatus::done => format!("Mark tasks as done: {}", task_list),
-                TaskStatus::trash => format!("Move tasks to trash: {}", task_list),
-                TaskStatus::context => format!("Change status to context: {}", task_list),
-                TaskStatus::project => format!("Change status to project: {}", task_list),
+                NotaStatus::inbox => format!("Move tasks to inbox: {}", task_list),
+                NotaStatus::next_action => format!("Move tasks to next_action: {}", task_list),
+                NotaStatus::waiting_for => format!("Move tasks to waiting_for: {}", task_list),
+                NotaStatus::someday => format!("Move tasks to someday: {}", task_list),
+                NotaStatus::later => format!("Move tasks to later: {}", task_list),
+                NotaStatus::calendar => format!("Move tasks to calendar: {}", task_list),
+                NotaStatus::done => format!("Mark tasks as done: {}", task_list),
+                NotaStatus::trash => format!("Move tasks to trash: {}", task_list),
+                NotaStatus::context => format!("Change status to context: {}", task_list),
+                NotaStatus::project => format!("Change status to project: {}", task_list),
             };
 
             if let Err(e) = self.save_data_with_message(&commit_message) {
@@ -449,8 +449,8 @@ impl McpServer for GtdServerHandler {
         let mut result = String::new();
         if !successful.is_empty() {
             let status_display = match target_status {
-                TaskStatus::next_action => "next action",
-                TaskStatus::waiting_for => "waiting for",
+                NotaStatus::next_action => "next action",
+                NotaStatus::waiting_for => "waiting for",
                 _ => &status,
             };
             result.push_str(&format!(
@@ -869,7 +869,7 @@ impl McpServer for GtdServerHandler {
             name: name.clone(),
             notes,
             title: None,
-            status: gtd::TaskStatus::context,
+            status: gtd::NotaStatus::context,
             project: None,
             context: None,
             start_date: None,
@@ -938,7 +938,7 @@ impl McpServer for GtdServerHandler {
                 data.contexts.get(&name).and_then(|c| c.notes.clone())
             },
             title: None,
-            status: gtd::TaskStatus::context,
+            status: gtd::NotaStatus::context,
             project: None,
             context: None,
             start_date: None,
@@ -1301,7 +1301,7 @@ mod tests {
         let task = Task {
             id: "test-task".to_string(),
             title: "Test Task".to_string(),
-            status: TaskStatus::inbox,
+            status: NotaStatus::inbox,
             project: None,
             context: None,
             notes: None,
@@ -1383,7 +1383,7 @@ mod tests {
         {
             let data = handler.data.lock().unwrap();
             let task = data.find_task_by_id(&task_id).unwrap();
-            assert_eq!(task.status, TaskStatus::next_action);
+            assert_eq!(task.status, NotaStatus::next_action);
         }
 
         // Test moving to done
@@ -1394,7 +1394,7 @@ mod tests {
         {
             let data = handler.data.lock().unwrap();
             let task = data.find_task_by_id(&task_id).unwrap();
-            assert_eq!(task.status, TaskStatus::done);
+            assert_eq!(task.status, NotaStatus::done);
         }
 
         // Test moving to trash
@@ -1405,7 +1405,7 @@ mod tests {
         {
             let data = handler.data.lock().unwrap();
             let task = data.find_task_by_id(&task_id).unwrap();
-            assert_eq!(task.status, TaskStatus::trash);
+            assert_eq!(task.status, NotaStatus::trash);
         }
 
         // Test invalid status
@@ -1449,7 +1449,7 @@ mod tests {
         assert!(result.is_ok());
         let data = handler.data.lock().unwrap();
         let task = data.find_task_by_id(&task_id).unwrap();
-        assert_eq!(task.status, TaskStatus::calendar);
+        assert_eq!(task.status, NotaStatus::calendar);
         assert_eq!(
             task.start_date.unwrap(),
             NaiveDate::from_ymd_opt(2024, 12, 25).unwrap()
@@ -1494,7 +1494,7 @@ mod tests {
         assert_eq!(data.next_action.len(), 3);
         for task_id in &task_ids {
             let task = data.find_task_by_id(task_id).unwrap();
-            assert_eq!(task.status, TaskStatus::next_action);
+            assert_eq!(task.status, NotaStatus::next_action);
         }
     }
 
@@ -1564,7 +1564,7 @@ mod tests {
         // Verify the task moved
         let data = handler.data.lock().unwrap();
         let task = data.find_task_by_id("call-sarah").unwrap();
-        assert_eq!(task.status, TaskStatus::next_action);
+        assert_eq!(task.status, NotaStatus::next_action);
     }
 
     #[tokio::test]
@@ -1638,7 +1638,7 @@ mod tests {
         {
             let data = handler.data.lock().unwrap();
             let task = data.find_task_by_id(&task_id).unwrap();
-            assert!(matches!(task.status, TaskStatus::inbox));
+            assert!(matches!(task.status, NotaStatus::inbox));
             assert_eq!(data.inbox.len(), 1);
             assert_eq!(data.next_action.len(), 0);
         }
@@ -1653,7 +1653,7 @@ mod tests {
         {
             let data = handler.data.lock().unwrap();
             let task = data.find_task_by_id(&task_id).unwrap();
-            assert!(matches!(task.status, TaskStatus::next_action));
+            assert!(matches!(task.status, NotaStatus::next_action));
             assert_eq!(data.inbox.len(), 0);
             assert_eq!(data.next_action.len(), 1);
         }
@@ -1686,7 +1686,7 @@ mod tests {
                 name: "Office".to_string(),
                 notes: None,
                 title: None,
-                status: gtd::TaskStatus::context,
+                status: gtd::NotaStatus::context,
                 project: None,
                 context: None,
                 start_date: None,
@@ -2336,7 +2336,7 @@ mod tests {
                 name: "Office".to_string(),
                 notes: None,
                 title: None,
-                status: gtd::TaskStatus::context,
+                status: gtd::NotaStatus::context,
                 project: None,
                 context: None,
                 start_date: None,
@@ -2389,7 +2389,7 @@ mod tests {
         let data = handler.data.lock().unwrap();
         let task = data.find_task_by_id(&task_id).unwrap();
         assert_eq!(task.title, "Updated Task");
-        assert!(matches!(task.status, TaskStatus::done));
+        assert!(matches!(task.status, NotaStatus::done));
         assert_eq!(task.project, Some(project_id));
         assert_eq!(task.context, Some("Office".to_string()));
         assert_eq!(task.notes, Some("Updated notes".to_string()));
@@ -2434,7 +2434,7 @@ mod tests {
         {
             let data = handler.data.lock().unwrap();
             let task = data.find_task_by_id(&task_id).unwrap();
-            assert!(matches!(task.status, TaskStatus::next_action));
+            assert!(matches!(task.status, NotaStatus::next_action));
             assert_eq!(data.next_action.len(), 1);
             assert_eq!(data.inbox.len(), 0);
         }
@@ -2449,7 +2449,7 @@ mod tests {
         {
             let data = handler.data.lock().unwrap();
             let task = data.find_task_by_id(&task_id).unwrap();
-            assert!(matches!(task.status, TaskStatus::inbox));
+            assert!(matches!(task.status, NotaStatus::inbox));
             assert_eq!(data.inbox.len(), 1);
             assert_eq!(data.next_action.len(), 0);
         }
@@ -2484,7 +2484,7 @@ mod tests {
 
         let data = handler.data.lock().unwrap();
         let task = data.find_task_by_id(&task_id).unwrap();
-        assert!(matches!(task.status, TaskStatus::next_action));
+        assert!(matches!(task.status, NotaStatus::next_action));
         assert_eq!(data.next_action.len(), 1);
         assert_eq!(data.inbox.len(), 0);
     }
@@ -2518,7 +2518,7 @@ mod tests {
 
         let data = handler.data.lock().unwrap();
         let task = data.find_task_by_id(&task_id).unwrap();
-        assert!(matches!(task.status, TaskStatus::waiting_for));
+        assert!(matches!(task.status, NotaStatus::waiting_for));
         assert_eq!(data.waiting_for.len(), 1);
         assert_eq!(data.inbox.len(), 0);
     }
@@ -2552,7 +2552,7 @@ mod tests {
 
         let data = handler.data.lock().unwrap();
         let task = data.find_task_by_id(&task_id).unwrap();
-        assert!(matches!(task.status, TaskStatus::someday));
+        assert!(matches!(task.status, NotaStatus::someday));
         assert_eq!(data.someday.len(), 1);
         assert_eq!(data.inbox.len(), 0);
     }
@@ -2586,7 +2586,7 @@ mod tests {
 
         let data = handler.data.lock().unwrap();
         let task = data.find_task_by_id(&task_id).unwrap();
-        assert!(matches!(task.status, TaskStatus::later));
+        assert!(matches!(task.status, NotaStatus::later));
         assert_eq!(data.later.len(), 1);
         assert_eq!(data.inbox.len(), 0);
     }
@@ -2620,7 +2620,7 @@ mod tests {
 
         let data = handler.data.lock().unwrap();
         let task = data.find_task_by_id(&task_id).unwrap();
-        assert!(matches!(task.status, TaskStatus::done));
+        assert!(matches!(task.status, NotaStatus::done));
         assert_eq!(data.done.len(), 1);
         assert_eq!(data.inbox.len(), 0);
     }
@@ -2654,7 +2654,7 @@ mod tests {
 
         let data = handler.data.lock().unwrap();
         let task = data.find_task_by_id(&task_id).unwrap();
-        assert!(matches!(task.status, TaskStatus::trash));
+        assert!(matches!(task.status, NotaStatus::trash));
         assert_eq!(data.trash.len(), 1);
         assert_eq!(data.inbox.len(), 0);
     }
@@ -2724,8 +2724,8 @@ mod tests {
 
         let task1 = data.find_task_by_id(&task_id_1).unwrap();
         let task2 = data.find_task_by_id(&task_id_2).unwrap();
-        assert!(matches!(task1.status, TaskStatus::trash));
-        assert!(matches!(task2.status, TaskStatus::trash));
+        assert!(matches!(task1.status, NotaStatus::trash));
+        assert!(matches!(task2.status, NotaStatus::trash));
     }
 
     #[tokio::test]
@@ -2787,7 +2787,7 @@ mod tests {
 
         for task_id in &task_ids {
             let task = data.find_task_by_id(task_id).unwrap();
-            assert!(matches!(task.status, TaskStatus::trash));
+            assert!(matches!(task.status, NotaStatus::trash));
         }
     }
 
@@ -2972,9 +2972,9 @@ mod tests {
         let task1 = data.find_task_by_id(&inbox_task_id).unwrap();
         let task2 = data.find_task_by_id(&next_action_task_id).unwrap();
         let task3 = data.find_task_by_id(&done_task_id).unwrap();
-        assert!(matches!(task1.status, TaskStatus::trash));
-        assert!(matches!(task2.status, TaskStatus::trash));
-        assert!(matches!(task3.status, TaskStatus::trash));
+        assert!(matches!(task1.status, NotaStatus::trash));
+        assert!(matches!(task2.status, NotaStatus::trash));
+        assert!(matches!(task3.status, NotaStatus::trash));
     }
 
     #[tokio::test]
@@ -3010,7 +3010,7 @@ mod tests {
 
         let data = handler.data.lock().unwrap();
         let task = data.find_task_by_id(&task_id).unwrap();
-        assert!(matches!(task.status, TaskStatus::calendar));
+        assert!(matches!(task.status, NotaStatus::calendar));
         assert_eq!(data.calendar.len(), 1);
         assert_eq!(data.inbox.len(), 0);
         assert!(task.start_date.is_some());
@@ -3081,7 +3081,7 @@ mod tests {
 
         let data = handler.data.lock().unwrap();
         let task = data.find_task_by_id(&task_id).unwrap();
-        assert!(matches!(task.status, TaskStatus::calendar));
+        assert!(matches!(task.status, NotaStatus::calendar));
         assert_eq!(data.calendar.len(), 1);
         assert_eq!(
             task.start_date.unwrap(),
@@ -3124,7 +3124,7 @@ mod tests {
 
         let data = handler.data.lock().unwrap();
         let task = data.find_task_by_id(&task_id).unwrap();
-        assert!(matches!(task.status, TaskStatus::calendar));
+        assert!(matches!(task.status, NotaStatus::calendar));
         assert_eq!(
             task.start_date.unwrap(),
             NaiveDate::from_ymd_opt(2024, 12, 31).unwrap()
@@ -4507,7 +4507,7 @@ mod tests {
 
         for task_id in &task_ids {
             let task = data.find_task_by_id(task_id).unwrap();
-            assert!(matches!(task.status, TaskStatus::inbox));
+            assert!(matches!(task.status, NotaStatus::inbox));
         }
     }
 
@@ -4555,7 +4555,7 @@ mod tests {
 
         for task_id in &task_ids {
             let task = data.find_task_by_id(task_id).unwrap();
-            assert!(matches!(task.status, TaskStatus::next_action));
+            assert!(matches!(task.status, NotaStatus::next_action));
         }
     }
 
@@ -4603,7 +4603,7 @@ mod tests {
 
         for task_id in &task_ids {
             let task = data.find_task_by_id(task_id).unwrap();
-            assert!(matches!(task.status, TaskStatus::waiting_for));
+            assert!(matches!(task.status, NotaStatus::waiting_for));
         }
     }
 
@@ -4651,7 +4651,7 @@ mod tests {
 
         for task_id in &task_ids {
             let task = data.find_task_by_id(task_id).unwrap();
-            assert!(matches!(task.status, TaskStatus::someday));
+            assert!(matches!(task.status, NotaStatus::someday));
         }
     }
 
@@ -4699,7 +4699,7 @@ mod tests {
 
         for task_id in &task_ids {
             let task = data.find_task_by_id(task_id).unwrap();
-            assert!(matches!(task.status, TaskStatus::later));
+            assert!(matches!(task.status, NotaStatus::later));
         }
     }
 
@@ -4747,7 +4747,7 @@ mod tests {
 
         for task_id in &task_ids {
             let task = data.find_task_by_id(task_id).unwrap();
-            assert!(matches!(task.status, TaskStatus::done));
+            assert!(matches!(task.status, NotaStatus::done));
         }
     }
 
@@ -5010,7 +5010,7 @@ mod tests {
 
         for task_id in &task_ids {
             let task = data.find_task_by_id(task_id).unwrap();
-            assert!(matches!(task.status, TaskStatus::calendar));
+            assert!(matches!(task.status, NotaStatus::calendar));
             assert_eq!(
                 task.start_date,
                 Some(NaiveDate::from_ymd_opt(2025, 1, 15).unwrap())
@@ -5060,7 +5060,7 @@ mod tests {
         assert_eq!(data.calendar.len(), 2);
         for task_id in &task_ids {
             let task = data.find_task_by_id(task_id).unwrap();
-            assert!(matches!(task.status, TaskStatus::calendar));
+            assert!(matches!(task.status, NotaStatus::calendar));
             assert_eq!(
                 task.start_date,
                 Some(NaiveDate::from_ymd_opt(2025, 2, 1).unwrap())

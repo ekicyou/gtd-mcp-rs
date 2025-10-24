@@ -154,7 +154,7 @@ impl Storage {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::gtd::{Context, Project, ProjectStatus, Task, TaskStatus};
+    use crate::gtd::{Context, NotaStatus, Project, ProjectStatus, Task};
     use chrono::NaiveDate;
     use std::env;
     use std::fs;
@@ -230,7 +230,7 @@ mod tests {
         let task = Task {
             id: "task-1".to_string(),
             title: "Test Task".to_string(),
-            status: TaskStatus::inbox,
+            status: NotaStatus::inbox,
             project: Some("project-1".to_string()),
             context: Some("context-1".to_string()),
             notes: Some("Test notes".to_string()),
@@ -319,7 +319,7 @@ mod tests {
             name: "Office".to_string(),
             notes: None,
             title: None,
-            status: TaskStatus::context,
+            status: NotaStatus::context,
             project: None,
             context: None,
             start_date: None,
@@ -360,7 +360,7 @@ mod tests {
             let task = Task {
                 id: format!("task-{}", i),
                 title: format!("Task {}", i),
-                status: TaskStatus::inbox,
+                status: NotaStatus::inbox,
                 project: None,
                 context: None,
                 notes: None,
@@ -401,7 +401,7 @@ mod tests {
                 ),
                 notes: None,
                 title: None,
-                status: TaskStatus::context,
+                status: NotaStatus::context,
                 project: None,
                 context: None,
                 start_date: None,
@@ -441,7 +441,7 @@ mod tests {
         let task1 = Task {
             id: "task-1".to_string(),
             title: "Original Task".to_string(),
-            status: TaskStatus::inbox,
+            status: NotaStatus::inbox,
             project: None,
             context: None,
             notes: None,
@@ -457,7 +457,7 @@ mod tests {
         let task2 = Task {
             id: "task-2".to_string(),
             title: "New Task".to_string(),
-            status: TaskStatus::next_action,
+            status: NotaStatus::next_action,
             project: None,
             context: None,
             notes: None,
@@ -507,14 +507,14 @@ mod tests {
         let mut data = GtdData::new();
 
         let statuses = [
-            TaskStatus::inbox,
-            TaskStatus::next_action,
-            TaskStatus::waiting_for,
-            TaskStatus::later,
-            TaskStatus::calendar,
-            TaskStatus::someday,
-            TaskStatus::done,
-            TaskStatus::trash,
+            NotaStatus::inbox,
+            NotaStatus::next_action,
+            NotaStatus::waiting_for,
+            NotaStatus::later,
+            NotaStatus::calendar,
+            NotaStatus::someday,
+            NotaStatus::done,
+            NotaStatus::trash,
         ];
 
         for (i, status) in statuses.iter().enumerate() {
@@ -631,7 +631,7 @@ mod tests {
         let task = Task {
             id: "test-1".to_string(),
             title: "Test Task".to_string(),
-            status: TaskStatus::inbox,
+            status: NotaStatus::inbox,
             project: None,
             context: None,
             notes: None,
@@ -750,7 +750,7 @@ mod tests {
         let task = Task {
             id: "test-1".to_string(),
             title: "Test Task".to_string(),
-            status: TaskStatus::inbox,
+            status: NotaStatus::inbox,
             project: None,
             context: None,
             notes: None,
@@ -861,7 +861,7 @@ mod tests {
         let task = Task {
             id: "#1".to_string(),
             title: "Task with notes".to_string(),
-            status: TaskStatus::inbox,
+            status: NotaStatus::inbox,
             project: None,
             context: None,
             notes: Some("Line 1\nLine 2\nLine 3".to_string()),
@@ -898,7 +898,7 @@ mod tests {
         let task = Task {
             id: "#1".to_string(),
             title: "Test".to_string(),
-            status: TaskStatus::inbox,
+            status: NotaStatus::inbox,
             project: None,
             context: None,
             notes: None,
