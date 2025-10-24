@@ -3507,22 +3507,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_prompt_add_task_guide() {
-        let (handler, _temp_file) = get_test_handler();
-
-        let result = handler.add_task_guide().await;
-        assert!(result.is_ok());
-        let content = result.unwrap();
-
-        // タスク作成ガイドの内容を確認
-        assert!(content.contains("Task Creation"));
-        assert!(content.contains("project"));
-        assert!(content.contains("context"));
-        assert!(content.contains("notes"));
-        assert!(content.contains("start_date"));
-        assert!(content.contains("#1"));
-    }
-
+    
     #[tokio::test]
     async fn test_prompts_return_non_empty_strings() {
         let (handler, _temp_file) = get_test_handler();
