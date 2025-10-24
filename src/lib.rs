@@ -1026,6 +1026,422 @@ impl McpServer for GtdServerHandler {
         Ok(format!("Context {} deleted successfully", name))
     }
 
+    // ==================== Unified Nota Tools ====================
+
+    /// Add a new nota (unified task/project/context). Status field determines nota type: task statuses (inbox, next_action, etc.) create tasks, 'project' creates projects, 'context' creates contexts.
+    #[allow(clippy::too_many_arguments)]
+    #[tool]
+    async fn add_nota(
+        &self,
+        /// Unique nota ID - any meaningful string (e.g., "meeting-prep", "website-redesign", "Office")
+        id: String,
+        /// Title describing the nota
+        title: String,
+        /// Status determines nota type: inbox/next_action/waiting_for/later/calendar/someday/done/trash (tasks), project (projects), context (contexts)
+        status: String,
+        /// Optional parent project ID
+        project: Option<String>,
+        /// Optional context where this nota applies
+        context: Option<String>,
+        /// Optional additional notes in Markdown format
+        notes: Option<String>,
+        /// Optional start date (format: YYYY-MM-DD). Required for 'calendar' status.
+        start_date: Option<String>,
+    ) -> McpResult<String> {
+        let mut data = self.data.lock().unwrap();
+
+        // Check for duplicate ID across all notas
+        if data.task_map.contains_key(&id)
+            || data.projects.contains_key(&id)
+            || data.contexts.contains_key(&id)
+        {
+            drop(data);
+            bail!("Nota ID '{}' already exists. Please use a unique ID.", id);
+        }
+
+        // Parse status
+        let nota_status: NotaStatus = match status.parse() {
+            Ok(s) => s,
+            Err(_) => {
+                drop(data);
+                bail!(
+                    "Invalid status '{}'. Valid statuses: inbox, next_action, waiting_for, later, calendar, someday, done, trash, project, context",
+                    status
+                );
+            }
+        };
+
+        // Validate calendar status has start_date
+        if nota_status == NotaStatus::calendar && start_date.is_none() {
+            drop(data);
+            bail!("Calendar status requires start_date parameter");
+        }
+
+        // Parse start_date if provided
+        let parsed_start_date = if let Some(ref date_str) = start_date {
+            match NaiveDate::parse_from_str(date_str, "%Y-%m-%d") {
+                Ok(d) => Some(d),
+                Err(_) => {
+                    drop(data);
+                    bail!(
+                        "Invalid date format '{}'. Use YYYY-MM-DD (e.g., '2025-03-15')",
+                        date_str
+                    );
+                }
+            }
+        } else {
+            None
+        };
+
+        // Validate project reference if provided
+        if let Some(ref proj_id) = project
+            && data.find_project_by_id(proj_id).is_none()
+        {
+            drop(data);
+            bail!("Project '{}' does not exist", proj_id);
+        }
+
+        // Validate context reference if provided
+        if let Some(ref ctx_name) = context
+            && data.find_context_by_name(ctx_name).is_none()
+        {
+            drop(data);
+            bail!("Context '{}' does not exist", ctx_name);
+        }
+
+        let today = gtd::local_date_today();
+        let nota = gtd::Nota {
+            id: id.clone(),
+            title: title.clone(),
+            status: nota_status.clone(),
+            project,
+            context,
+            notes,
+            start_date: parsed_start_date,
+            created_at: today,
+            updated_at: today,
+        };
+
+        data.add_nota(nota);
+        drop(data);
+
+        if let Err(e) = self.save_data_with_message(&format!("Add nota {}", id)) {
+            bail!("Failed to save: {}", e);
+        }
+
+        Ok(format!(
+            "Nota created with ID: {} (type: {})",
+            id,
+            if nota_status == NotaStatus::context {
+                "context"
+            } else if nota_status == NotaStatus::project {
+                "project"
+            } else {
+                "task"
+            }
+        ))
+    }
+
+    /// List notas with optional status filter. Returns all tasks, projects, and contexts by default. Use status filter to narrow results.
+    #[tool]
+    async fn list_notas(
+        &self,
+        /// Optional status filter: inbox, next_action, waiting_for, later, calendar, someday, done, trash, project, context. Leave empty for all notas.
+        status: Option<String>,
+    ) -> McpResult<String> {
+        let data = self.data.lock().unwrap();
+
+        // Parse status filter if provided
+        let status_filter = if let Some(ref status_str) = status {
+            match status_str.parse::<NotaStatus>() {
+                Ok(s) => Some(s),
+                Err(_) => {
+                    drop(data);
+                    bail!(
+                        "Invalid status '{}'. Valid statuses: inbox, next_action, waiting_for, later, calendar, someday, done, trash, project, context",
+                        status_str
+                    );
+                }
+            }
+        } else {
+            None
+        };
+
+        let notas = data.list_notas(status_filter);
+        drop(data);
+
+        if notas.is_empty() {
+            return Ok("No notas found".to_string());
+        }
+
+        let mut result = format!("Found {} nota(s):\n\n", notas.len());
+        for nota in notas {
+            let nota_type = if nota.is_context() {
+                "context"
+            } else if nota.is_project() {
+                "project"
+            } else {
+                "task"
+            };
+
+            result.push_str(&format!(
+                "- [{}] {} (status: {:?}, type: {})\n",
+                nota.id, nota.title, nota.status, nota_type
+            ));
+
+            if let Some(ref proj) = nota.project {
+                result.push_str(&format!("  Project: {}\n", proj));
+            }
+            if let Some(ref ctx) = nota.context {
+                result.push_str(&format!("  Context: {}\n", ctx));
+            }
+            if let Some(ref n) = nota.notes {
+                result.push_str(&format!("  Notes: {}\n", n));
+            }
+            if let Some(ref date) = nota.start_date {
+                result.push_str(&format!("  Start date: {}\n", date));
+            }
+        }
+
+        Ok(result)
+    }
+
+    /// Update an existing nota's fields. Provide only the fields you want to change.
+    #[allow(clippy::too_many_arguments)]
+    #[tool]
+    async fn update_nota(
+        &self,
+        /// Nota ID to update
+        id: String,
+        /// Optional new title
+        title: Option<String>,
+        /// Optional new status (can change nota type: inbox->project transforms task to project)
+        status: Option<String>,
+        /// Optional new project ID (use empty string to clear)
+        project: Option<String>,
+        /// Optional new context (use empty string to clear)
+        context: Option<String>,
+        /// Optional new notes (use empty string to clear)
+        notes: Option<String>,
+        /// Optional new start date in YYYY-MM-DD format (use empty string to clear)
+        start_date: Option<String>,
+    ) -> McpResult<String> {
+        let mut data = self.data.lock().unwrap();
+
+        // Find existing nota
+        let mut nota = match data.find_nota_by_id(&id) {
+            Some(n) => n,
+            None => {
+                drop(data);
+                bail!("Nota '{}' not found", id);
+            }
+        };
+
+        // Update fields if provided
+        if let Some(new_title) = title {
+            nota.title = new_title;
+        }
+
+        if let Some(new_status_str) = status {
+            let new_status: NotaStatus = match new_status_str.parse() {
+                Ok(s) => s,
+                Err(_) => {
+                    drop(data);
+                    bail!(
+                        "Invalid status '{}'. Valid statuses: inbox, next_action, waiting_for, later, calendar, someday, done, trash, project, context",
+                        new_status_str
+                    );
+                }
+            };
+            nota.status = new_status;
+        }
+
+        // Handle optional reference fields (empty string means clear)
+        if let Some(proj) = project {
+            nota.project = if proj.is_empty() {
+                None
+            } else {
+                // Validate project exists
+                if data.find_project_by_id(&proj).is_none() {
+                    drop(data);
+                    bail!("Project '{}' does not exist", proj);
+                }
+                Some(proj)
+            };
+        }
+
+        if let Some(ctx) = context {
+            nota.context = if ctx.is_empty() {
+                None
+            } else {
+                // Validate context exists
+                if data.find_context_by_name(&ctx).is_none() {
+                    drop(data);
+                    bail!("Context '{}' does not exist", ctx);
+                }
+                Some(ctx)
+            };
+        }
+
+        if let Some(n) = notes {
+            nota.notes = if n.is_empty() { None } else { Some(n) };
+        }
+
+        if let Some(date_str) = start_date {
+            nota.start_date = if date_str.is_empty() {
+                None
+            } else {
+                match NaiveDate::parse_from_str(&date_str, "%Y-%m-%d") {
+                    Ok(d) => Some(d),
+                    Err(_) => {
+                        drop(data);
+                        bail!(
+                            "Invalid date format '{}'. Use YYYY-MM-DD (e.g., '2025-03-15')",
+                            date_str
+                        );
+                    }
+                }
+            };
+        }
+
+        // Validate calendar status has start_date
+        if nota.status == NotaStatus::calendar && nota.start_date.is_none() {
+            drop(data);
+            bail!("Calendar status requires start_date");
+        }
+
+        nota.updated_at = gtd::local_date_today();
+
+        // Update the nota
+        if data.update_nota(&id, nota).is_none() {
+            drop(data);
+            bail!("Failed to update nota '{}'", id);
+        }
+        drop(data);
+
+        if let Err(e) = self.save_data_with_message(&format!("Update nota {}", id)) {
+            bail!("Failed to save: {}", e);
+        }
+
+        Ok(format!("Nota {} updated successfully", id))
+    }
+
+    /// Change a nota's status. This can transform a nota between types (e.g., task->project).
+    #[tool]
+    async fn change_nota_status(
+        &self,
+        /// Nota ID to update
+        id: String,
+        /// New status: inbox, next_action, waiting_for, later, calendar, someday, done, trash, project, context
+        new_status: String,
+        /// Required for 'calendar' status: start date in YYYY-MM-DD format
+        start_date: Option<String>,
+    ) -> McpResult<String> {
+        let mut data = self.data.lock().unwrap();
+
+        // Parse new status
+        let nota_status: NotaStatus = match new_status.parse() {
+            Ok(s) => s,
+            Err(_) => {
+                drop(data);
+                bail!(
+                    "Invalid status '{}'. Valid statuses: inbox, next_action, waiting_for, later, calendar, someday, done, trash, project, context",
+                    new_status
+                );
+            }
+        };
+
+        // Validate calendar status has start_date
+        if nota_status == NotaStatus::calendar && start_date.is_none() {
+            drop(data);
+            bail!("Calendar status requires start_date parameter");
+        }
+
+        // Find existing nota
+        let mut nota = match data.find_nota_by_id(&id) {
+            Some(n) => n,
+            None => {
+                drop(data);
+                bail!("Nota '{}' not found", id);
+            }
+        };
+
+        // Update status
+        nota.status = nota_status;
+
+        // Update start_date if provided for calendar
+        if let Some(date_str) = start_date {
+            nota.start_date = match NaiveDate::parse_from_str(&date_str, "%Y-%m-%d") {
+                Ok(d) => Some(d),
+                Err(_) => {
+                    drop(data);
+                    bail!(
+                        "Invalid date format '{}'. Use YYYY-MM-DD (e.g., '2025-03-15')",
+                        date_str
+                    );
+                }
+            };
+        }
+
+        nota.updated_at = gtd::local_date_today();
+
+        // Update the nota (this will automatically move it to the correct container)
+        if data.update_nota(&id, nota).is_none() {
+            drop(data);
+            bail!("Failed to update nota '{}'", id);
+        }
+        drop(data);
+
+        if let Err(e) =
+            self.save_data_with_message(&format!("Change nota {} status to {}", id, new_status))
+        {
+            bail!("Failed to save: {}", e);
+        }
+
+        Ok(format!(
+            "Nota {} status changed to {} successfully",
+            id, new_status
+        ))
+    }
+
+    /// Delete a nota. Fails if other notas reference this one in their project or context fields.
+    #[tool]
+    async fn delete_nota(
+        &self,
+        /// Nota ID to delete
+        id: String,
+    ) -> McpResult<String> {
+        let mut data = self.data.lock().unwrap();
+
+        // Check if nota exists
+        if data.find_nota_by_id(&id).is_none() {
+            drop(data);
+            bail!("Nota '{}' not found", id);
+        }
+
+        // Check if this nota is referenced by others
+        if data.is_nota_referenced(&id) {
+            drop(data);
+            bail!(
+                "Cannot delete nota '{}': it is referenced by other notas in their 'project' or 'context' fields. Please update or delete the referencing notas first.",
+                id
+            );
+        }
+
+        // Remove the nota
+        if data.remove_nota(&id).is_none() {
+            drop(data);
+            bail!("Failed to delete nota '{}'", id);
+        }
+        drop(data);
+
+        if let Err(e) = self.save_data_with_message(&format!("Delete nota {}", id)) {
+            bail!("Failed to save: {}", e);
+        }
+
+        Ok(format!("Nota {} deleted successfully", id))
+    }
+
     // ==================== Prompts ====================
 
     /// GTD system overview and available tools

@@ -858,6 +858,190 @@ impl GtdData {
             }
         }
     }
+
+    /// Add a nota (unified task/project/context)
+    ///
+    /// Depending on the nota's status, it will be stored as:
+    /// - Task (if status is inbox, next_action, waiting_for, later, calendar, someday, done, trash)
+    /// - Project (if status is project)
+    /// - Context (if status is context)
+    ///
+    /// # Arguments
+    /// * `nota` - The nota to add
+    #[allow(dead_code)]
+    pub fn add_nota(&mut self, nota: Nota) {
+        match nota.status {
+            NotaStatus::context => {
+                if let Some(context) = nota.to_context() {
+                    self.add_context(context);
+                }
+            }
+            NotaStatus::project => {
+                if let Some(project) = nota.to_project() {
+                    self.add_project(project);
+                }
+            }
+            _ => {
+                if let Some(task) = nota.to_task() {
+                    self.add_task(task);
+                }
+            }
+        }
+    }
+
+    /// Find a nota by its ID
+    ///
+    /// Searches across all tasks, projects, and contexts.
+    ///
+    /// # Arguments
+    /// * `id` - The nota ID to search for
+    ///
+    /// # Returns
+    /// An optional Nota if found
+    #[allow(dead_code)]
+    pub fn find_nota_by_id(&self, id: &str) -> Option<Nota> {
+        // Try to find as task
+        if let Some(task) = self.find_task_by_id(id) {
+            return Some(Nota::from_task(task.clone()));
+        }
+
+        // Try to find as project
+        if let Some(project) = self.find_project_by_id(id) {
+            return Some(Nota::from_project(project.clone()));
+        }
+
+        // Try to find as context
+        if let Some(context) = self.find_context_by_name(id) {
+            return Some(Nota::from_context(context.clone()));
+        }
+
+        None
+    }
+
+    /// Remove a nota by its ID
+    ///
+    /// Searches across all tasks, projects, and contexts and removes the nota if found.
+    ///
+    /// # Arguments
+    /// * `id` - The nota ID to remove
+    ///
+    /// # Returns
+    /// The removed Nota if found
+    #[allow(dead_code)]
+    pub fn remove_nota(&mut self, id: &str) -> Option<Nota> {
+        // Try to remove as task
+        if let Some(task) = self.remove_task(id) {
+            return Some(Nota::from_task(task));
+        }
+
+        // Try to remove as project
+        if let Some(project) = self.projects.remove(id) {
+            return Some(Nota::from_project(project));
+        }
+
+        // Try to remove as context
+        if let Some(context) = self.contexts.remove(id) {
+            return Some(Nota::from_context(context));
+        }
+
+        None
+    }
+
+    /// List all notas with optional status filter
+    ///
+    /// # Arguments
+    /// * `status_filter` - Optional status to filter by
+    ///
+    /// # Returns
+    /// Vector of Nota objects matching the filter
+    #[allow(dead_code)]
+    pub fn list_notas(&self, status_filter: Option<NotaStatus>) -> Vec<Nota> {
+        let mut notas = Vec::new();
+
+        // Add tasks
+        for task_list in self.all_task_lists() {
+            for task in task_list {
+                if status_filter.is_none() || Some(&task.status) == status_filter.as_ref() {
+                    notas.push(Nota::from_task(task.clone()));
+                }
+            }
+        }
+
+        // Add projects
+        if status_filter.is_none() || status_filter == Some(NotaStatus::project) {
+            for project in self.projects.values() {
+                notas.push(Nota::from_project(project.clone()));
+            }
+        }
+
+        // Add contexts
+        if status_filter.is_none() || status_filter == Some(NotaStatus::context) {
+            for context in self.contexts.values() {
+                notas.push(Nota::from_context(context.clone()));
+            }
+        }
+
+        notas
+    }
+
+    /// Update a nota's fields
+    ///
+    /// Finds the nota by ID and updates its fields. The nota type (task/project/context)
+    /// is determined by its current status.
+    ///
+    /// # Arguments
+    /// * `id` - The nota ID to update
+    /// * `nota` - The nota with updated fields
+    ///
+    /// # Returns
+    /// `Some(())` if the nota was found and updated, `None` otherwise
+    #[allow(dead_code)]
+    pub fn update_nota(&mut self, id: &str, nota: Nota) -> Option<()> {
+        // Remove the old nota
+        let _old_nota = self.remove_nota(id)?;
+
+        // If status changed, this will automatically place it in the correct container
+        self.add_nota(nota);
+
+        Some(())
+    }
+
+    /// Check if a nota ID is referenced by other notas
+    ///
+    /// Returns true if the ID is used in any nota's project or context fields.
+    ///
+    /// # Arguments
+    /// * `id` - The nota ID to check
+    ///
+    /// # Returns
+    /// True if the ID is referenced by other notas
+    #[allow(dead_code)]
+    pub fn is_nota_referenced(&self, id: &str) -> bool {
+        // Check if any task references this ID
+        for task_list in self.all_task_lists() {
+            for task in task_list {
+                if task.project.as_deref() == Some(id) || task.context.as_deref() == Some(id) {
+                    return true;
+                }
+            }
+        }
+
+        // Check if any project references this ID
+        for project in self.projects.values() {
+            if project.project.as_deref() == Some(id) || project.context.as_deref() == Some(id) {
+                return true;
+            }
+        }
+
+        // Check if any context references this ID
+        for context in self.contexts.values() {
+            if context.project.as_deref() == Some(id) || context.context.as_deref() == Some(id) {
+                return true;
+            }
+        }
+
+        false
+    }
 }
 
 #[cfg(test)]
@@ -3366,5 +3550,249 @@ updated_at = "2024-01-01"
         assert_eq!(context.name, nota.id);
         assert_eq!(context.title, Some(nota.title));
         assert_eq!(context.notes, nota.notes);
+    }
+
+    // Nota追加テスト - タスクとして追加
+    #[test]
+    fn test_add_nota_as_task() {
+        let mut data = GtdData::new();
+        let nota = Nota {
+            id: "task-1".to_string(),
+            title: "Test Task".to_string(),
+            status: NotaStatus::inbox,
+            project: None,
+            context: None,
+            notes: None,
+            start_date: None,
+            created_at: local_date_today(),
+            updated_at: local_date_today(),
+        };
+
+        data.add_nota(nota.clone());
+        assert_eq!(data.task_count(), 1);
+        assert_eq!(data.inbox.len(), 1);
+
+        let found = data.find_nota_by_id("task-1").unwrap();
+        assert_eq!(found.title, "Test Task");
+        assert!(found.is_task());
+    }
+
+    // Nota追加テスト - プロジェクトとして追加
+    #[test]
+    fn test_add_nota_as_project() {
+        let mut data = GtdData::new();
+        let nota = Nota {
+            id: "proj-1".to_string(),
+            title: "Test Project".to_string(),
+            status: NotaStatus::project,
+            project: None,
+            context: None,
+            notes: None,
+            start_date: None,
+            created_at: local_date_today(),
+            updated_at: local_date_today(),
+        };
+
+        data.add_nota(nota.clone());
+        assert_eq!(data.projects.len(), 1);
+
+        let found = data.find_nota_by_id("proj-1").unwrap();
+        assert_eq!(found.title, "Test Project");
+        assert!(found.is_project());
+    }
+
+    // Nota追加テスト - コンテキストとして追加
+    #[test]
+    fn test_add_nota_as_context() {
+        let mut data = GtdData::new();
+        let nota = Nota {
+            id: "Office".to_string(),
+            title: "Office Context".to_string(),
+            status: NotaStatus::context,
+            project: None,
+            context: None,
+            notes: None,
+            start_date: None,
+            created_at: local_date_today(),
+            updated_at: local_date_today(),
+        };
+
+        data.add_nota(nota.clone());
+        assert_eq!(data.contexts.len(), 1);
+
+        let found = data.find_nota_by_id("Office").unwrap();
+        assert_eq!(found.title, "Office Context");
+        assert!(found.is_context());
+    }
+
+    // Nota削除テスト
+    #[test]
+    fn test_remove_nota() {
+        let mut data = GtdData::new();
+        let nota = Nota {
+            id: "task-1".to_string(),
+            title: "Test Task".to_string(),
+            status: NotaStatus::inbox,
+            project: None,
+            context: None,
+            notes: None,
+            start_date: None,
+            created_at: local_date_today(),
+            updated_at: local_date_today(),
+        };
+
+        data.add_nota(nota.clone());
+        assert_eq!(data.task_count(), 1);
+
+        let removed = data.remove_nota("task-1").unwrap();
+        assert_eq!(removed.title, "Test Task");
+        assert_eq!(data.task_count(), 0);
+    }
+
+    // Nota一覧テスト
+    #[test]
+    fn test_list_notas() {
+        let mut data = GtdData::new();
+
+        // Add a task
+        data.add_nota(Nota {
+            id: "task-1".to_string(),
+            title: "Task".to_string(),
+            status: NotaStatus::inbox,
+            project: None,
+            context: None,
+            notes: None,
+            start_date: None,
+            created_at: local_date_today(),
+            updated_at: local_date_today(),
+        });
+
+        // Add a project
+        data.add_nota(Nota {
+            id: "proj-1".to_string(),
+            title: "Project".to_string(),
+            status: NotaStatus::project,
+            project: None,
+            context: None,
+            notes: None,
+            start_date: None,
+            created_at: local_date_today(),
+            updated_at: local_date_today(),
+        });
+
+        // Add a context
+        data.add_nota(Nota {
+            id: "Office".to_string(),
+            title: "Office".to_string(),
+            status: NotaStatus::context,
+            project: None,
+            context: None,
+            notes: None,
+            start_date: None,
+            created_at: local_date_today(),
+            updated_at: local_date_today(),
+        });
+
+        let all_notas = data.list_notas(None);
+        assert_eq!(all_notas.len(), 3);
+
+        let tasks_only = data.list_notas(Some(NotaStatus::inbox));
+        assert_eq!(tasks_only.len(), 1);
+
+        let projects_only = data.list_notas(Some(NotaStatus::project));
+        assert_eq!(projects_only.len(), 1);
+
+        let contexts_only = data.list_notas(Some(NotaStatus::context));
+        assert_eq!(contexts_only.len(), 1);
+    }
+
+    // Nota参照チェックテスト
+    #[test]
+    fn test_is_nota_referenced() {
+        let mut data = GtdData::new();
+
+        // Add a project
+        data.add_nota(Nota {
+            id: "proj-1".to_string(),
+            title: "Project".to_string(),
+            status: NotaStatus::project,
+            project: None,
+            context: None,
+            notes: None,
+            start_date: None,
+            created_at: local_date_today(),
+            updated_at: local_date_today(),
+        });
+
+        // Add a context
+        data.add_nota(Nota {
+            id: "Office".to_string(),
+            title: "Office".to_string(),
+            status: NotaStatus::context,
+            project: None,
+            context: None,
+            notes: None,
+            start_date: None,
+            created_at: local_date_today(),
+            updated_at: local_date_today(),
+        });
+
+        // Add a task that references both
+        data.add_nota(Nota {
+            id: "task-1".to_string(),
+            title: "Task".to_string(),
+            status: NotaStatus::inbox,
+            project: Some("proj-1".to_string()),
+            context: Some("Office".to_string()),
+            notes: None,
+            start_date: None,
+            created_at: local_date_today(),
+            updated_at: local_date_today(),
+        });
+
+        assert!(data.is_nota_referenced("proj-1"));
+        assert!(data.is_nota_referenced("Office"));
+        assert!(!data.is_nota_referenced("task-1"));
+    }
+
+    // Nota更新テスト
+    #[test]
+    fn test_update_nota() {
+        let mut data = GtdData::new();
+
+        // Add a nota
+        data.add_nota(Nota {
+            id: "task-1".to_string(),
+            title: "Old Title".to_string(),
+            status: NotaStatus::inbox,
+            project: None,
+            context: None,
+            notes: None,
+            start_date: None,
+            created_at: local_date_today(),
+            updated_at: local_date_today(),
+        });
+
+        // Update it
+        let updated = Nota {
+            id: "task-1".to_string(),
+            title: "New Title".to_string(),
+            status: NotaStatus::next_action,
+            project: None,
+            context: None,
+            notes: Some("New notes".to_string()),
+            start_date: None,
+            created_at: local_date_today(),
+            updated_at: local_date_today(),
+        };
+
+        data.update_nota("task-1", updated).unwrap();
+
+        let found = data.find_nota_by_id("task-1").unwrap();
+        assert_eq!(found.title, "New Title");
+        assert_eq!(found.status, NotaStatus::next_action);
+        assert_eq!(found.notes, Some("New notes".to_string()));
+        assert_eq!(data.next_action.len(), 1);
+        assert_eq!(data.inbox.len(), 0);
     }
 }
