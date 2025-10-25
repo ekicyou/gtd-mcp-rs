@@ -580,7 +580,7 @@ mod tests {
             created_at: local_date_today(),
             updated_at: local_date_today(),
         };
-        data.add(task);
+        data.add(Nota::from_task(task));
         drop(data);
 
         // 保存
