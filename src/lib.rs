@@ -536,6 +536,16 @@ impl McpServer for GtdServerHandler {
             }
         };
 
+        // Check if moving to trash and if nota is still referenced
+        let is_trash = nota_status == NotaStatus::trash;
+        if is_trash && data.is_referenced(&id) {
+            drop(data);
+            bail!(
+                "Cannot trash '{}': still referenced by other items. Remove references first.",
+                id
+            );
+        }
+
         // Update status
         nota.status = nota_status;
 
@@ -568,10 +578,14 @@ impl McpServer for GtdServerHandler {
             bail!("Failed to save: {}", e);
         }
 
-        Ok(format!(
-            "Nota {} status changed to {} successfully",
-            id, new_status
-        ))
+        Ok(if is_trash {
+            format!("Nota {} deleted (moved to trash)", id)
+        } else {
+            format!(
+                "Nota {} status changed to {} successfully",
+                id, new_status
+            )
+        })
     }
 }
 #[cfg(test)]
@@ -2851,7 +2865,7 @@ mod tests {
             .unwrap();
 
         // Add a task that references the context
-        let task_id = handler
+        let response = handler
             .inbox(
                 "task-2008".to_string(),
                 "Office work".to_string(),
@@ -2864,12 +2878,12 @@ mod tests {
             .await
             .unwrap();
 
-        // Extract task ID from the response
-        let task_id = task_id.split("ID: ").nth(1).unwrap().trim().to_string();
+        // Extract task ID from the response  
+        let task_id = GtdServerHandler::extract_id_from_response(&response);
 
         // Remove the context reference from the task
         handler
-            .update(task_id, None, None, Some(String::new()), None, None, None)
+            .update(task_id, None, None, None, Some(String::new()), None, None) // Clear context (5th param)
             .await
             .unwrap();
 
@@ -2924,8 +2938,8 @@ mod tests {
                 None,
                 None,
                 None,
+                Some(String::new()), // Clear context
                 None,
-                Some(String::new()),
                 None,
             )
             .await
