@@ -581,7 +581,7 @@ mod tests {
     // - cargo fmt --check && cargo clippy && cargo test
     //
     use super::*;
-    use crate::gtd::local_date_today;
+    use crate::gtd::{local_date_today, Nota};
     use chrono::NaiveDate;
     use tempfile::NamedTempFile;
 
@@ -999,7 +999,7 @@ mod tests {
 
         {
             let mut data = handler.data.lock().unwrap();
-            data.inbox(gtd::Context {
+            data.add(Nota::from_context(gtd::Context {
                 name: "Office".to_string(),
                 notes: None,
                 title: None,
@@ -1009,7 +1009,7 @@ mod tests {
                 start_date: None,
                 created_at: None,
                 updated_at: None,
-            });
+            }));
             drop(data);
             let _ = handler.save_data();
         }
@@ -1680,7 +1680,7 @@ mod tests {
         // Add a context
         {
             let mut data = handler.data.lock().unwrap();
-            data.inbox(gtd::Context {
+            data.add(Nota::from_context(gtd::Context {
                 name: "Office".to_string(),
                 notes: None,
                 title: None,
@@ -1690,7 +1690,7 @@ mod tests {
                 start_date: None,
                 created_at: None,
                 updated_at: None,
-            });
+            }));
             drop(data);
             let _ = handler.save_data();
         }
@@ -2779,9 +2779,10 @@ mod tests {
                 None,
             ).await.unwrap();
 
-        let result = handler.delete_context("Office".to_string()).await;
+        let result = handler.change_status("Office".to_string(), "trash".to_string(), None).await;
         assert!(result.is_ok());
-        assert!(result.unwrap().contains("deleted"));
+        let result = handler.empty_trash().await;
+        assert!(result.is_ok());
 
         let data = handler.data.lock().unwrap();
         assert_eq!(data.contexts.len(), 0);
@@ -2791,7 +2792,7 @@ mod tests {
     async fn test_delete_context_not_found() {
         let (handler, _temp_file) = get_test_handler();
 
-        let result = handler.delete_context("NonExistent".to_string()).await;
+        let result = handler.change_status("NonExistent".to_string(), "trash".to_string(), None).await;
         assert!(result.is_err());
     }
 
@@ -3491,6 +3492,8 @@ mod tests {
 
     // ==================== Prompt Tests ====================
 
+    // GTD workflow methods removed - tests commented out
+    /*
     #[tokio::test]
     async fn test_prompt_gtd_overview() {
         let (handler, _temp_file) = get_test_handler();
@@ -3584,6 +3587,7 @@ mod tests {
             assert!(content.len() > 100); // 各プロンプトは実質的な内容を持つ
         }
     }
+    */
 
     // 日付フィルタリングのテスト: start_dateが未来のタスクを除外
     #[tokio::test]
@@ -3798,7 +3802,7 @@ mod tests {
         assert!(result.is_ok());
 
         // 日付フィルタなしで一覧取得
-        let result = handler.list(None, None, None).await;
+        let result = handler.list(None).await;
         assert!(result.is_ok());
         let list = result.unwrap();
 
@@ -3870,7 +3874,7 @@ mod tests {
         assert!(result.is_ok());
 
         // デフォルト（exclude_notes=None）で一覧取得
-        let result = handler.list(None, None, None).await;
+        let result = handler.list(None).await;
         assert!(result.is_ok());
         let list = result.unwrap();
 
@@ -3908,7 +3912,7 @@ mod tests {
         assert!(result.is_ok());
 
         // exclude_notes=trueで一覧取得
-        let result = handler.list(None, None, Some(true)).await;
+        let result = handler.list(None).await;
         assert!(result.is_ok());
         let list = result.unwrap();
 
@@ -3938,7 +3942,7 @@ mod tests {
         assert!(result.is_ok());
 
         // exclude_notes=falseで明示的に一覧取得
-        let result = handler.list(None, None, Some(false)).await;
+        let result = handler.list(None).await;
         assert!(result.is_ok());
         let list = result.unwrap();
 
@@ -3967,7 +3971,7 @@ mod tests {
         assert!(result.is_ok());
 
         // デフォルトで一覧取得
-        let result = handler.list(None, None, None).await;
+        let result = handler.list(None).await;
         assert!(result.is_ok());
         let list = result.unwrap();
 
