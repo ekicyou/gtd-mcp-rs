@@ -523,12 +523,6 @@ impl McpServer for GtdServerHandler {
             }
         };
 
-        // Validate calendar status has start_date
-        if nota_status == NotaStatus::calendar && start_date.is_none() {
-            drop(data);
-            bail!("Calendar status requires start_date parameter");
-        }
-
         // Find existing nota
         let mut nota = match data.find_by_id(&id) {
             Some(n) => n,
@@ -537,6 +531,12 @@ impl McpServer for GtdServerHandler {
                 bail!("Nota '{}' not found", id);
             }
         };
+
+        // Validate calendar status has start_date (either provided or already exists)
+        if nota_status == NotaStatus::calendar && start_date.is_none() && nota.start_date.is_none() {
+            drop(data);
+            bail!("Calendar status requires start_date parameter (task has no existing start_date)");
+        }
 
         // Check if moving to trash and if nota is still referenced
         let is_trash = nota_status == NotaStatus::trash;
