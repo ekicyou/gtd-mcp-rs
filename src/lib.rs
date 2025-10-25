@@ -632,6 +632,7 @@ mod tests {
             .inbox(
                 "task-3".to_string(),
                 "Test Task".to_string(),
+                "inbox".to_string(),
                 None,
                 None,
                 None,
