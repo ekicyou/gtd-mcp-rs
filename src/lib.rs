@@ -2914,8 +2914,8 @@ mod tests {
                 "Office Project".to_string(),
                 "inbox".to_string(),
                 None,
-                None,
                 Some("Office".to_string()),
+                None,
                 None,
             )
             .await
@@ -2972,8 +2972,8 @@ mod tests {
                 "Office Project".to_string(),
                 "inbox".to_string(),
                 None,
-                None,
                 Some("Office".to_string()),
+                None,
                 None,
             )
             .await
@@ -3069,8 +3069,8 @@ mod tests {
                 "Office Project".to_string(),
                 "inbox".to_string(),
                 None,
-                None,
                 Some("Office".to_string()),
+                None,
                 None,
             )
             .await
@@ -3183,8 +3183,8 @@ mod tests {
                 "Office Project".to_string(),
                 "inbox".to_string(),
                 None,
-                None,
                 Some("Office".to_string()),
+                None,
                 None,
             )
             .await;
@@ -3208,8 +3208,8 @@ mod tests {
                 "Test Project".to_string(),
                 "inbox".to_string(),
                 None,
-                None,
                 Some("NonExistent".to_string()),
+                None,
                 None,
             )
             .await;
@@ -3297,8 +3297,8 @@ mod tests {
                 "Test Project".to_string(),
                 "inbox".to_string(),
                 None,
-                None,
                 Some("Office".to_string()),
+                None,
                 None,
             )
             .await;
