@@ -1266,8 +1266,8 @@ mod tests {
         let result = handler
             .update(
                 project_id.clone(),
+                Some("Updated Name".to_string()), // title is 2nd param
                 None,
-                Some("Updated Name".to_string()),
                 None,
                 None,
                 None,
@@ -1307,9 +1307,9 @@ mod tests {
                 project_id.clone(),
                 None,
                 None,
-                Some("New description".to_string()),
                 None,
                 None,
+                Some("New description".to_string()), // notes is 6th param
                 None,
             )
             .await;
@@ -1328,9 +1328,9 @@ mod tests {
                 project_id.clone(),
                 None,
                 None,
-                Some("".to_string()),
                 None,
                 None,
+                Some("".to_string()), // notes is 6th param
                 None,
             )
             .await;
