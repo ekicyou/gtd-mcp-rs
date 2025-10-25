@@ -546,7 +546,7 @@ impl McpServer for GtdServerHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::gtd::local_date_today;
+    use crate::gtd::{local_date_today, Nota};
     use chrono::NaiveDate;
     use tempfile::NamedTempFile;
 
