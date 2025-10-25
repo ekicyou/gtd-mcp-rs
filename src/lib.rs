@@ -834,6 +834,7 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
             )
             .await;
         assert!(result.is_ok());
@@ -1037,6 +1038,7 @@ mod tests {
         let result = handler
             .update(
                 task_id.clone(),
+                None,
                 None,
                 Some(project_id.clone()),
                 Some("Office".to_string()),
@@ -2604,7 +2606,15 @@ mod tests {
         let (handler, _temp_file) = get_test_handler();
 
         let result = handler
-            .inbox("Office".to_string(), Some("Work environment".to_string()))
+            .inbox(
+                "Office".to_string(),
+                "Office".to_string(),
+                "context".to_string(),
+                None,
+                None,
+                Some("Work environment".to_string()),
+                None,
+            )
             .await;
         assert!(result.is_ok());
         assert!(result.unwrap().contains("Office"));
@@ -2620,11 +2630,31 @@ mod tests {
     async fn test_add_context_duplicate() {
         let (handler, _temp_file) = get_test_handler();
 
-        let result = handler.inbox("Office".to_string(), None).await;
+        let result = handler
+            .inbox(
+                "Office".to_string(),
+                "Office".to_string(),
+                "context".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
+            .await;
         assert!(result.is_ok());
 
         // Try to add duplicate
-        let result = handler.inbox("Office".to_string(), None).await;
+        let result = handler
+            .inbox(
+                "Office".to_string(),
+                "Office".to_string(),
+                "context".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
+            .await;
         assert!(result.is_err());
     }
 
@@ -2642,10 +2672,26 @@ mod tests {
         let (handler, _temp_file) = get_test_handler();
 
         handler
-            .inbox("Office".to_string(), Some("Work environment".to_string()))
+            .inbox(
+                "Office".to_string(),
+                "Office".to_string(),
+                "context".to_string(),
+                None,
+                None,
+                Some("Work environment".to_string()),
+                None,
+            )
             .await
             .unwrap();
-        handler.inbox("Home".to_string(), None).await.unwrap();
+        handler.inbox(
+                "Home".to_string(),
+                "Home".to_string(),
+                "context".to_string(),
+                None,
+                None,
+                None,
+                None,
+            ).await.unwrap();
 
         let result = handler.list().await;
         assert!(result.is_ok());
@@ -2660,7 +2706,15 @@ mod tests {
         let (handler, _temp_file) = get_test_handler();
 
         handler
-            .inbox("Office".to_string(), Some("Old description".to_string()))
+            .inbox(
+                "Office".to_string(),
+                "Office".to_string(),
+                "context".to_string(),
+                None,
+                None,
+                Some("Old description".to_string()),
+                None,
+            )
             .await
             .unwrap();
 
@@ -2679,7 +2733,15 @@ mod tests {
         let (handler, _temp_file) = get_test_handler();
 
         handler
-            .inbox("Office".to_string(), Some("Old description".to_string()))
+            .inbox(
+                "Office".to_string(),
+                "Office".to_string(),
+                "context".to_string(),
+                None,
+                None,
+                Some("Old description".to_string()),
+                None,
+            )
             .await
             .unwrap();
 
@@ -2707,7 +2769,15 @@ mod tests {
     async fn test_delete_context() {
         let (handler, _temp_file) = get_test_handler();
 
-        handler.inbox("Office".to_string(), None).await.unwrap();
+        handler.inbox(
+                "Office".to_string(),
+                "Office".to_string(),
+                "context".to_string(),
+                None,
+                None,
+                None,
+                None,
+            ).await.unwrap();
 
         let result = handler.delete_context("Office".to_string()).await;
         assert!(result.is_ok());
@@ -2730,7 +2800,15 @@ mod tests {
         let (handler, _temp_file) = get_test_handler();
 
         // Add a context
-        handler.inbox("Office".to_string(), None).await.unwrap();
+        handler.inbox(
+                "Office".to_string(),
+                "Office".to_string(),
+                "context".to_string(),
+                None,
+                None,
+                None,
+                None,
+            ).await.unwrap();
 
         // Add a task that references the context
         handler
@@ -2761,7 +2839,15 @@ mod tests {
         let (handler, _temp_file) = get_test_handler();
 
         // Add a context
-        handler.inbox("Office".to_string(), None).await.unwrap();
+        handler.inbox(
+                "Office".to_string(),
+                "Office".to_string(),
+                "context".to_string(),
+                None,
+                None,
+                None,
+                None,
+            ).await.unwrap();
 
         // Add a project that references the context
         handler
@@ -2791,7 +2877,15 @@ mod tests {
         let (handler, _temp_file) = get_test_handler();
 
         // Add a context
-        handler.inbox("Office".to_string(), None).await.unwrap();
+        handler.inbox(
+                "Office".to_string(),
+                "Office".to_string(),
+                "context".to_string(),
+                None,
+                None,
+                None,
+                None,
+            ).await.unwrap();
 
         // Add a task that references the context
         handler
@@ -2835,7 +2929,15 @@ mod tests {
         let (handler, _temp_file) = get_test_handler();
 
         // Add a context
-        handler.inbox("Office".to_string(), None).await.unwrap();
+        handler.inbox(
+                "Office".to_string(),
+                "Office".to_string(),
+                "context".to_string(),
+                None,
+                None,
+                None,
+                None,
+            ).await.unwrap();
 
         // Add a task that references the context
         let task_id = handler
@@ -2875,7 +2977,15 @@ mod tests {
         let (handler, _temp_file) = get_test_handler();
 
         // Add a context
-        handler.inbox("Office".to_string(), None).await.unwrap();
+        handler.inbox(
+                "Office".to_string(),
+                "Office".to_string(),
+                "context".to_string(),
+                None,
+                None,
+                None,
+                None,
+            ).await.unwrap();
 
         // Add a project that references the context
         handler
@@ -2918,7 +3028,15 @@ mod tests {
         let (handler, _temp_file) = get_test_handler();
 
         // Add a context
-        handler.inbox("Office".to_string(), None).await.unwrap();
+        handler.inbox(
+                "Office".to_string(),
+                "Office".to_string(),
+                "context".to_string(),
+                None,
+                None,
+                None,
+                None,
+            ).await.unwrap();
 
         // Add multiple tasks that reference the context
         handler
@@ -2962,7 +3080,15 @@ mod tests {
 
         // Add a context first
         let result = handler
-            .inbox("Office".to_string(), Some("Work environment".to_string()))
+            .inbox(
+                "Office".to_string(),
+                "Office".to_string(),
+                "context".to_string(),
+                None,
+                None,
+                Some("Work environment".to_string()),
+                None,
+            )
             .await;
         assert!(result.is_ok());
 
@@ -3008,7 +3134,15 @@ mod tests {
 
         // Add a context
         let _ = handler
-            .inbox("Office".to_string(), Some("Work environment".to_string()))
+            .inbox(
+                "Office".to_string(),
+                "Office".to_string(),
+                "context".to_string(),
+                None,
+                None,
+                Some("Work environment".to_string()),
+                None,
+            )
             .await;
 
         // Add a project without context
@@ -3056,7 +3190,15 @@ mod tests {
 
         // Add a context
         let _ = handler
-            .inbox("Office".to_string(), Some("Work environment".to_string()))
+            .inbox(
+                "Office".to_string(),
+                "Office".to_string(),
+                "context".to_string(),
+                None,
+                None,
+                Some("Work environment".to_string()),
+                None,
+            )
             .await;
 
         // Add a project with context
