@@ -1,5 +1,6 @@
 use crate::git_ops::GitOps;
-use crate::gtd::GtdData;
+#[allow(unused_imports)]
+use crate::gtd::{GtdData, local_date_today};
 use anyhow::Result;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -153,7 +154,7 @@ impl Storage {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::gtd::{Context, Project, ProjectStatus, Task, TaskStatus};
+    use crate::gtd::{Context, NotaStatus, Project, ProjectStatus, Task};
     use chrono::NaiveDate;
     use std::env;
     use std::fs;
@@ -229,7 +230,7 @@ mod tests {
         let task = Task {
             id: "task-1".to_string(),
             title: "Test Task".to_string(),
-            status: TaskStatus::inbox,
+            status: NotaStatus::inbox,
             project: Some("project-1".to_string()),
             context: Some("context-1".to_string()),
             notes: Some("Test notes".to_string()),
@@ -275,9 +276,13 @@ mod tests {
 
         let project = Project {
             id: "project-1".to_string(),
-            name: "Test Project".to_string(),
-            description: Some("Test description".to_string()),
+            title: "Test Project".to_string(),
+            notes: Some("Test description".to_string()),
             status: ProjectStatus::active,
+            project: None,
+            start_date: None,
+            created_at: local_date_today(),
+            updated_at: local_date_today(),
             context: None,
         };
         data.add_project(project.clone());
@@ -292,11 +297,8 @@ mod tests {
         assert_eq!(loaded_data.projects.len(), 1);
 
         let loaded_project = loaded_data.find_project_by_id("project-1").unwrap();
-        assert_eq!(loaded_project.name, "Test Project");
-        assert_eq!(
-            loaded_project.description,
-            Some("Test description".to_string())
-        );
+        assert_eq!(loaded_project.title, "Test Project");
+        assert_eq!(loaded_project.notes, Some("Test description".to_string()));
 
         // Clean up
         let _ = fs::remove_file(&test_path);
@@ -315,7 +317,14 @@ mod tests {
 
         let context = Context {
             name: "Office".to_string(),
-            description: None,
+            notes: None,
+            title: None,
+            status: NotaStatus::context,
+            project: None,
+            context: None,
+            start_date: None,
+            created_at: None,
+            updated_at: None,
         };
         data.add_context(context.clone());
 
@@ -351,7 +360,7 @@ mod tests {
             let task = Task {
                 id: format!("task-{}", i),
                 title: format!("Task {}", i),
-                status: TaskStatus::inbox,
+                status: NotaStatus::inbox,
                 project: None,
                 context: None,
                 notes: None,
@@ -366,10 +375,18 @@ mod tests {
         for i in 1..=2 {
             let project = Project {
                 id: format!("project-{}", i),
-                name: format!("Project {}", i),
-                description: None,
+                title: format!(
+                    "Project {
+}",
+                    i
+                ),
+                notes: None,
                 status: ProjectStatus::active,
+                project: None,
                 context: None,
+                start_date: None,
+                created_at: local_date_today(),
+                updated_at: local_date_today(),
             };
             data.add_project(project);
         }
@@ -377,8 +394,19 @@ mod tests {
         // Add multiple contexts
         for i in 1..=2 {
             let context = Context {
-                name: format!("Context {}", i),
-                description: None,
+                name: format!(
+                    "Context {
+}",
+                    i
+                ),
+                notes: None,
+                title: None,
+                status: NotaStatus::context,
+                project: None,
+                context: None,
+                start_date: None,
+                created_at: None,
+                updated_at: None,
             };
             data.add_context(context);
         }
@@ -413,7 +441,7 @@ mod tests {
         let task1 = Task {
             id: "task-1".to_string(),
             title: "Original Task".to_string(),
-            status: TaskStatus::inbox,
+            status: NotaStatus::inbox,
             project: None,
             context: None,
             notes: None,
@@ -429,7 +457,7 @@ mod tests {
         let task2 = Task {
             id: "task-2".to_string(),
             title: "New Task".to_string(),
-            status: TaskStatus::next_action,
+            status: NotaStatus::next_action,
             project: None,
             context: None,
             notes: None,
@@ -479,14 +507,14 @@ mod tests {
         let mut data = GtdData::new();
 
         let statuses = [
-            TaskStatus::inbox,
-            TaskStatus::next_action,
-            TaskStatus::waiting_for,
-            TaskStatus::later,
-            TaskStatus::calendar,
-            TaskStatus::someday,
-            TaskStatus::done,
-            TaskStatus::trash,
+            NotaStatus::inbox,
+            NotaStatus::next_action,
+            NotaStatus::waiting_for,
+            NotaStatus::later,
+            NotaStatus::calendar,
+            NotaStatus::someday,
+            NotaStatus::done,
+            NotaStatus::trash,
         ];
 
         for (i, status) in statuses.iter().enumerate() {
@@ -603,7 +631,7 @@ mod tests {
         let task = Task {
             id: "test-1".to_string(),
             title: "Test Task".to_string(),
-            status: TaskStatus::inbox,
+            status: NotaStatus::inbox,
             project: None,
             context: None,
             notes: None,
@@ -722,7 +750,7 @@ mod tests {
         let task = Task {
             id: "test-1".to_string(),
             title: "Test Task".to_string(),
-            status: TaskStatus::inbox,
+            status: NotaStatus::inbox,
             project: None,
             context: None,
             notes: None,
@@ -833,7 +861,7 @@ mod tests {
         let task = Task {
             id: "#1".to_string(),
             title: "Task with notes".to_string(),
-            status: TaskStatus::inbox,
+            status: NotaStatus::inbox,
             project: None,
             context: None,
             notes: Some("Line 1\nLine 2\nLine 3".to_string()),
@@ -870,7 +898,7 @@ mod tests {
         let task = Task {
             id: "#1".to_string(),
             title: "Test".to_string(),
-            status: TaskStatus::inbox,
+            status: NotaStatus::inbox,
             project: None,
             context: None,
             notes: None,
@@ -1060,7 +1088,8 @@ mod tests {
 
 #[cfg(test)]
 mod test_line_ending_normalization {
-    use crate::gtd::GtdData;
+    #[allow(unused_imports)]
+    use crate::gtd::{GtdData, local_date_today};
 
     // Test that CR normalization works for project descriptions
     #[test]
@@ -1069,8 +1098,8 @@ mod test_line_ending_normalization {
         let toml_input = concat!(
             "[[projects]]\n",
             "id = \"project-1\"\n",
-            "name = \"Test Project\"\n",
-            "description = \"Line 1\\rLine 2\\rLine 3\"\n",
+            "title = \"Test Project\"\n",
+            "notes = \"Line 1\\rLine 2\\rLine 3\"\n",
             "status = \"active\"\n"
         );
 
@@ -1078,8 +1107,8 @@ mod test_line_ending_normalization {
         let project = data.find_project_by_id("project-1").unwrap();
 
         // Description should be normalized to LF
-        assert!(project.description.is_some());
-        let desc = project.description.as_ref().unwrap();
+        assert!(project.notes.is_some());
+        let desc = project.notes.as_ref().unwrap();
         assert!(!desc.as_bytes().contains(&b'\r'), "Should not contain CR");
         assert!(desc.contains('\n'), "Should contain LF");
     }
@@ -1090,15 +1119,15 @@ mod test_line_ending_normalization {
         // Create TOML with \r in context description
         let toml_input = concat!(
             "[contexts.Office]\n",
-            "description = \"Line 1\\rLine 2\\rLine 3\"\n"
+            "notes = \"Line 1\\rLine 2\\rLine 3\"\n"
         );
 
         let data: GtdData = toml::from_str(toml_input).unwrap();
         let context = data.find_context_by_name("Office").unwrap();
 
         // Description should be normalized to LF
-        assert!(context.description.is_some());
-        let desc = context.description.as_ref().unwrap();
+        assert!(context.notes.is_some());
+        let desc = context.notes.as_ref().unwrap();
         assert!(!desc.as_bytes().contains(&b'\r'), "Should not contain CR");
         assert!(desc.contains('\n'), "Should contain LF");
     }

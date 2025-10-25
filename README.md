@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/ekicyou/gtd-mcp-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/ekicyou/gtd-mcp-rs/actions/workflows/ci.yml)
 
-**Version 0.7.1**
+**Version 0.7.2**
 
 A Model Context Protocol (MCP) server for GTD (Getting Things Done) task management. This server enables LLM assistants like Claude to help you manage your tasks and projects using the proven GTD methodology.
 
@@ -12,8 +12,9 @@ gtd-mcp is an MCP server that implements the Getting Things Done (GTD) workflow.
 
 **Key Features:**
 - ✅ Complete GTD workflow support (inbox, next actions, waiting for, someday/maybe, calendar, done, trash)
+- ✅ **Unified nota interface** - single set of tools for tasks, projects, and contexts
 - ✅ Project and context management
-- ✅ Human-readable IDs (`#1`, `#2` for tasks, meaningful project IDs like `website-redesign`)
+- ✅ **Flexible task IDs** - client-provided arbitrary strings (e.g., "meeting-prep", "call-sarah")
 - ✅ Batch operations for efficient task management
 - ✅ TOML-based storage (human-readable, Git-friendly)
 - ✅ Optional Git synchronization
@@ -79,21 +80,50 @@ With Git synchronization:
 
 ### Usage
 
-Once configured, you can ask your LLM assistant to help you manage tasks:
+Once configured, you can ask your LLM assistant to help you manage tasks using the unified nota interface:
 
-- "Add a task to review the project proposal"
+- "Add a new task to review the project proposal"
 - "Show me my next actions"
-- "Change tasks #1, #2, and #3 to done status"
-- "Move task #5 to calendar for December 25th"
-- "Create a project for the Q1 marketing campaign"
+- "Update task meeting-prep and add notes"
+- "Change status of call-sarah to done"
+- "Create a project called website-redesign"
 - "What's in my inbox?"
 - "Help me process my inbox" (uses built-in GTD workflow prompt)
 
 ## MCP Tools
 
+### Core Unified Tools (Recommended)
+
+The system provides 5 core tools that handle all GTD operations in a unified way:
+
+**add** - Capture any nota (task/project/context)
+- Required: `id`, `title`, `status`
+- Optional: `project`, `context`, `notes`, `start_date` (YYYY-MM-DD)
+- Status determines type: inbox/next_action/etc→task, project→project, context→context
+
+**list** - Review all notas with optional status filter
+- Optional: `status` - Filter by specific status
+
+**update** - Clarify and organize nota details
+- Required: `id`
+- Optional: `title`, `status`, `project`, `context`, `notes`, `start_date`
+- Can transform types by changing status
+
+**change_status** - Move notas through GTD workflow stages
+- Required: `id`, `new_status`
+- Supports all workflow transitions including type transformations
+
+**empty_trash** - Permanently delete all trashed notas
+- No parameters
+- Irreversible operation with safety checks for referenced notas
+
+### Legacy Tools (Backward Compatibility)
+
+The following task-specific tools are maintained for compatibility but the unified tools above are recommended:
+
 ### Task Management
 
-**add_task** - Add a new task to inbox
+**add_task** - Add a new task to inbox (deprecated: use `add` with status="inbox")
 - Required: `title`
 - Optional: `project`, `context`, `notes`, `start_date` (YYYY-MM-DD)
 

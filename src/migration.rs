@@ -16,7 +16,8 @@
 //! - **Version 1**: Projects stored as `Vec<Project>` (TOML: `[[projects]]`)
 //! - **Version 2**: Projects stored as `HashMap<String, Project>` (TOML: `[projects.id]`)
 
-use crate::gtd::{Context, Project, Task};
+#[allow(unused_imports)]
+use crate::gtd::{Context, Project, Task, local_date_today};
 use serde::Deserialize;
 use std::collections::HashMap;
 
@@ -170,8 +171,8 @@ pub fn normalize_task_line_endings(tasks: &mut [Task]) {
 /// * `projects` - Mutable reference to the projects HashMap
 pub fn normalize_project_line_endings(projects: &mut HashMap<String, Project>) {
     for project in projects.values_mut() {
-        if let Some(description) = &project.description {
-            project.description = Some(normalize_string_line_endings(description));
+        if let Some(notes) = &project.notes {
+            project.notes = Some(normalize_string_line_endings(notes));
         }
     }
 }
@@ -183,8 +184,8 @@ pub fn normalize_project_line_endings(projects: &mut HashMap<String, Project>) {
 /// * `contexts` - Mutable reference to the contexts HashMap
 pub fn normalize_context_line_endings(contexts: &mut HashMap<String, Context>) {
     for context in contexts.values_mut() {
-        if let Some(description) = &context.description {
-            context.description = Some(normalize_string_line_endings(description));
+        if let Some(notes) = &context.notes {
+            context.notes = Some(normalize_string_line_endings(notes));
         }
     }
 }
@@ -199,16 +200,24 @@ mod tests {
         let projects_vec = vec![
             Project {
                 id: "project-1".to_string(),
-                name: "First Project".to_string(),
-                description: Some("Description 1".to_string()),
+                title: "First Project".to_string(),
+                notes: Some("Notes 1".to_string()),
                 status: ProjectStatus::active,
+                project: None,
+                start_date: None,
+                created_at: local_date_today(),
+                updated_at: local_date_today(),
                 context: None,
             },
             Project {
                 id: "project-2".to_string(),
-                name: "Second Project".to_string(),
-                description: None,
+                title: "Second Project".to_string(),
+                notes: None,
                 status: ProjectStatus::on_hold,
+                project: None,
+                start_date: None,
+                created_at: local_date_today(),
+                updated_at: local_date_today(),
                 context: Some("Office".to_string()),
             },
         ];
@@ -220,8 +229,8 @@ mod tests {
         assert!(projects_map.contains_key("project-2"));
 
         let project1 = &projects_map["project-1"];
-        assert_eq!(project1.name, "First Project");
-        assert_eq!(project1.description, Some("Description 1".to_string()));
+        assert_eq!(project1.title, "First Project");
+        assert_eq!(project1.notes, Some("Notes 1".to_string()));
     }
 
     #[test]
@@ -251,9 +260,13 @@ mod tests {
             "proj-1".to_string(),
             Project {
                 id: String::new(), // ID is empty before population
-                name: "Test".to_string(),
-                description: None,
+                title: "Test".to_string(),
+                notes: None,
                 status: ProjectStatus::active,
+                project: None,
+                start_date: None,
+                created_at: local_date_today(),
+                updated_at: local_date_today(),
                 context: None,
             },
         );
