@@ -649,7 +649,7 @@ mod tests {
 
         // Test moving to next_action
         let result = handler
-            .change_status(vec![task_id.clone()], "next_action".to_string(), None)
+            .change_status(task_id.clone(), "next_action".to_string(), None)
             .await;
         assert!(result.is_ok());
         {
