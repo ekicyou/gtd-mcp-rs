@@ -979,7 +979,7 @@ mod tests {
             .inbox(
                 "test-project-1".to_string(),
                 "Test Project".to_string(),
-                "inbox".to_string(),
+                "project".to_string(),
                 None,
                 None,
                 None,
@@ -1303,7 +1303,7 @@ mod tests {
             .inbox(
                 "test-project-1".to_string(),
                 "Original Name".to_string(),
-                "inbox".to_string(),
+                "project".to_string(),
                 None,
                 None,
                 None,
@@ -1347,7 +1347,7 @@ mod tests {
             .inbox(
                 "test-project-1".to_string(),
                 "Test Project".to_string(),
-                "inbox".to_string(),
+                "project".to_string(),
                 None,
                 None,
                 None,
@@ -1412,7 +1412,7 @@ mod tests {
             .inbox(
                 "test-project-1".to_string(),
                 "Test Project".to_string(),
-                "inbox".to_string(),
+                "project".to_string(),
                 None,
                 None,
                 None,
@@ -1484,7 +1484,7 @@ mod tests {
             .inbox(
                 "test-project-1".to_string(),
                 "Test Project".to_string(),
-                "inbox".to_string(),
+                "project".to_string(),
                 None,
                 None,
                 None,
@@ -1542,7 +1542,7 @@ mod tests {
             .inbox(
                 "test-project-1".to_string(),
                 "Test Project".to_string(),
-                "inbox".to_string(),
+                "project".to_string(),
                 None,
                 None,
                 None,
@@ -1583,7 +1583,7 @@ mod tests {
             .inbox(
                 "test-project-1".to_string(),
                 "Test Project".to_string(),
-                "inbox".to_string(),
+                "project".to_string(),
                 None,
                 None,
                 None,
@@ -1626,7 +1626,7 @@ mod tests {
             .inbox(
                 "test-project-1".to_string(),
                 "Test Project".to_string(),
-                "inbox".to_string(),
+                "project".to_string(),
                 None,
                 None,
                 None,
@@ -1683,7 +1683,7 @@ mod tests {
             .inbox(
                 "test-project-1".to_string(),
                 "Test Project".to_string(),
-                "inbox".to_string(),
+                "project".to_string(),
                 None,
                 None,
                 None,
@@ -2912,7 +2912,7 @@ mod tests {
             .inbox(
                 "office-proj".to_string(),
                 "Office Project".to_string(),
-                "inbox".to_string(),
+                "project".to_string(),
                 None,
                 Some("Office".to_string()),
                 None,
@@ -2970,7 +2970,7 @@ mod tests {
             .inbox(
                 "office-proj".to_string(),
                 "Office Project".to_string(),
-                "inbox".to_string(),
+                "project".to_string(),
                 None,
                 Some("Office".to_string()),
                 None,
@@ -3067,7 +3067,7 @@ mod tests {
             .inbox(
                 "office-proj".to_string(),
                 "Office Project".to_string(),
-                "inbox".to_string(),
+                "project".to_string(),
                 None,
                 Some("Office".to_string()),
                 None,
@@ -3181,7 +3181,7 @@ mod tests {
             .inbox(
                 "office-proj".to_string(),
                 "Office Project".to_string(),
-                "inbox".to_string(),
+                "project".to_string(),
                 None,
                 Some("Office".to_string()),
                 None,
@@ -3206,7 +3206,7 @@ mod tests {
             .inbox(
                 "test-project-1".to_string(),
                 "Test Project".to_string(),
-                "inbox".to_string(),
+                "project".to_string(),
                 None,
                 Some("NonExistent".to_string()),
                 None,
@@ -3238,7 +3238,7 @@ mod tests {
             .inbox(
                 "test-project-1".to_string(),
                 "Test Project".to_string(),
-                "inbox".to_string(),
+                "project".to_string(),
                 None,
                 None,
                 None,
@@ -3295,7 +3295,7 @@ mod tests {
             .inbox(
                 "test-project-1".to_string(),
                 "Test Project".to_string(),
-                "inbox".to_string(),
+                "project".to_string(),
                 None,
                 Some("Office".to_string()),
                 None,
@@ -3339,7 +3339,7 @@ mod tests {
             .inbox(
                 "test-project-1".to_string(),
                 "Test Project".to_string(),
-                "inbox".to_string(),
+                "project".to_string(),
                 None,
                 None,
                 None,
@@ -3378,7 +3378,7 @@ mod tests {
             .inbox(
                 "my-custom-id".to_string(),
                 "Custom ID Project".to_string(),
-                "inbox".to_string(),
+                "project".to_string(),
                 None,
                 None,
                 Some("Project with custom ID".to_string()),
@@ -3437,7 +3437,7 @@ mod tests {
             .inbox(
                 "test-project-1".to_string(),
                 "Test Project".to_string(),
-                "inbox".to_string(),
+                "project".to_string(),
                 None,
                 None,
                 None,
@@ -3541,7 +3541,7 @@ mod tests {
             .inbox(
                 "test-project-1".to_string(),
                 "Test Project".to_string(),
-                "inbox".to_string(),
+                "project".to_string(),
                 None,
                 None,
                 None,
@@ -4518,7 +4518,7 @@ mod tests {
             .inbox(
                 "test-project-1".to_string(),
                 "Test Project".to_string(),
-                "inbox".to_string(),
+                "project".to_string(),
                 None,
                 None,
                 None,
@@ -4556,7 +4556,7 @@ mod tests {
             .inbox(
                 "test-project-1".to_string(),
                 "Test Project".to_string(),
-                "inbox".to_string(),
+                "project".to_string(),
                 None,
                 None,
                 None,
