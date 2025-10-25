@@ -581,6 +581,7 @@ mod tests {
     // - cargo fmt --check && cargo clippy && cargo test
     //
     use super::*;
+    use crate::gtd::local_date_today;
     use chrono::NaiveDate;
     use tempfile::NamedTempFile;
 
@@ -614,7 +615,7 @@ mod tests {
             created_at: local_date_today(),
             updated_at: local_date_today(),
         };
-        data.add(task);
+        data.add(Nota::from_task(task));
         drop(data);
 
         // 保存
@@ -666,6 +667,7 @@ mod tests {
             .inbox(
                 "task-3".to_string(),
                 "Test Task".to_string(),
+                "inbox".to_string(),
                 None,
                 None,
                 None,
@@ -682,7 +684,7 @@ mod tests {
 
         // Test moving to next_action
         let result = handler
-            .change_status(vec![task_id.clone()], "next_action".to_string(), None)
+            .change_status(task_id.clone(), "next_action".to_string(), None)
             .await;
         assert!(result.is_ok());
         {
@@ -693,7 +695,7 @@ mod tests {
 
         // Test moving to done
         let result = handler
-            .change_status(vec![task_id.clone()], "done".to_string(), None)
+            .change_status(task_id.clone(), "done".to_string(), None)
             .await;
         assert!(result.is_ok());
         {
@@ -704,7 +706,7 @@ mod tests {
 
         // Test moving to trash
         let result = handler
-            .change_status(vec![task_id.clone()], "trash".to_string(), None)
+            .change_status(task_id.clone(), "trash".to_string(), None)
             .await;
         assert!(result.is_ok());
         {
@@ -715,7 +717,7 @@ mod tests {
 
         // Test invalid status
         let result = handler
-            .change_status(vec![task_id.clone()], "invalid_status".to_string(), None)
+            .change_status(task_id.clone(), "invalid_status".to_string(), None)
             .await;
         assert!(result.is_err());
     }
@@ -729,6 +731,7 @@ mod tests {
             .inbox(
                 "task-4".to_string(),
                 "Test Task".to_string(),
+                "inbox".to_string(),
                 None,
                 None,
                 None,
@@ -746,7 +749,7 @@ mod tests {
         // Test moving to calendar with date
         let result = handler
             .change_status(
-                vec![task_id.clone()],
+                task_id.clone(),
                 "calendar".to_string(),
                 Some("2024-12-25".to_string()),
             )
@@ -772,6 +775,7 @@ mod tests {
                 .inbox(
                     format!("task-{}", 5 - 1 + i),
                     format!("Test Task {}", i),
+                    "inbox".to_string(),
                     None,
                     None,
                     None,
@@ -812,6 +816,7 @@ mod tests {
             .inbox(
                 "meeting-prep".to_string(),
                 "Prepare for meeting".to_string(),
+                "inbox".to_string(),
                 None,
                 None,
                 None,
@@ -848,6 +853,7 @@ mod tests {
             .inbox(
                 "call-sarah".to_string(),
                 "Call Sarah".to_string(),
+                "inbox".to_string(),
                 None,
                 None,
                 None,
@@ -881,6 +887,7 @@ mod tests {
             .inbox(
                 "task-8".to_string(),
                 "Original Title".to_string(),
+                "inbox".to_string(),
                 None,
                 None,
                 None,
@@ -925,6 +932,7 @@ mod tests {
             .inbox(
                 "task-9".to_string(),
                 "Test Task".to_string(),
+                "inbox".to_string(),
                 None,
                 None,
                 None,
@@ -950,7 +958,7 @@ mod tests {
 
         // Update status to next_action using new method
         let result = handler
-            .change_status(vec![task_id.clone()], "next_action".to_string(), None)
+            .change_status(task_id.clone(), "next_action".to_string(), None)
             .await;
         assert!(result.is_ok());
 
@@ -971,8 +979,11 @@ mod tests {
         // Add a project and context first
         let project_result = handler
             .inbox(
-                "Test Project".to_string(),
                 "test-project-1".to_string(),
+                "Test Project".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
                 None,
                 None,
             )
@@ -1007,6 +1018,7 @@ mod tests {
             .inbox(
                 "task-10".to_string(),
                 "Test Task".to_string(),
+                "inbox".to_string(),
                 None,
                 None,
                 None,
@@ -1050,6 +1062,7 @@ mod tests {
             .inbox(
                 "task-2001".to_string(),
                 "Test Task".to_string(),
+                "inbox".to_string(),
                 None,
                 None,
                 Some("Some notes".to_string()),
@@ -1101,6 +1114,7 @@ mod tests {
             .inbox(
                 "task-11".to_string(),
                 "Test Task".to_string(),
+                "inbox".to_string(),
                 None,
                 None,
                 None,
@@ -1138,6 +1152,7 @@ mod tests {
             .inbox(
                 "task-12".to_string(),
                 "Test Task".to_string(),
+                "inbox".to_string(),
                 None,
                 None,
                 None,
@@ -1175,6 +1190,7 @@ mod tests {
             .inbox(
                 "task-13".to_string(),
                 "Test Task".to_string(),
+                "inbox".to_string(),
                 None,
                 None,
                 None,
@@ -1230,6 +1246,7 @@ mod tests {
             .inbox(
                 "task-14".to_string(),
                 "Test Task".to_string(),
+                "inbox".to_string(),
                 None,
                 None,
                 None,
@@ -1279,8 +1296,11 @@ mod tests {
         // Add a project
         let result = handler
             .inbox(
-                "Original Name".to_string(),
                 "test-project-1".to_string(),
+                "Original Name".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
                 None,
                 None,
             )
@@ -1319,8 +1339,11 @@ mod tests {
         // Add a project
         let result = handler
             .inbox(
-                "Test Project".to_string(),
                 "test-project-1".to_string(),
+                "Test Project".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
                 None,
                 None,
             )
@@ -1379,8 +1402,11 @@ mod tests {
         // Add a project
         let result = handler
             .inbox(
-                "Test Project".to_string(),
                 "test-project-1".to_string(),
+                "Test Project".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
                 None,
                 None,
             )
@@ -1446,8 +1472,11 @@ mod tests {
         // Add a project
         let result = handler
             .inbox(
-                "Test Project".to_string(),
                 "test-project-1".to_string(),
+                "Test Project".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
                 None,
                 None,
             )
@@ -1499,8 +1528,11 @@ mod tests {
         // Add a project
         let result = handler
             .inbox(
-                "Test Project".to_string(),
                 "test-project-1".to_string(),
+                "Test Project".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
                 None,
                 None,
             )
@@ -1533,8 +1565,11 @@ mod tests {
         // Add a project
         let result = handler
             .inbox(
-                "Test Project".to_string(),
                 "test-project-1".to_string(),
+                "Test Project".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
                 None,
                 None,
             )
@@ -1570,8 +1605,11 @@ mod tests {
         // Add a project
         let result = handler
             .inbox(
-                "Test Project".to_string(),
                 "test-project-1".to_string(),
+                "Test Project".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
                 None,
                 None,
             )
@@ -1620,8 +1658,11 @@ mod tests {
         // Add a project
         let project_result = handler
             .inbox(
-                "Test Project".to_string(),
                 "test-project-1".to_string(),
+                "Test Project".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
                 None,
                 None,
             )
@@ -1657,6 +1698,7 @@ mod tests {
             .inbox(
                 "task-15".to_string(),
                 "Original Task".to_string(),
+                "inbox".to_string(),
                 None,
                 None,
                 None,
@@ -1686,7 +1728,7 @@ mod tests {
 
         // Change status separately using new method
         let result = handler
-            .change_status(vec![task_id.clone()], "done".to_string(), None)
+            .change_status(task_id.clone(), "done".to_string(), None)
             .await;
         assert!(result.is_ok());
 
@@ -1715,6 +1757,7 @@ mod tests {
             .inbox(
                 "task-16".to_string(),
                 "Test Task".to_string(),
+                "inbox".to_string(),
                 None,
                 None,
                 None,
@@ -1731,7 +1774,7 @@ mod tests {
 
         // Move to next_action first
         let result = handler
-            .change_status(vec![task_id.clone()], "next_action".to_string(), None)
+            .change_status(task_id.clone(), "next_action".to_string(), None)
             .await;
         assert!(result.is_ok());
 
@@ -1746,7 +1789,7 @@ mod tests {
 
         // Move back to inbox
         let result = handler
-            .change_status(vec![task_id.clone()], "inbox".to_string(), None)
+            .change_status(task_id.clone(), "inbox".to_string(), None)
             .await;
         assert!(result.is_ok());
 
@@ -1768,6 +1811,7 @@ mod tests {
             .inbox(
                 "task-17".to_string(),
                 "Test Task".to_string(),
+                "inbox".to_string(),
                 None,
                 None,
                 None,
@@ -1783,7 +1827,7 @@ mod tests {
             .to_string();
 
         let result = handler
-            .change_status(vec![task_id.clone()], "next_action".to_string(), None)
+            .change_status(task_id.clone(), "next_action".to_string(), None)
             .await;
         assert!(result.is_ok());
 
@@ -1802,6 +1846,7 @@ mod tests {
             .inbox(
                 "task-18".to_string(),
                 "Test Task".to_string(),
+                "inbox".to_string(),
                 None,
                 None,
                 None,
@@ -1817,7 +1862,7 @@ mod tests {
             .to_string();
 
         let result = handler
-            .change_status(vec![task_id.clone()], "waiting_for".to_string(), None)
+            .change_status(task_id.clone(), "waiting_for".to_string(), None)
             .await;
         assert!(result.is_ok());
 
@@ -1836,6 +1881,7 @@ mod tests {
             .inbox(
                 "task-19".to_string(),
                 "Test Task".to_string(),
+                "inbox".to_string(),
                 None,
                 None,
                 None,
@@ -1851,7 +1897,7 @@ mod tests {
             .to_string();
 
         let result = handler
-            .change_status(vec![task_id.clone()], "someday".to_string(), None)
+            .change_status(task_id.clone(), "someday".to_string(), None)
             .await;
         assert!(result.is_ok());
 
@@ -1870,6 +1916,7 @@ mod tests {
             .inbox(
                 "task-20".to_string(),
                 "Test Task".to_string(),
+                "inbox".to_string(),
                 None,
                 None,
                 None,
@@ -1885,7 +1932,7 @@ mod tests {
             .to_string();
 
         let result = handler
-            .change_status(vec![task_id.clone()], "later".to_string(), None)
+            .change_status(task_id.clone(), "later".to_string(), None)
             .await;
         assert!(result.is_ok());
 
@@ -1904,6 +1951,7 @@ mod tests {
             .inbox(
                 "task-21".to_string(),
                 "Test Task".to_string(),
+                "inbox".to_string(),
                 None,
                 None,
                 None,
@@ -1919,7 +1967,7 @@ mod tests {
             .to_string();
 
         let result = handler
-            .change_status(vec![task_id.clone()], "done".to_string(), None)
+            .change_status(task_id.clone(), "done".to_string(), None)
             .await;
         assert!(result.is_ok());
 
@@ -1938,6 +1986,7 @@ mod tests {
             .inbox(
                 "task-22".to_string(),
                 "Test Task".to_string(),
+                "inbox".to_string(),
                 None,
                 None,
                 None,
@@ -1953,7 +2002,7 @@ mod tests {
             .to_string();
 
         let result = handler
-            .change_status(vec![task_id.clone()], "trash".to_string(), None)
+            .change_status(task_id.clone(), "trash".to_string(), None)
             .await;
         assert!(result.is_ok(), "Failed to trash task: {:?}", result.err());
 
@@ -1973,6 +2022,7 @@ mod tests {
             .inbox(
                 "task-23".to_string(),
                 "Direct Trash Test".to_string(),
+                "inbox".to_string(),
                 None,
                 None,
                 None,
@@ -1988,7 +2038,7 @@ mod tests {
             .to_string();
 
         let result = handler
-            .change_status(vec![task_id_1.clone()], "trash".to_string(), None)
+            .change_status(task_id_1.clone(), "trash".to_string(), None)
             .await;
         assert!(result.is_ok(), "Direct trash failed: {:?}", result.err());
 
@@ -1997,6 +2047,7 @@ mod tests {
             .inbox(
                 "task-24".to_string(),
                 "Indirect Trash Test".to_string(),
+                "inbox".to_string(),
                 None,
                 None,
                 None,
@@ -2012,12 +2063,12 @@ mod tests {
             .to_string();
 
         let result = handler
-            .change_status(vec![task_id_2.clone()], "done".to_string(), None)
+            .change_status(task_id_2.clone(), "done".to_string(), None)
             .await;
         assert!(result.is_ok(), "Moving to done failed: {:?}", result.err());
 
         let result = handler
-            .change_status(vec![task_id_2.clone()], "trash".to_string(), None)
+            .change_status(task_id_2.clone(), "trash".to_string(), None)
             .await;
         assert!(result.is_ok(), "Trash from done failed: {:?}", result.err());
 
@@ -2042,7 +2093,7 @@ mod tests {
 
         for task_id in test_cases {
             let result = handler
-                .change_status(vec![task_id.to_string()], "trash".to_string(), None)
+                .change_status(task_id.to_string(), "trash".to_string(), None)
                 .await;
             assert!(result.is_err(), "Expected error for task_id: {}", task_id);
         }
@@ -2188,6 +2239,7 @@ mod tests {
             .inbox(
                 "task-27".to_string(),
                 "Inbox Task".to_string(),
+                "inbox".to_string(),
                 None,
                 None,
                 None,
@@ -2207,6 +2259,7 @@ mod tests {
             .inbox(
                 "task-28".to_string(),
                 "Next Action Task".to_string(),
+                "inbox".to_string(),
                 None,
                 None,
                 None,
@@ -2234,6 +2287,7 @@ mod tests {
             .inbox(
                 "task-29".to_string(),
                 "Done Task".to_string(),
+                "inbox".to_string(),
                 None,
                 None,
                 None,
@@ -2248,7 +2302,7 @@ mod tests {
             .unwrap()
             .to_string();
         handler
-            .change_status(vec![done_task_id.clone()], "done".to_string(), None)
+            .change_status(done_task_id.clone(), "done".to_string(), None)
             .await
             .unwrap();
 
@@ -2290,6 +2344,7 @@ mod tests {
             .inbox(
                 "task-30".to_string(),
                 "Test Task".to_string(),
+                "inbox".to_string(),
                 None,
                 None,
                 None,
@@ -2334,6 +2389,7 @@ mod tests {
             .inbox(
                 "task-31".to_string(),
                 "Test Task".to_string(),
+                "inbox".to_string(),
                 None,
                 None,
                 None,
@@ -2350,7 +2406,7 @@ mod tests {
 
         // start_dateを指定せずにcalendarに移動しようとするとエラー
         let result = handler
-            .change_status(vec![task_id.clone()], "calendar".to_string(), None)
+            .change_status(task_id.clone(), "calendar".to_string(), None)
             .await;
         assert!(result.is_err());
     }
@@ -2364,6 +2420,7 @@ mod tests {
             .inbox(
                 "task-2004".to_string(),
                 "Test Task".to_string(),
+                "inbox".to_string(),
                 None,
                 None,
                 None,
@@ -2380,7 +2437,7 @@ mod tests {
 
         // start_dateパラメータなしでcalendarに移動（既存のstart_dateを使用）
         let result = handler
-            .change_status(vec![task_id.clone()], "calendar".to_string(), None)
+            .change_status(task_id.clone(), "calendar".to_string(), None)
             .await;
         assert!(result.is_ok());
 
@@ -2403,6 +2460,7 @@ mod tests {
             .inbox(
                 "task-2005".to_string(),
                 "Test Task".to_string(),
+                "inbox".to_string(),
                 None,
                 None,
                 None,
@@ -2444,6 +2502,7 @@ mod tests {
             .inbox(
                 "task-32".to_string(),
                 "Test Task".to_string(),
+                "inbox".to_string(),
                 None,
                 None,
                 None,
@@ -2477,6 +2536,7 @@ mod tests {
             .inbox(
                 "task-33".to_string(),
                 "Test Task".to_string(),
+                "inbox".to_string(),
                 None,
                 None,
                 None,
@@ -2499,7 +2559,7 @@ mod tests {
 
         // Move to next_action
         let result = handler
-            .change_status(vec![task_id.clone()], "next_action".to_string(), None)
+            .change_status(task_id.clone(), "next_action".to_string(), None)
             .await;
         assert!(result.is_ok());
 
@@ -2523,7 +2583,7 @@ mod tests {
         assert!(result.is_err());
 
         let result = handler
-            .change_status(vec!["nonexistent-id".to_string()], "done".to_string(), None)
+            .change_status("nonexistent-id".to_string(), "done".to_string(), None)
             .await;
         assert!(result.is_err());
 
@@ -2677,6 +2737,7 @@ mod tests {
             .inbox(
                 "task-2006".to_string(),
                 "Office work".to_string(),
+                "inbox".to_string(),
                 None,
                 Some("Office".to_string()),
                 None,
@@ -2707,6 +2768,8 @@ mod tests {
             .inbox(
                 "Office Project".to_string(),
                 "office-proj".to_string(),
+                "inbox".to_string(),
+                "inbox".to_string(),
                 None,
                 Some("Office".to_string()),
             )
@@ -2735,6 +2798,7 @@ mod tests {
             .inbox(
                 "task-2007".to_string(),
                 "Office work".to_string(),
+                "inbox".to_string(),
                 None,
                 Some("Office".to_string()),
                 None,
@@ -2748,6 +2812,8 @@ mod tests {
             .inbox(
                 "Office Project".to_string(),
                 "office-proj".to_string(),
+                "inbox".to_string(),
+                "inbox".to_string(),
                 None,
                 Some("Office".to_string()),
             )
@@ -2776,6 +2842,7 @@ mod tests {
             .inbox(
                 "task-2008".to_string(),
                 "Office work".to_string(),
+                "inbox".to_string(),
                 None,
                 Some("Office".to_string()),
                 None,
@@ -2815,6 +2882,8 @@ mod tests {
             .inbox(
                 "Office Project".to_string(),
                 "office-proj".to_string(),
+                "inbox".to_string(),
+                "inbox".to_string(),
                 None,
                 Some("Office".to_string()),
             )
@@ -2856,6 +2925,7 @@ mod tests {
             .inbox(
                 "task-2009".to_string(),
                 "Task 1".to_string(),
+                "inbox".to_string(),
                 None,
                 Some("Office".to_string()),
                 None,
@@ -2868,6 +2938,7 @@ mod tests {
             .inbox(
                 "task-2010".to_string(),
                 "Task 2".to_string(),
+                "inbox".to_string(),
                 None,
                 Some("Office".to_string()),
                 None,
@@ -2922,6 +2993,8 @@ mod tests {
             .inbox(
                 "Test Project".to_string(),
                 "test-project-1".to_string(),
+                "inbox".to_string(),
+                "inbox".to_string(),
                 None,
                 Some("NonExistent".to_string()),
             )
@@ -2941,8 +3014,11 @@ mod tests {
         // Add a project without context
         let result = handler
             .inbox(
-                "Test Project".to_string(),
                 "test-project-1".to_string(),
+                "Test Project".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
                 None,
                 None,
             )
@@ -2988,6 +3064,8 @@ mod tests {
             .inbox(
                 "Test Project".to_string(),
                 "test-project-1".to_string(),
+                "inbox".to_string(),
+                "inbox".to_string(),
                 None,
                 Some("Office".to_string()),
             )
@@ -3026,8 +3104,11 @@ mod tests {
         // Add a project
         let result = handler
             .inbox(
-                "Test Project".to_string(),
                 "test-project-1".to_string(),
+                "Test Project".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
                 None,
                 None,
             )
@@ -3084,8 +3165,11 @@ mod tests {
         // Add first project with custom ID
         let result = handler
             .inbox(
-                "First Project".to_string(),
                 "duplicate-id".to_string(),
+                "First Project".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
                 None,
                 None,
             )
@@ -3095,8 +3179,11 @@ mod tests {
         // Try to add second project with same ID
         let result = handler
             .inbox(
-                "Second Project".to_string(),
                 "duplicate-id".to_string(),
+                "Second Project".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
                 None,
                 None,
             )
@@ -3111,8 +3198,11 @@ mod tests {
         // Add a project
         let result = handler
             .inbox(
-                "Test Project".to_string(),
                 "test-project-1".to_string(),
+                "Test Project".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
                 None,
                 None,
             )
@@ -3194,8 +3284,11 @@ mod tests {
         // Add a project
         let result = handler
             .inbox(
-                "Test Project".to_string(),
                 "test-project-1".to_string(),
+                "Test Project".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
                 None,
                 None,
             )
@@ -3360,6 +3453,7 @@ mod tests {
             .inbox(
                 "task-2012".to_string(),
                 "Past Task".to_string(),
+                "inbox".to_string(),
                 None,
                 None,
                 None,
@@ -3372,6 +3466,7 @@ mod tests {
             .inbox(
                 "task-2013".to_string(),
                 "Today Task".to_string(),
+                "inbox".to_string(),
                 None,
                 None,
                 None,
@@ -3384,6 +3479,7 @@ mod tests {
             .inbox(
                 "task-2014".to_string(),
                 "Future Task".to_string(),
+                "inbox".to_string(),
                 None,
                 None,
                 None,
@@ -3416,6 +3512,7 @@ mod tests {
             .inbox(
                 "task-34".to_string(),
                 "No Date Task".to_string(),
+                "inbox".to_string(),
                 None,
                 None,
                 None,
@@ -3429,6 +3526,7 @@ mod tests {
             .inbox(
                 "task-2015".to_string(),
                 "Future Task".to_string(),
+                "inbox".to_string(),
                 None,
                 None,
                 None,
@@ -3460,6 +3558,7 @@ mod tests {
             .inbox(
                 "task-2016".to_string(),
                 "Calendar Past".to_string(),
+                "inbox".to_string(),
                 None,
                 None,
                 None,
@@ -3478,6 +3577,7 @@ mod tests {
             .inbox(
                 "task-2017".to_string(),
                 "Calendar Future".to_string(),
+                "inbox".to_string(),
                 None,
                 None,
                 None,
@@ -3494,11 +3594,11 @@ mod tests {
 
         // 両方をカレンダーステータスに移動
         let result = handler
-            .change_status(vec![task_id1.clone()], "calendar".to_string(), None)
+            .change_status(task_id1.clone(), "calendar".to_string(), None)
             .await;
         assert!(result.is_ok());
         let result = handler
-            .change_status(vec![task_id2.clone()], "calendar".to_string(), None)
+            .change_status(task_id2.clone(), "calendar".to_string(), None)
             .await;
         assert!(result.is_ok());
 
@@ -3546,6 +3646,7 @@ mod tests {
             .inbox(
                 "task-2018".to_string(),
                 "Future Task".to_string(),
+                "inbox".to_string(),
                 None,
                 None,
                 None,
@@ -3573,6 +3674,7 @@ mod tests {
             .inbox(
                 "task-2019".to_string(),
                 "Same Date Task".to_string(),
+                "inbox".to_string(),
                 None,
                 None,
                 None,
@@ -3602,6 +3704,7 @@ mod tests {
             .inbox(
                 "task-2020".to_string(),
                 "Task with notes".to_string(),
+                "inbox".to_string(),
                 None,
                 None,
                 Some("Important notes here".to_string()),
@@ -3615,6 +3718,7 @@ mod tests {
             .inbox(
                 "task-35".to_string(),
                 "Task without notes".to_string(),
+                "inbox".to_string(),
                 None,
                 None,
                 None,
@@ -3652,6 +3756,7 @@ mod tests {
             .inbox(
                 "task-2021".to_string(),
                 "Task with notes".to_string(),
+                "inbox".to_string(),
                 None,
                 None,
                 Some("Important notes here".to_string()),
@@ -3681,6 +3786,7 @@ mod tests {
             .inbox(
                 "task-2022".to_string(),
                 "Task with notes".to_string(),
+                "inbox".to_string(),
                 None,
                 None,
                 Some("Important notes here".to_string()),
@@ -3709,6 +3815,7 @@ mod tests {
             .inbox(
                 "task-2023".to_string(),
                 "Complex task".to_string(),
+                "inbox".to_string(),
                 None,
                 None,
                 Some("Line 1\nLine 2\nLine 3".to_string()),
@@ -3753,7 +3860,7 @@ mod tests {
                 .to_string();
             // Move to next_action first
             let _ = handler
-                .change_status(vec![task_id.clone()], "next_action".to_string(), None)
+                .change_status(task_id.clone(), "next_action".to_string(), None)
                 .await;
             task_ids.push(task_id);
         }
@@ -4030,6 +4137,7 @@ mod tests {
             .inbox(
                 "task-42".to_string(),
                 "Test Task".to_string(),
+                "inbox".to_string(),
                 None,
                 None,
                 None,
@@ -4046,7 +4154,7 @@ mod tests {
 
         // 無効なステータス "in_progress" でエラーをテスト（問題として報告されたもの）
         let result = handler
-            .change_status(vec![task_id.clone()], "in_progress".to_string(), None)
+            .change_status(task_id.clone(), "in_progress".to_string(), None)
             .await;
         assert!(result.is_err());
         let err_msg = format!("{:?}", result.unwrap_err());
@@ -4070,6 +4178,7 @@ mod tests {
             .inbox(
                 "task-43".to_string(),
                 "Test Task".to_string(),
+                "inbox".to_string(),
                 None,
                 None,
                 None,
@@ -4098,7 +4207,7 @@ mod tests {
 
         for invalid_status in invalid_statuses {
             let result = handler
-                .change_status(vec![task_id.clone()], invalid_status.to_string(), None)
+                .change_status(task_id.clone(), invalid_status.to_string(), None)
                 .await;
             assert!(
                 result.is_err(),
@@ -4161,8 +4270,11 @@ mod tests {
         // プロジェクトを作成
         let result = handler
             .inbox(
-                "Test Project".to_string(),
                 "test-project-1".to_string(),
+                "Test Project".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
                 None,
                 None,
             )
@@ -4195,8 +4307,11 @@ mod tests {
         // プロジェクトを作成
         let result = handler
             .inbox(
-                "Test Project".to_string(),
                 "test-project-1".to_string(),
+                "Test Project".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
                 None,
                 None,
             )
@@ -4348,6 +4463,7 @@ mod tests {
             .inbox(
                 "task-2024".to_string(),
                 "Task with date".to_string(),
+                "inbox".to_string(),
                 None,
                 None,
                 None,
@@ -4369,6 +4485,7 @@ mod tests {
             .inbox(
                 "task-46".to_string(),
                 "Task without date".to_string(),
+                "inbox".to_string(),
                 None,
                 None,
                 None,
