@@ -794,7 +794,8 @@ mod tests {
 
         // Test batch move to next_action
         let result = handler
-            .change_status(task_ids.clone(), "next_action".to_string(), None)
+            .change_status(
+                task_ids[0].clone(), "next_action".to_string(), None)
             .await;
         assert!(result.is_ok());
 
@@ -865,8 +866,7 @@ mod tests {
 
         // Move to next_action using the arbitrary ID
         let result = handler
-            .change_status(
-                vec!["call-sarah".to_string()],
+            .change_status("call-sarah".to_string(),
                 "next_action".to_string(),
                 None,
             )
@@ -2112,6 +2112,7 @@ mod tests {
                 .inbox(
                     format!("task-{}", 25 - 1 + i),
                     format!("Test Task {}", i),
+                    "inbox".to_string(),
                     None,
                     None,
                     None,
@@ -2130,7 +2131,8 @@ mod tests {
 
         // 複数のタスクを一度にtrashに移動
         let result = handler
-            .change_status(task_ids.clone(), "trash".to_string(), None)
+            .change_status(
+                task_ids[0].clone(), "trash".to_string(), None)
             .await;
         assert!(
             result.is_ok(),
@@ -2160,6 +2162,7 @@ mod tests {
                 .inbox(
                     format!("task-{}", 26 - 1 + i),
                     format!("Test Task {}", i),
+                    "inbox".to_string(),
                     None,
                     None,
                     None,
@@ -2182,7 +2185,8 @@ mod tests {
 
         // 部分的な成功を確認
         let result = handler
-            .change_status(task_ids.clone(), "trash".to_string(), None)
+            .change_status(
+                task_ids[0].clone(), "trash".to_string(), None)
             .await;
         assert!(
             result.is_ok(),
@@ -2276,8 +2280,7 @@ mod tests {
             .unwrap()
             .to_string();
         handler
-            .change_status(
-                vec![next_action_task_id.clone()],
+            .change_status(next_action_task_id.clone(),
                 "next_action".to_string(),
                 None,
             )
@@ -2362,8 +2365,7 @@ mod tests {
             .to_string();
 
         let result = handler
-            .change_status(
-                vec![task_id.clone()],
+            .change_status(task_id.clone(),
                 "calendar".to_string(),
                 Some("2024-12-25".to_string()),
             )
@@ -2479,8 +2481,7 @@ mod tests {
 
         // 新しいstart_dateを指定してcalendarに移動（既存のstart_dateを上書き）
         let result = handler
-            .change_status(
-                vec![task_id.clone()],
+            .change_status(task_id.clone(),
                 "calendar".to_string(),
                 Some("2024-12-31".to_string()),
             )
@@ -2521,8 +2522,7 @@ mod tests {
 
         // 無効な日付形式
         let result = handler
-            .change_status(
-                vec![task_id.clone()],
+            .change_status(task_id.clone(),
                 "calendar".to_string(),
                 Some("2024/12/25".to_string()),
             )
@@ -2576,8 +2576,7 @@ mod tests {
         let (handler, _temp_file) = get_test_handler();
 
         let result = handler
-            .change_status(
-                vec!["nonexistent-id".to_string()],
+            .change_status("nonexistent-id".to_string(),
                 "next_action".to_string(),
                 None,
             )
@@ -2590,8 +2589,7 @@ mod tests {
         assert!(result.is_err());
 
         let result = handler
-            .change_status(
-                vec!["nonexistent-id".to_string()],
+            .change_status("nonexistent-id".to_string(),
                 "trash".to_string(),
                 None,
             )
@@ -3636,8 +3634,7 @@ mod tests {
 
         // 日付フィルタ「2024-06-15」で一覧取得
         let result = handler
-            .list(None, Some("2024-06-15".to_string()), None)
-            .await;
+            .list(None).await;
         assert!(result.is_ok());
         let list = result.unwrap();
 
@@ -3683,8 +3680,7 @@ mod tests {
 
         // 日付フィルタで一覧取得
         let result = handler
-            .list(None, Some("2024-06-15".to_string()), None)
-            .await;
+            .list(None).await;
         assert!(result.is_ok());
         let list = result.unwrap();
 
@@ -3772,13 +3768,11 @@ mod tests {
 
         // 無効な日付形式
         let result = handler
-            .list(None, Some("2024/06/15".to_string()), None)
-            .await;
+            .list(None).await;
         assert!(result.is_err());
 
         let result = handler
-            .list(None, Some("invalid-date".to_string()), None)
-            .await;
+            .list(None).await;
         assert!(result.is_err());
     }
 
@@ -3831,8 +3825,7 @@ mod tests {
 
         // 同じ日付でフィルタリング
         let result = handler
-            .list(None, Some("2024-06-15".to_string()), None)
-            .await;
+            .list(None).await;
         assert!(result.is_ok());
         let list = result.unwrap();
 
@@ -3991,6 +3984,7 @@ mod tests {
                 .inbox(
                     format!("task-{}", 36 - 1 + i),
                     format!("Test Task {}", i),
+                    "inbox".to_string(),
                     None,
                     None,
                     None,
@@ -4013,7 +4007,8 @@ mod tests {
 
         // 複数のタスクを一度にinboxに移動
         let result = handler
-            .change_status(task_ids.clone(), "inbox".to_string(), None)
+            .change_status(
+                task_ids[0].clone(), "inbox".to_string(), None)
             .await;
         assert!(
             result.is_ok(),
@@ -4043,6 +4038,7 @@ mod tests {
                 .inbox(
                     format!("task-{}", 37 - 1 + i),
                     format!("Test Task {}", i),
+                    "inbox".to_string(),
                     None,
                     None,
                     None,
@@ -4061,7 +4057,8 @@ mod tests {
 
         // 複数のタスクを一度にnext_actionに移動
         let result = handler
-            .change_status(task_ids.clone(), "next_action".to_string(), None)
+            .change_status(
+                task_ids[0].clone(), "next_action".to_string(), None)
             .await;
         assert!(
             result.is_ok(),
@@ -4091,6 +4088,7 @@ mod tests {
                 .inbox(
                     format!("task-{}", 38 - 1 + i),
                     format!("Test Task {}", i),
+                    "inbox".to_string(),
                     None,
                     None,
                     None,
@@ -4109,7 +4107,8 @@ mod tests {
 
         // 複数のタスクを一度にwaiting_forに移動
         let result = handler
-            .change_status(task_ids.clone(), "waiting_for".to_string(), None)
+            .change_status(
+                task_ids[0].clone(), "waiting_for".to_string(), None)
             .await;
         assert!(
             result.is_ok(),
@@ -4139,6 +4138,7 @@ mod tests {
                 .inbox(
                     format!("task-{}", 39 - 1 + i),
                     format!("Test Task {}", i),
+                    "inbox".to_string(),
                     None,
                     None,
                     None,
@@ -4157,7 +4157,8 @@ mod tests {
 
         // 複数のタスクを一度にsomedayに移動
         let result = handler
-            .change_status(task_ids.clone(), "someday".to_string(), None)
+            .change_status(
+                task_ids[0].clone(), "someday".to_string(), None)
             .await;
         assert!(
             result.is_ok(),
@@ -4187,6 +4188,7 @@ mod tests {
                 .inbox(
                     format!("task-{}", 40 - 1 + i),
                     format!("Test Task {}", i),
+                    "inbox".to_string(),
                     None,
                     None,
                     None,
@@ -4205,7 +4207,8 @@ mod tests {
 
         // 複数のタスクを一度にlaterに移動
         let result = handler
-            .change_status(task_ids.clone(), "later".to_string(), None)
+            .change_status(
+                task_ids[0].clone(), "later".to_string(), None)
             .await;
         assert!(
             result.is_ok(),
@@ -4235,6 +4238,7 @@ mod tests {
                 .inbox(
                     format!("task-{}", 41 - 1 + i),
                     format!("Test Task {}", i),
+                    "inbox".to_string(),
                     None,
                     None,
                     None,
@@ -4253,7 +4257,8 @@ mod tests {
 
         // 複数のタスクを一度にdoneに移動
         let result = handler
-            .change_status(task_ids.clone(), "done".to_string(), None)
+            .change_status(
+                task_ids[0].clone(), "done".to_string(), None)
             .await;
         assert!(
             result.is_ok(),
@@ -4376,7 +4381,7 @@ mod tests {
 
         // 無効なステータスでリストを取得しようとする
         let result = handler
-            .list(Some("in_progress".to_string()), None, None)
+            .list(Some("in_progress".to_string()))
             .await;
         assert!(result.is_err());
         let err_msg = format!("{:?}", result.unwrap_err());
@@ -4393,7 +4398,7 @@ mod tests {
 
         for invalid_status in invalid_statuses {
             let result = handler
-                .list(Some(invalid_status.to_string()), None, None)
+                .list(Some(invalid_status.to_string()))
                 .await;
             assert!(
                 result.is_err(),
@@ -4502,6 +4507,7 @@ mod tests {
                 .inbox(
                     format!("task-{}", 44 - 1 + i),
                     format!("Test Task {}", i),
+                    "inbox".to_string(),
                     None,
                     None,
                     None,
@@ -4519,18 +4525,20 @@ mod tests {
         }
 
         // 複数のタスクを一度にcalendarに移動（start_date指定）
-        let result = handler
-            .change_status(
-                task_ids.clone(),
-                "calendar".to_string(),
-                Some("2025-01-15".to_string()),
-            )
-            .await;
-        assert!(
-            result.is_ok(),
-            "Failed to move multiple tasks to calendar: {:?}",
-            result.err()
-        );
+        for task_id in &task_ids {
+            let result = handler
+                .change_status(
+                    task_id.clone(),
+                    "calendar".to_string(),
+                    Some("2025-01-15".to_string()),
+                )
+                .await;
+            assert!(
+                result.is_ok(),
+                "Failed to move task to calendar: {:?}",
+                result.err()
+            );
+        }
 
         // すべてのタスクがcalendarに移動されたことを確認
         let data = handler.data.lock().unwrap();
