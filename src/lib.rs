@@ -1597,6 +1597,7 @@ mod tests {
             .inbox(
                 "task-2002".to_string(),
                 "Test Task".to_string(),
+                "inbox".to_string(),
                 Some("test-project-1".to_string()),
                 None,
                 None,
@@ -1638,6 +1639,7 @@ mod tests {
             .inbox(
                 "task-2003".to_string(),
                 "Test Task".to_string(),
+                "inbox".to_string(),
                 Some("test-project-1".to_string()),
                 None,
                 None,
@@ -2677,7 +2679,7 @@ mod tests {
     async fn test_list_contexts_empty() {
         let (handler, _temp_file) = get_test_handler();
 
-        let result = handler.list().await;
+        let result = handler.list(None).await;
         assert!(result.is_ok());
         assert!(result.unwrap().contains("No contexts found"));
     }
@@ -2708,7 +2710,7 @@ mod tests {
                 None,
             ).await.unwrap();
 
-        let result = handler.list().await;
+        let result = handler.list(None).await;
         assert!(result.is_ok());
         let output = result.unwrap();
         assert!(output.contains("Office"));
@@ -2734,7 +2736,7 @@ mod tests {
             .unwrap();
 
         let result = handler
-            .update("Office".to_string(), Some("New description".to_string()))
+            .update("Office".to_string(), None, None, None, None, Some("New description".to_string(), None))
             .await;
         assert!(result.is_ok());
 
@@ -2761,7 +2763,7 @@ mod tests {
             .unwrap();
 
         let result = handler
-            .update("Office".to_string(), Some("".to_string()))
+            .update("Office".to_string(), None, None, None, None, Some("".to_string(), None))
             .await;
         assert!(result.is_ok());
 
@@ -2775,7 +2777,7 @@ mod tests {
         let (handler, _temp_file) = get_test_handler();
 
         let result = handler
-            .update("NonExistent".to_string(), Some("Description".to_string()))
+            .update("NonExistent".to_string(), None, None, None, None, Some("Description".to_string(), None))
             .await;
         assert!(result.is_err());
     }
@@ -2974,7 +2976,7 @@ mod tests {
 
         // Remove the context reference from the task
         handler
-            .update(task_id, None, None, Some(String::new()), None, None)
+            .update(task_id, None, None, Some(String::new()), None, None, None)
             .await
             .unwrap();
 
@@ -3114,6 +3116,8 @@ mod tests {
             .inbox(
                 "Office Project".to_string(),
                 "office-project-1".to_string(),
+                "inbox".to_string(),
+                "inbox".to_string(),
                 Some("Project description".to_string()),
                 Some("Office".to_string()),
             )
@@ -3306,6 +3310,8 @@ mod tests {
             .inbox(
                 "Custom ID Project".to_string(),
                 "my-custom-id".to_string(),
+                "inbox".to_string(),
+                "inbox".to_string(),
                 Some("Project with custom ID".to_string()),
                 None,
             )
@@ -3470,6 +3476,7 @@ mod tests {
             .inbox(
                 "task-2011".to_string(),
                 "Task in project".to_string(),
+                "inbox".to_string(),
                 Some(project_id.clone()),
                 None,
                 None,
