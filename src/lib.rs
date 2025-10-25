@@ -3783,7 +3783,7 @@ mod tests {
 
         // notesが含まれていることを確認
         assert!(list.contains("Task with notes"));
-        assert!(list.contains("[notes: Important notes here]"));
+        assert!(list.contains("Notes: Important notes here"));
 
         // notesなしのタスクにはnotesフィールドがないことを確認
         assert!(list.contains("Task without notes"));
@@ -3792,7 +3792,7 @@ mod tests {
             .iter()
             .find(|line| line.contains("Task without notes"))
             .unwrap();
-        assert!(!without_notes_line.contains("[notes:"));
+        assert!(!without_notes_line.contains("Notes:"));
     }
 
     // exclude_notes=trueでnotesが除外されることを確認
@@ -3821,7 +3821,7 @@ mod tests {
 
         // タスクは存在するがnotesは含まれていないことを確認
         assert!(list.contains("Task with notes"));
-        assert!(!list.contains("[notes:"));
+        assert!(!list.contains("Notes:"));
         assert!(!list.contains("Important notes here"));
     }
 
@@ -3851,7 +3851,7 @@ mod tests {
 
         // notesが含まれていることを確認
         assert!(list.contains("Task with notes"));
-        assert!(list.contains("[notes: Important notes here]"));
+        assert!(list.contains("Notes: Important notes here"));
     }
 
     // notesに複数行やspecial charactersが含まれる場合のテスト
@@ -3880,7 +3880,7 @@ mod tests {
 
         // notesが含まれていることを確認（改行も含む）
         assert!(list.contains("Complex task"));
-        assert!(list.contains("[notes: Line 1\nLine 2\nLine 3]"));
+        assert!(list.contains("Notes: Line 1\nLine 2\nLine 3"));
     }
 
     #[tokio::test]
