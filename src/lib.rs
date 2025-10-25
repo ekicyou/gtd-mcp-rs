@@ -914,6 +914,7 @@ mod tests {
                 None,
                 None,
                 None,
+            None,
             )
             .await;
         assert!(result.is_ok());
@@ -1096,6 +1097,7 @@ mod tests {
                 None,
                 Some("".to_string()),
                 Some("".to_string()),
+            None,
             )
             .await;
         assert!(result.is_ok());
@@ -1140,6 +1142,7 @@ mod tests {
                 None,
                 None,
                 Some("invalid-date".to_string()),
+            None,
             )
             .await;
         assert!(result.is_err());
@@ -1178,6 +1181,7 @@ mod tests {
                 None,
                 None,
                 None,
+            None,
             )
             .await;
         assert!(result.is_err());
@@ -1216,6 +1220,7 @@ mod tests {
                 Some("NonExistent".to_string()),
                 None,
                 None,
+            None,
             )
             .await;
         assert!(result.is_err());
@@ -1234,6 +1239,7 @@ mod tests {
                 None,
                 None,
                 None,
+            None,
             )
             .await;
         assert!(result.is_err());
@@ -1279,6 +1285,7 @@ mod tests {
                 None,
                 None,
                 None,
+            None,
             )
             .await;
         assert!(result.is_ok());
@@ -1324,6 +1331,7 @@ mod tests {
                 None,
                 None,
                 None,
+            None,
             )
             .await;
         assert!(result.is_ok());
@@ -1367,6 +1375,7 @@ mod tests {
                 Some("New description".to_string()),
                 None,
                 None,
+            None,
             )
             .await;
         assert!(result.is_ok());
@@ -1387,6 +1396,7 @@ mod tests {
                 Some("".to_string()),
                 None,
                 None,
+            None,
             )
             .await;
         assert!(result.is_ok());
@@ -1437,6 +1447,7 @@ mod tests {
                 None,
                 Some("on_hold".to_string()),
                 None,
+            None,
             )
             .await;
         assert!(result.is_ok());
@@ -1457,6 +1468,7 @@ mod tests {
                 None,
                 Some("completed".to_string()),
                 None,
+            None,
             )
             .await;
         assert!(result.is_ok());
@@ -1500,6 +1512,7 @@ mod tests {
                 None,
                 Some("invalid_status".to_string()),
                 None,
+            None,
             )
             .await;
         assert!(result.is_err());
@@ -1518,6 +1531,7 @@ mod tests {
                 None,
                 None,
                 None,
+            None,
             )
             .await;
         assert!(result.is_err());
@@ -1592,6 +1606,7 @@ mod tests {
         assert!(result.is_ok());
 
         // Try to delete the project (should fail)
+        None,
         let result = handler.change_status("test-project-1".to_string(), "trash".to_string(), None).await;
         assert!(result.is_err());
 
@@ -1637,6 +1652,7 @@ mod tests {
                 "task-2003".to_string(),
                 None,
                 Some("".to_string()), // Empty string removes project
+                None,
                 None,
                 None,
                 None,
@@ -1724,6 +1740,7 @@ mod tests {
                 Some("Office".to_string()),
                 Some("Updated notes".to_string()),
                 Some("2025-01-15".to_string()),
+            None,
             )
             .await;
         assert!(result.is_ok());
@@ -3008,6 +3025,7 @@ mod tests {
                 None,
                 None,
                 Some(String::new()),
+                None,
             )
             .await
             .unwrap();
@@ -3171,8 +3189,9 @@ mod tests {
                 None,
                 None,
                 None,
-                None,
                 Some("Office".to_string()),
+            None,
+            None,
             )
             .await;
         assert!(result.is_ok());
@@ -3226,8 +3245,9 @@ mod tests {
                 None,
                 None,
                 None,
-                None,
                 Some("".to_string()),
+            None,
+            None,
             )
             .await;
         assert!(result.is_ok());
@@ -3271,6 +3291,7 @@ mod tests {
                 None,
                 None,
                 Some("NonExistent".to_string()),
+            None,
             )
             .await;
         assert!(result.is_err());
@@ -3365,6 +3386,7 @@ mod tests {
                 None,
                 None,
                 None,
+            None,
             )
             .await;
         assert!(result.is_ok());
@@ -3413,6 +3435,7 @@ mod tests {
                 None,
                 None,
                 None,
+            None,
             )
             .await;
         assert!(result.is_err());
@@ -3477,7 +3500,8 @@ mod tests {
                 None,
                 None,
                 None,
-                None,
+            None,
+            None,
             )
             .await;
         assert!(result.is_ok());
@@ -3748,8 +3772,6 @@ mod tests {
         let result = handler
             .list(
                 Some("calendar".to_string()),
-                Some("2024-06-15".to_string()),
-                None,
             )
             .await;
         assert!(result.is_ok());
@@ -4441,6 +4463,7 @@ mod tests {
                 None,
                 Some("in_progress".to_string()),
                 None,
+            None,
             )
             .await;
         assert!(result.is_err());
@@ -4480,6 +4503,7 @@ mod tests {
                     None,
                     Some(invalid_status.to_string()),
                     None,
+                None,
                 )
                 .await;
             assert!(
