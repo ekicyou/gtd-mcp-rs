@@ -3897,14 +3897,17 @@ mod tests {
         }
 
         // 複数のタスクを一度にinboxに移動
-        let result = handler
-            .change_status(task_ids[0].clone(), "inbox".to_string(), None)
-            .await;
-        assert!(
-            result.is_ok(),
-            "Failed to move multiple tasks to inbox: {:?}",
-            result.err()
-        );
+        for task_id in &task_ids {
+            let result = handler
+                .change_status(task_id.clone(), "inbox".to_string(), None)
+                .await;
+            assert!(
+                result.is_ok(),
+                "Failed to move task {} to inbox: {:?}",
+                task_id,
+                result.err()
+            );
+        }
 
         // すべてのタスクがinboxに移動されたことを確認
         let data = handler.data.lock().unwrap();
@@ -3941,14 +3944,17 @@ mod tests {
         }
 
         // 複数のタスクを一度にnext_actionに移動
-        let result = handler
-            .change_status(task_ids[0].clone(), "next_action".to_string(), None)
-            .await;
-        assert!(
-            result.is_ok(),
-            "Failed to move multiple tasks to next_action: {:?}",
-            result.err()
-        );
+        for task_id in &task_ids {
+            let result = handler
+                .change_status(task_id.clone(), "next_action".to_string(), None)
+                .await;
+            assert!(
+                result.is_ok(),
+                "Failed to move task {} to next_action: {:?}",
+                task_id,
+                result.err()
+            );
+        }
 
         // すべてのタスクがnext_actionに移動されたことを確認
         let data = handler.data.lock().unwrap();
@@ -3985,14 +3991,17 @@ mod tests {
         }
 
         // 複数のタスクを一度にwaiting_forに移動
-        let result = handler
-            .change_status(task_ids[0].clone(), "waiting_for".to_string(), None)
-            .await;
-        assert!(
-            result.is_ok(),
-            "Failed to move multiple tasks to waiting_for: {:?}",
-            result.err()
-        );
+        for task_id in &task_ids {
+            let result = handler
+                .change_status(task_id.clone(), "waiting_for".to_string(), None)
+                .await;
+            assert!(
+                result.is_ok(),
+                "Failed to move task {} to waiting_for: {:?}",
+                task_id,
+                result.err()
+            );
+        }
 
         // すべてのタスクがwaiting_forに移動されたことを確認
         let data = handler.data.lock().unwrap();
@@ -4029,14 +4038,17 @@ mod tests {
         }
 
         // 複数のタスクを一度にsomedayに移動
-        let result = handler
-            .change_status(task_ids[0].clone(), "someday".to_string(), None)
-            .await;
-        assert!(
-            result.is_ok(),
-            "Failed to move multiple tasks to someday: {:?}",
-            result.err()
-        );
+        for task_id in &task_ids {
+            let result = handler
+                .change_status(task_id.clone(), "someday".to_string(), None)
+                .await;
+            assert!(
+                result.is_ok(),
+                "Failed to move task {} to someday: {:?}",
+                task_id,
+                result.err()
+            );
+        }
 
         // すべてのタスクがsomedayに移動されたことを確認
         let data = handler.data.lock().unwrap();
@@ -4073,14 +4085,17 @@ mod tests {
         }
 
         // 複数のタスクを一度にlaterに移動
-        let result = handler
-            .change_status(task_ids[0].clone(), "later".to_string(), None)
-            .await;
-        assert!(
-            result.is_ok(),
-            "Failed to move multiple tasks to later: {:?}",
-            result.err()
-        );
+        for task_id in &task_ids {
+            let result = handler
+                .change_status(task_id.clone(), "later".to_string(), None)
+                .await;
+            assert!(
+                result.is_ok(),
+                "Failed to move task {} to later: {:?}",
+                task_id,
+                result.err()
+            );
+        }
 
         // すべてのタスクがlaterに移動されたことを確認
         let data = handler.data.lock().unwrap();
@@ -4117,14 +4132,17 @@ mod tests {
         }
 
         // 複数のタスクを一度にdoneに移動
-        let result = handler
-            .change_status(task_ids[0].clone(), "done".to_string(), None)
-            .await;
-        assert!(
-            result.is_ok(),
-            "Failed to move multiple tasks to done: {:?}",
-            result.err()
-        );
+        for task_id in &task_ids {
+            let result = handler
+                .change_status(task_id.clone(), "done".to_string(), None)
+                .await;
+            assert!(
+                result.is_ok(),
+                "Failed to move task {} to done: {:?}",
+                task_id,
+                result.err()
+            );
+        }
 
         // すべてのタスクがdoneに移動されたことを確認
         let data = handler.data.lock().unwrap();
