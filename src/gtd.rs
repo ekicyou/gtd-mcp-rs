@@ -2171,8 +2171,8 @@ mod tests {
             status: ProjectStatus::active,
             project: None,
             start_date: None,
-            created_at: local_date_today(),
-            updated_at: local_date_today(),
+            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
             context: None,
         });
 
@@ -2221,8 +2221,8 @@ updated_at = "2024-01-01"
 title = "Documentation Project"
 notes = "Comprehensive project documentation update"
 status = "active"
-created_at = "2025-10-24"
-updated_at = "2025-10-24"
+created_at = "2024-01-01"
+updated_at = "2024-01-01"
 
 [contexts.Office]
 notes = "Work environment with desk and computer"

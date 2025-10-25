@@ -787,10 +787,12 @@ mod tests {
         }
 
         // Test batch move to next_action
-        let result = handler
-            .change_status(task_ids[0].clone(), "next_action".to_string(), None)
-            .await;
-        assert!(result.is_ok());
+        for task_id in &task_ids {
+            let result = handler
+                .change_status(task_id.clone(), "next_action".to_string(), None)
+                .await;
+            assert!(result.is_ok());
+        }
 
         // Verify all tasks moved
         let data = handler.data.lock().unwrap();
@@ -2071,19 +2073,23 @@ mod tests {
         task_ids.push("#999".to_string());
         task_ids.push("invalid-id".to_string());
 
-        // 部分的な成功を確認
-        let result = handler
-            .change_status(task_ids[0].clone(), "trash".to_string(), None)
-            .await;
-        assert!(
-            result.is_ok(),
-            "Should succeed with partial success: {:?}",
-            result.err()
-        );
+        // 有効なタスクだけをtrashに移動
+        let mut success_count = 0;
+        let mut fail_count = 0;
+        for task_id in &task_ids {
+            let result = handler
+                .change_status(task_id.clone(), "trash".to_string(), None)
+                .await;
+            if result.is_ok() {
+                success_count += 1;
+            } else {
+                fail_count += 1;
+            }
+        }
 
-        let result_msg = result.unwrap();
-        assert!(result_msg.contains("Successfully moved 2 task(s)"));
-        assert!(result_msg.contains("Failed to move 2 task(s)"));
+        // 部分的な成功を確認
+        assert_eq!(success_count, 2);
+        assert_eq!(fail_count, 2);
 
         // 有効なタスクだけがtrashに移動されたことを確認
         let data = handler.data.lock().unwrap();
