@@ -40,9 +40,9 @@ use std::sync::Mutex;
 // Re-export for integration tests (McpServer trait already in scope above)
 
 // Re-export commonly used types
-pub use gtd::{Context, GtdData, NotaStatus, Project, ProjectStatus, Task, Nota, local_date_today};
-pub use storage::Storage;
 pub use git_ops::GitOps;
+pub use gtd::{Context, GtdData, Nota, NotaStatus, Project, ProjectStatus, Task, local_date_today};
+pub use storage::Storage;
 
 /// MCP Server handler for GTD task management
 ///
@@ -111,6 +111,7 @@ impl GtdServerHandler {
     /// // normalize_task_id("task-1") -> "task-1"
     /// // normalize_task_id("meeting-prep") -> "meeting-prep"
     /// ```
+    #[allow(dead_code)]
     fn normalize_task_id(task_id: &str) -> String {
         task_id.trim().to_string()
     }
@@ -194,6 +195,7 @@ impl McpServer for GtdServerHandler {
     /// **GTD Capture (Inbox)**: Quickly capture anything needing attention. First step - all items start here.
     /// **Status**: Use "inbox" for tasks, "project" for projects, "context" for contexts.
     /// **Workflow**: 1) inbox everything → 2) list to review → 3) update/change_status to organize.
+    #[allow(clippy::too_many_arguments)]
     #[tool]
     async fn inbox(
         &self,
@@ -581,10 +583,7 @@ impl McpServer for GtdServerHandler {
         Ok(if is_trash {
             format!("Nota {} deleted (moved to trash)", id)
         } else {
-            format!(
-                "Nota {} status changed to {} successfully",
-                id, new_status
-            )
+            format!("Nota {} status changed to {} successfully", id, new_status)
         })
     }
 }
@@ -2878,7 +2877,7 @@ mod tests {
             .await
             .unwrap();
 
-        // Extract task ID from the response  
+        // Extract task ID from the response
         let task_id = GtdServerHandler::extract_id_from_response(&response);
 
         // Remove the context reference from the task
@@ -4498,9 +4497,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        task_ids.push(
-            GtdServerHandler::extract_id_from_response(&result.unwrap()),
-        );
+        task_ids.push(GtdServerHandler::extract_id_from_response(&result.unwrap()));
 
         // start_dateを持たないタスク
         let result = handler
@@ -4515,9 +4512,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        task_ids.push(
-            GtdServerHandler::extract_id_from_response(&result.unwrap()),
-        );
+        task_ids.push(GtdServerHandler::extract_id_from_response(&result.unwrap()));
 
         // start_dateを指定せずに移動を試みる（部分的な失敗）
         // First task has date, should succeed
