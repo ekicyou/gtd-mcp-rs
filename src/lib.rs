@@ -111,6 +111,34 @@ impl GtdServerHandler {
     fn normalize_task_id(task_id: &str) -> String {
         task_id.trim().to_string()
     }
+
+    /// Extract ID from response message
+    ///
+    /// Helper function for tests to extract nota ID from response messages.
+    /// Response format: "Nota created with ID: <id> (type: task)"
+    ///
+    /// # Arguments
+    /// * `response` - The response message from inbox() or similar operations
+    ///
+    /// # Returns
+    /// The extracted ID
+    #[cfg(test)]
+    fn extract_id_from_response(response: &str) -> String {
+        // Parse "Nota created with ID: <id> (type: ...)"
+        if let Some(start) = response.find("ID: ") {
+            let id_part = &response[start + 4..];
+            if let Some(end) = id_part.find(" (") {
+                return id_part[..end].trim().to_string();
+            }
+        }
+        // Fallback: try to get last whitespace-separated token without parentheses
+        response
+            .split_whitespace()
+            .last()
+            .unwrap_or("")
+            .trim_end_matches(')')
+            .to_string()
+    }
 }
 
 impl Drop for GtdServerHandler {
@@ -675,12 +703,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         // Test moving to next_action
         let result = handler
@@ -739,12 +762,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         // Test moving to calendar with date
         let result = handler
@@ -783,12 +801,7 @@ mod tests {
                 )
                 .await;
             assert!(result.is_ok());
-            let task_id = result
-                .unwrap()
-                .split_whitespace()
-                .last()
-                .unwrap()
-                .to_string();
+            let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
             task_ids.push(task_id);
         }
 
@@ -894,12 +907,7 @@ mod tests {
         assert!(result.is_ok());
 
         // Extract task ID from result
-        let task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         // Update title
         let result = handler
@@ -938,12 +946,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         // Verify initial status is inbox
         {
@@ -987,12 +990,7 @@ mod tests {
             )
             .await;
         assert!(project_result.is_ok());
-        let project_id = project_result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let project_id = GtdServerHandler::extract_id_from_response(&project_result.unwrap());
 
         {
             let mut data = handler.data.lock().unwrap();
@@ -1024,12 +1022,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         // Update project and context
         let result = handler
@@ -1069,12 +1062,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         // Verify initial state
         {
@@ -1122,12 +1110,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         // Try to update with invalid date
         let result = handler
@@ -1161,12 +1144,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         // Try to update with non-existent project
         let result = handler
@@ -1200,12 +1178,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         // Try to update with non-existent context
         let result = handler
@@ -1258,12 +1231,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         // Get initial timestamps
         let (created_at, _updated_at) = {
@@ -1311,12 +1279,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let project_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let project_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         // Update name
         let result = handler
@@ -1355,12 +1318,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let project_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let project_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         // Add description
         let result = handler
@@ -1420,12 +1378,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let project_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let project_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         // Verify initial status
         {
@@ -1492,12 +1445,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let project_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let project_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         // Try to update with invalid status
         let result = handler
@@ -1691,12 +1639,7 @@ mod tests {
             )
             .await;
         assert!(project_result.is_ok());
-        let project_id = project_result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let project_id = GtdServerHandler::extract_id_from_response(&project_result.unwrap());
 
         // Add a context
         {
@@ -1729,12 +1672,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         // Update multiple fields at once
         let result = handler
@@ -1789,12 +1727,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         // Move to next_action first
         let result = handler
@@ -1843,12 +1776,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         let result = handler
             .change_status(task_id.clone(), "next_action".to_string(), None)
@@ -1878,12 +1806,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         let result = handler
             .change_status(task_id.clone(), "waiting_for".to_string(), None)
@@ -1913,12 +1836,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         let result = handler
             .change_status(task_id.clone(), "someday".to_string(), None)
@@ -1948,12 +1866,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         let result = handler
             .change_status(task_id.clone(), "later".to_string(), None)
@@ -1983,12 +1896,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         let result = handler
             .change_status(task_id.clone(), "done".to_string(), None)
@@ -2018,12 +1926,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         let result = handler
             .change_status(task_id.clone(), "trash".to_string(), None)
@@ -2054,12 +1957,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id_1 = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id_1 = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         let result = handler
             .change_status(task_id_1.clone(), "trash".to_string(), None)
@@ -2079,12 +1977,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id_2 = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id_2 = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         let result = handler
             .change_status(task_id_2.clone(), "done".to_string(), None)
@@ -2142,12 +2035,7 @@ mod tests {
                 )
                 .await;
             assert!(result.is_ok());
-            let task_id = result
-                .unwrap()
-                .split_whitespace()
-                .last()
-                .unwrap()
-                .to_string();
+            let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
             task_ids.push(task_id);
         }
 
@@ -2191,12 +2079,7 @@ mod tests {
                 )
                 .await;
             assert!(result.is_ok());
-            let task_id = result
-                .unwrap()
-                .split_whitespace()
-                .last()
-                .unwrap()
-                .to_string();
+            let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
             task_ids.push(task_id);
         }
 
@@ -2273,12 +2156,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let inbox_task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let inbox_task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         // next_actionに移動
         let result = handler
@@ -2293,12 +2171,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let next_action_task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let next_action_task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
         handler
             .change_status(next_action_task_id.clone(), "next_action".to_string(), None)
             .await
@@ -2317,12 +2190,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let done_task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let done_task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
         handler
             .change_status(done_task_id.clone(), "done".to_string(), None)
             .await
@@ -2373,12 +2241,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         let result = handler
             .change_status(
@@ -2418,12 +2281,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         // start_dateを指定せずにcalendarに移動しようとするとエラー
         let result = handler
@@ -2449,12 +2307,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         // start_dateパラメータなしでcalendarに移動（既存のstart_dateを使用）
         let result = handler
@@ -2489,12 +2342,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         // 新しいstart_dateを指定してcalendarに移動（既存のstart_dateを上書き）
         let result = handler
@@ -2531,12 +2379,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         // 無効な日付形式
         let result = handler
@@ -2565,12 +2408,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         let created_at = {
             let data = handler.data.lock().unwrap();
@@ -3246,12 +3084,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let project_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let project_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         // Update project with context
         let result = handler
@@ -3303,12 +3136,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let project_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let project_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         // Remove context using empty string
         let result = handler
@@ -3347,12 +3175,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let project_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let project_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         // Try to update with non-existent context
         let result = handler
@@ -3445,12 +3268,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let project_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let project_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         // Update project ID
         let result = handler
@@ -3491,12 +3309,7 @@ mod tests {
             )
             .await;
         assert!(result1.is_ok());
-        let project1_id = result1
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let project1_id = GtdServerHandler::extract_id_from_response(&result1.unwrap());
 
         let result2 = handler
             .inbox(
@@ -3510,12 +3323,7 @@ mod tests {
             )
             .await;
         assert!(result2.is_ok());
-        let project2_id = result2
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let project2_id = GtdServerHandler::extract_id_from_response(&result2.unwrap());
 
         // Try to update project2's ID to project1's ID
         let result = handler
@@ -3549,12 +3357,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let project_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let project_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         // Add a task referencing the project
         let result = handler
@@ -3569,12 +3372,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         // Verify task references the original project ID
         {
@@ -3822,12 +3620,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id1 = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id1 = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         let result = handler
             .inbox(
@@ -3841,12 +3634,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id2 = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id2 = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         // 両方をカレンダーステータスに移動
         let result = handler
@@ -4097,12 +3885,7 @@ mod tests {
                 )
                 .await;
             assert!(result.is_ok());
-            let task_id = result
-                .unwrap()
-                .split_whitespace()
-                .last()
-                .unwrap()
-                .to_string();
+            let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
             // Move to next_action first
             let _ = handler
                 .change_status(task_id.clone(), "next_action".to_string(), None)
@@ -4150,12 +3933,7 @@ mod tests {
                 )
                 .await;
             assert!(result.is_ok());
-            let task_id = result
-                .unwrap()
-                .split_whitespace()
-                .last()
-                .unwrap()
-                .to_string();
+            let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
             task_ids.push(task_id);
         }
 
@@ -4199,12 +3977,7 @@ mod tests {
                 )
                 .await;
             assert!(result.is_ok());
-            let task_id = result
-                .unwrap()
-                .split_whitespace()
-                .last()
-                .unwrap()
-                .to_string();
+            let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
             task_ids.push(task_id);
         }
 
@@ -4248,12 +4021,7 @@ mod tests {
                 )
                 .await;
             assert!(result.is_ok());
-            let task_id = result
-                .unwrap()
-                .split_whitespace()
-                .last()
-                .unwrap()
-                .to_string();
+            let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
             task_ids.push(task_id);
         }
 
@@ -4297,12 +4065,7 @@ mod tests {
                 )
                 .await;
             assert!(result.is_ok());
-            let task_id = result
-                .unwrap()
-                .split_whitespace()
-                .last()
-                .unwrap()
-                .to_string();
+            let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
             task_ids.push(task_id);
         }
 
@@ -4346,12 +4109,7 @@ mod tests {
                 )
                 .await;
             assert!(result.is_ok());
-            let task_id = result
-                .unwrap()
-                .split_whitespace()
-                .last()
-                .unwrap()
-                .to_string();
+            let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
             task_ids.push(task_id);
         }
 
@@ -4395,12 +4153,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         // 無効なステータス "in_progress" でエラーをテスト（問題として報告されたもの）
         let result = handler
@@ -4436,12 +4189,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         // 様々な無効なステータスをテスト
         let invalid_statuses = vec![
@@ -4612,12 +4360,7 @@ mod tests {
                 )
                 .await;
             assert!(result.is_ok());
-            let task_id = result
-                .unwrap()
-                .split_whitespace()
-                .last()
-                .unwrap()
-                .to_string();
+            let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
             task_ids.push(task_id);
         }
 
@@ -4671,12 +4414,7 @@ mod tests {
                 )
                 .await;
             assert!(result.is_ok());
-            let task_id = result
-                .unwrap()
-                .split_whitespace()
-                .last()
-                .unwrap()
-                .to_string();
+            let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
             task_ids.push(task_id);
         }
 
@@ -4726,12 +4464,7 @@ mod tests {
             .await;
         assert!(result.is_ok());
         task_ids.push(
-            result
-                .unwrap()
-                .split_whitespace()
-                .last()
-                .unwrap()
-                .to_string(),
+            GtdServerHandler::extract_id_from_response(&result.unwrap()),
         );
 
         // start_dateを持たないタスク
@@ -4748,12 +4481,7 @@ mod tests {
             .await;
         assert!(result.is_ok());
         task_ids.push(
-            result
-                .unwrap()
-                .split_whitespace()
-                .last()
-                .unwrap()
-                .to_string(),
+            GtdServerHandler::extract_id_from_response(&result.unwrap()),
         );
 
         // start_dateを指定せずに移動を試みる（部分的な失敗）
