@@ -25,10 +25,10 @@
 //! }
 //! ```
 
-mod git_ops;
-mod gtd;
-mod migration;
-mod storage;
+pub mod git_ops;
+pub mod gtd;
+pub mod migration;
+pub mod storage;
 
 use anyhow::Result;
 use chrono::NaiveDate;
@@ -37,9 +37,12 @@ use mcp_attr::server::{McpServer, mcp_server};
 use mcp_attr::{Result as McpResult, bail};
 use std::sync::Mutex;
 
+// Re-export for integration tests (McpServer trait already in scope above)
+
 // Re-export commonly used types
-pub use gtd::{Context, GtdData, NotaStatus, Project, ProjectStatus, Task};
+pub use gtd::{Context, GtdData, NotaStatus, Project, ProjectStatus, Task, Nota, local_date_today};
 pub use storage::Storage;
+pub use git_ops::GitOps;
 
 /// MCP Server handler for GTD task management
 ///
