@@ -1542,7 +1542,7 @@ mod tests {
         assert!(result.is_ok());
 
         // Delete the project
-        let result = handler.delete_project("test-project-1".to_string()).await;
+        let result = handler.change_status("test-project-1".to_string(), "trash".to_string(), None).await;
         assert!(result.is_ok());
         assert!(result.unwrap().contains("deleted successfully"));
 
@@ -1556,7 +1556,7 @@ mod tests {
         let (handler, _temp_file) = get_test_handler();
 
         // Try to delete non-existent project
-        let result = handler.delete_project("non-existent-id".to_string()).await;
+        let result = handler.change_status("non-existent-id".to_string(), "trash".to_string(), None).await;
         assert!(result.is_err());
     }
 
@@ -1592,7 +1592,7 @@ mod tests {
         assert!(result.is_ok());
 
         // Try to delete the project (should fail)
-        let result = handler.delete_project("test-project-1".to_string()).await;
+        let result = handler.change_status("test-project-1".to_string(), "trash".to_string(), None).await;
         assert!(result.is_err());
 
         // Verify the project was NOT deleted
@@ -1645,7 +1645,7 @@ mod tests {
         assert!(result.is_ok());
 
         // Now delete the project (should succeed)
-        let result = handler.delete_project("test-project-1".to_string()).await;
+        let result = handler.change_status("test-project-1".to_string(), "trash".to_string(), None).await;
         assert!(result.is_ok());
 
         // Verify the project was deleted
@@ -2826,7 +2826,7 @@ mod tests {
             .unwrap();
 
         // Try to delete the context - should fail
-        let result = handler.delete_context("Office".to_string()).await;
+        let result = handler.change_status("Office".to_string(), "trash".to_string(), None).await;
         assert!(result.is_err());
 
         // Verify context still exists
@@ -2864,7 +2864,7 @@ mod tests {
             .unwrap();
 
         // Try to delete the context - should fail
-        let result = handler.delete_context("Office".to_string()).await;
+        let result = handler.change_status("Office".to_string(), "trash".to_string(), None).await;
         assert!(result.is_err());
 
         // Verify context still exists
@@ -2916,7 +2916,7 @@ mod tests {
             .unwrap();
 
         // Try to delete the context - should fail (task check comes first)
-        let result = handler.delete_context("Office".to_string()).await;
+        let result = handler.change_status("Office".to_string(), "trash".to_string(), None).await;
         assert!(result.is_err());
 
         // Verify context still exists
@@ -2964,7 +2964,7 @@ mod tests {
             .unwrap();
 
         // Now deletion should succeed
-        let result = handler.delete_context("Office".to_string()).await;
+        let result = handler.change_status("Office".to_string(), "trash".to_string(), None).await;
         assert!(result.is_ok());
         assert!(result.unwrap().contains("deleted"));
 
@@ -3015,7 +3015,7 @@ mod tests {
             .unwrap();
 
         // Now deletion should succeed
-        let result = handler.delete_context("Office".to_string()).await;
+        let result = handler.change_status("Office".to_string(), "trash".to_string(), None).await;
         assert!(result.is_ok());
         assert!(result.unwrap().contains("deleted"));
 
@@ -3067,7 +3067,7 @@ mod tests {
             .unwrap();
 
         // Try to delete the context - should fail with the first task found
-        let result = handler.delete_context("Office".to_string()).await;
+        let result = handler.change_status("Office".to_string(), "trash".to_string(), None).await;
         assert!(result.is_err());
 
         // Verify context still exists
@@ -4558,6 +4558,7 @@ mod tests {
                 .inbox(
                     format!("task-{}", 44 + i),
                     format!("Test Task {}", i),
+                    "inbox".to_string(),
                     None,
                     None,
                     None,
@@ -4575,14 +4576,16 @@ mod tests {
         }
 
         // start_dateを指定せずにcalendarに移動（既存のstart_dateを使用）
-        let result = handler
-            .change_status(task_ids.clone(), "calendar".to_string(), None)
-            .await;
-        assert!(
-            result.is_ok(),
-            "Failed to move multiple tasks to calendar: {:?}",
-            result.err()
-        );
+        for task_id in &task_ids {
+            let result = handler
+                .change_status(task_id.clone(), "calendar".to_string(), None)
+                .await;
+            assert!(
+                result.is_ok(),
+                "Failed to move task to calendar: {:?}",
+                result.err()
+            );
+        }
 
         // すべてのタスクがcalendarに移動され、既存のstart_dateが保持されていることを確認
         let data = handler.data.lock().unwrap();
@@ -4649,14 +4652,17 @@ mod tests {
         );
 
         // start_dateを指定せずに移動を試みる（部分的な失敗）
-        let result = handler
-            .change_status(task_ids.clone(), "calendar".to_string(), None)
+        // First task has date, should succeed
+        let result1 = handler
+            .change_status(task_ids[0].clone(), "calendar".to_string(), None)
             .await;
-        assert!(
-            result.is_ok(),
-            "Should succeed with partial success: {:?}",
-            result.err()
-        );
+        assert!(result1.is_ok(), "Task with date should move to calendar");
+        
+        // Second task has no date, should fail
+        let result2 = handler
+            .change_status(task_ids[1].clone(), "calendar".to_string(), None)
+            .await;
+        assert!(result2.is_err(), "Task without date should fail");
 
         // 1つのタスクだけが移動されたことを確認
         let data = handler.data.lock().unwrap();
