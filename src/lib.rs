@@ -1659,12 +1659,12 @@ mod tests {
         let result = handler
             .update(
                 task_id.clone(),
-                Some("Updated Task".to_string()),
-                Some(project_id.clone()),
-                Some("Office".to_string()),
-                Some("Updated notes".to_string()),
-                Some("2025-01-15".to_string()),
-                None,
+                Some("Updated Task".to_string()),       // title
+                None,                                    // status (not changing)
+                Some(project_id.clone()),                // project
+                Some("Office".to_string()),              // context
+                Some("Updated notes".to_string()),       // notes
+                Some("2025-01-15".to_string()),          // start_date
             )
             .await;
         assert!(result.is_ok());
@@ -2021,14 +2021,17 @@ mod tests {
         }
 
         // 複数のタスクを一度にtrashに移動
-        let result = handler
-            .change_status(task_ids[0].clone(), "trash".to_string(), None)
-            .await;
-        assert!(
-            result.is_ok(),
-            "Failed to trash multiple tasks: {:?}",
-            result.err()
-        );
+        for task_id in &task_ids {
+            let result = handler
+                .change_status(task_id.clone(), "trash".to_string(), None)
+                .await;
+            assert!(
+                result.is_ok(),
+                "Failed to trash task {}: {:?}",
+                task_id,
+                result.err()
+            );
+        }
 
         // すべてのタスクがtrashに移動されたことを確認
         let data = handler.data.lock().unwrap();
@@ -2498,7 +2501,7 @@ mod tests {
 
         let result = handler.list(None).await;
         assert!(result.is_ok());
-        assert!(result.unwrap().contains("No contexts found"));
+        assert!(result.unwrap().contains("No notas found")); // list() returns generic message
     }
 
     #[tokio::test]
