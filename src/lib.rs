@@ -1060,9 +1060,9 @@ mod tests {
                 None,
                 None,
                 None,
-                Some("".to_string()),
-                Some("".to_string()),
-                None,
+                Some("".to_string()), // Clear context
+                Some("".to_string()), // Clear notes
+                Some("".to_string()), // Clear start_date
             )
             .await;
         assert!(result.is_ok());
@@ -1101,8 +1101,8 @@ mod tests {
                 None,
                 None,
                 None,
-                Some("invalid-date".to_string()),
                 None,
+                Some("invalid-date".to_string()), // start_date is 7th param
             )
             .await;
         assert!(result.is_err());
