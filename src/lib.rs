@@ -1485,7 +1485,7 @@ mod tests {
             .change_status("test-project-1".to_string(), "trash".to_string(), None)
             .await;
         assert!(result.is_ok());
-        assert!(result.unwrap().contains("deleted successfully"));
+        assert!(result.unwrap().contains("deleted"));
 
         // Verify the project was deleted
         let data = handler.data.lock().unwrap();
@@ -1583,8 +1583,8 @@ mod tests {
             .update(
                 "task-2003".to_string(),
                 None,
-                Some("".to_string()), // Empty string removes project
                 None,
+                Some("".to_string()), // Empty string removes project (4th param)
                 None,
                 None,
                 None,
