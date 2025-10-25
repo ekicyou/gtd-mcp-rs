@@ -660,7 +660,7 @@ mod tests {
 
         // Test moving to done
         let result = handler
-            .change_status(vec![task_id.clone()], "done".to_string(), None)
+            .change_status(task_id.clone(), "done".to_string(), None)
             .await;
         assert!(result.is_ok());
         {
