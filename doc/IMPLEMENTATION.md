@@ -4,7 +4,7 @@
 
 This is a unified nota implementation of a GTD (Getting Things Done) MCP (Model Context Protocol) server in Rust. The server provides task, project, and context management through a simplified 5-tool interface.
 
-**Version 0.7.2**
+**Version 0.8.0**
 
 This version uses `mcp-attr` v0.0.7 for declarative server building and implements a unified nota interface:
 
@@ -322,7 +322,7 @@ Contexts: "@office", "@home", "@computer", "@phone"
 ```
 
 ### Migration from Previous Versions:
-Previous versions (pre-0.7.x) used auto-generated counter-based IDs (`#1`, `#2`, `project-1`, `project-2`). The unified nota interface (0.7.x+) switched to client-provided arbitrary string IDs for improved flexibility and semantic clarity.
+Previous versions (pre-0.7.x) used auto-generated counter-based IDs (`#1`, `#2`, `project-1`, `project-2`). The unified nota interface (0.7.x–0.8.x) uses client-provided arbitrary string IDs for improved flexibility and semantic clarity.
 
 ## Future Enhancements
 
