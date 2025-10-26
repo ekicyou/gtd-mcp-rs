@@ -257,7 +257,8 @@ impl Nota {
 /// we would profile first, then consider a proper database backend (SQLite) rather than
 /// complex in-memory indexing.
 ///
-/// See issue #[issue_number] for full design analysis and rationale.
+/// For complete design analysis and rationale, see the comprehensive documentation above
+/// and the design validation tests in the test module.
 #[derive(Debug)]
 pub struct GtdData {
     /// Format version for the TOML file (current: 3)
