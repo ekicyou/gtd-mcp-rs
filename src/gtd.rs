@@ -266,9 +266,9 @@ impl<'de> Deserialize<'de> for GtdData {
         D: Deserializer<'de>,
     {
         use crate::migration::{
-            GtdDataMigrationHelper, migrate_projects_to_latest,
-            normalize_context_line_endings, normalize_project_line_endings,
-            normalize_task_line_endings, populate_context_names, populate_project_ids,
+            GtdDataMigrationHelper, migrate_projects_to_latest, normalize_context_line_endings,
+            normalize_project_line_endings, normalize_task_line_endings, populate_context_names,
+            populate_project_ids,
         };
 
         let helper = GtdDataMigrationHelper::deserialize(deserializer)?;
@@ -475,9 +475,7 @@ impl GtdData {
     /// An optional Nota reference if found and it's a task
     #[allow(dead_code)]
     pub fn find_task_by_id(&self, id: &str) -> Option<&Nota> {
-        self.notas
-            .iter()
-            .find(|n| n.id == id && n.is_task())
+        self.notas.iter().find(|n| n.id == id && n.is_task())
     }
 
     /// Find a task by its ID and return a mutable reference (for compatibility)
@@ -488,9 +486,7 @@ impl GtdData {
     /// # Returns
     /// An optional mutable Nota reference if found and it's a task
     pub fn find_task_by_id_mut(&mut self, id: &str) -> Option<&mut Nota> {
-        self.notas
-            .iter_mut()
-            .find(|n| n.id == id && n.is_task())
+        self.notas.iter_mut().find(|n| n.id == id && n.is_task())
     }
 
     /// Add a nota to the collection
@@ -719,64 +715,89 @@ impl GtdData {
     /// True if the ID is referenced by other notas
     #[allow(dead_code)]
     pub fn is_referenced(&self, id: &str) -> bool {
-        self.notas.iter().any(|nota| {
-            nota.project.as_deref() == Some(id) || nota.context.as_deref() == Some(id)
-        })
+        self.notas
+            .iter()
+            .any(|nota| nota.project.as_deref() == Some(id) || nota.context.as_deref() == Some(id))
     }
 
     // Compatibility properties for tests
     /// Get inbox notas (for compatibility)
     #[allow(dead_code)]
     pub fn inbox(&self) -> Vec<&Nota> {
-        self.notas.iter().filter(|n| n.status == NotaStatus::inbox).collect()
+        self.notas
+            .iter()
+            .filter(|n| n.status == NotaStatus::inbox)
+            .collect()
     }
 
     /// Get next_action notas (for compatibility)
     #[allow(dead_code)]
     pub fn next_action(&self) -> Vec<&Nota> {
-        self.notas.iter().filter(|n| n.status == NotaStatus::next_action).collect()
+        self.notas
+            .iter()
+            .filter(|n| n.status == NotaStatus::next_action)
+            .collect()
     }
 
     /// Get waiting_for notas (for compatibility)
     #[allow(dead_code)]
     pub fn waiting_for(&self) -> Vec<&Nota> {
-        self.notas.iter().filter(|n| n.status == NotaStatus::waiting_for).collect()
+        self.notas
+            .iter()
+            .filter(|n| n.status == NotaStatus::waiting_for)
+            .collect()
     }
 
     /// Get later notas (for compatibility)
     #[allow(dead_code)]
     pub fn later(&self) -> Vec<&Nota> {
-        self.notas.iter().filter(|n| n.status == NotaStatus::later).collect()
+        self.notas
+            .iter()
+            .filter(|n| n.status == NotaStatus::later)
+            .collect()
     }
 
     /// Get calendar notas (for compatibility)
     #[allow(dead_code)]
     pub fn calendar(&self) -> Vec<&Nota> {
-        self.notas.iter().filter(|n| n.status == NotaStatus::calendar).collect()
+        self.notas
+            .iter()
+            .filter(|n| n.status == NotaStatus::calendar)
+            .collect()
     }
 
     /// Get someday notas (for compatibility)
     #[allow(dead_code)]
     pub fn someday(&self) -> Vec<&Nota> {
-        self.notas.iter().filter(|n| n.status == NotaStatus::someday).collect()
+        self.notas
+            .iter()
+            .filter(|n| n.status == NotaStatus::someday)
+            .collect()
     }
 
     /// Get done notas (for compatibility)
     #[allow(dead_code)]
     pub fn done(&self) -> Vec<&Nota> {
-        self.notas.iter().filter(|n| n.status == NotaStatus::done).collect()
+        self.notas
+            .iter()
+            .filter(|n| n.status == NotaStatus::done)
+            .collect()
     }
 
     /// Get trash notas (for compatibility)
     #[allow(dead_code)]
     pub fn trash(&self) -> Vec<&Nota> {
-        self.notas.iter().filter(|n| n.status == NotaStatus::trash).collect()
+        self.notas
+            .iter()
+            .filter(|n| n.status == NotaStatus::trash)
+            .collect()
     }
 
     /// Get projects map (for compatibility)
     #[allow(dead_code)]
     pub fn projects(&self) -> HashMap<String, &Nota> {
-        self.notas.iter()
+        self.notas
+            .iter()
             .filter(|n| n.status == NotaStatus::project)
             .map(|n| (n.id.clone(), n))
             .collect()
@@ -785,7 +806,8 @@ impl GtdData {
     /// Get contexts map (for compatibility)
     #[allow(dead_code)]
     pub fn contexts(&self) -> HashMap<String, &Nota> {
-        self.notas.iter()
+        self.notas
+            .iter()
             .filter(|n| n.status == NotaStatus::context)
             .map(|n| (n.id.clone(), n))
             .collect()
@@ -1918,15 +1940,21 @@ mod tests {
         );
 
         // V4形式の期待される構造を検証
-        assert!(toml_output.contains("format_version = 4"), "Should be version 4");
-        assert!(toml_output.contains("[[notas]]"), "Should have unified [[notas]] sections");
-        
+        assert!(
+            toml_output.contains("format_version = 4"),
+            "Should be version 4"
+        );
+        assert!(
+            toml_output.contains("[[notas]]"),
+            "Should have unified [[notas]] sections"
+        );
+
         // 各アイテムが含まれていることを確認
         assert!(toml_output.contains("id = \"task-001\""));
         assert!(toml_output.contains("id = \"task-002\""));
         assert!(toml_output.contains("id = \"project-001\""));
         assert!(toml_output.contains("id = \"Office\""));
-        
+
         // ステータスが正しく含まれていることを確認
         assert!(toml_output.contains("status = \"next_action\""));
         assert!(toml_output.contains("status = \"inbox\""));
@@ -2860,14 +2888,23 @@ notes = "Office context"
         let toml_str = toml::to_string(&data).unwrap();
 
         // V4 format uses unified [[notas]] section
-        assert!(toml_str.contains("[[notas]]"), "Should contain [[notas]] section");
-        assert!(toml_str.contains("format_version = 4"), "Should be version 4");
-        
+        assert!(
+            toml_str.contains("[[notas]]"),
+            "Should contain [[notas]] section"
+        );
+        assert!(
+            toml_str.contains("format_version = 4"),
+            "Should be version 4"
+        );
+
         // Verify all statuses are represented in the notas
         for status in &statuses {
             let status_str = format!("{:?}", status);
-            assert!(toml_str.contains(&format!("status = \"{}\"", status_str)), 
-                    "Should contain status = \"{}\"", status_str);
+            assert!(
+                toml_str.contains(&format!("status = \"{}\"", status_str)),
+                "Should contain status = \"{}\"",
+                status_str
+            );
         }
     }
 
