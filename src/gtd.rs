@@ -405,16 +405,56 @@ impl Serialize for GtdData {
         state.serialize_field("format_version", &self.format_version)?;
 
         // Separate notas by status (Version 5 format)
-        let inbox: Vec<&Nota> = self.notas.iter().filter(|n| n.status == NotaStatus::inbox).collect();
-        let next_action: Vec<&Nota> = self.notas.iter().filter(|n| n.status == NotaStatus::next_action).collect();
-        let waiting_for: Vec<&Nota> = self.notas.iter().filter(|n| n.status == NotaStatus::waiting_for).collect();
-        let later: Vec<&Nota> = self.notas.iter().filter(|n| n.status == NotaStatus::later).collect();
-        let calendar: Vec<&Nota> = self.notas.iter().filter(|n| n.status == NotaStatus::calendar).collect();
-        let someday: Vec<&Nota> = self.notas.iter().filter(|n| n.status == NotaStatus::someday).collect();
-        let done: Vec<&Nota> = self.notas.iter().filter(|n| n.status == NotaStatus::done).collect();
-        let context: Vec<&Nota> = self.notas.iter().filter(|n| n.status == NotaStatus::context).collect();
-        let project: Vec<&Nota> = self.notas.iter().filter(|n| n.status == NotaStatus::project).collect();
-        let trash: Vec<&Nota> = self.notas.iter().filter(|n| n.status == NotaStatus::trash).collect();
+        let inbox: Vec<&Nota> = self
+            .notas
+            .iter()
+            .filter(|n| n.status == NotaStatus::inbox)
+            .collect();
+        let next_action: Vec<&Nota> = self
+            .notas
+            .iter()
+            .filter(|n| n.status == NotaStatus::next_action)
+            .collect();
+        let waiting_for: Vec<&Nota> = self
+            .notas
+            .iter()
+            .filter(|n| n.status == NotaStatus::waiting_for)
+            .collect();
+        let later: Vec<&Nota> = self
+            .notas
+            .iter()
+            .filter(|n| n.status == NotaStatus::later)
+            .collect();
+        let calendar: Vec<&Nota> = self
+            .notas
+            .iter()
+            .filter(|n| n.status == NotaStatus::calendar)
+            .collect();
+        let someday: Vec<&Nota> = self
+            .notas
+            .iter()
+            .filter(|n| n.status == NotaStatus::someday)
+            .collect();
+        let done: Vec<&Nota> = self
+            .notas
+            .iter()
+            .filter(|n| n.status == NotaStatus::done)
+            .collect();
+        let context: Vec<&Nota> = self
+            .notas
+            .iter()
+            .filter(|n| n.status == NotaStatus::context)
+            .collect();
+        let project: Vec<&Nota> = self
+            .notas
+            .iter()
+            .filter(|n| n.status == NotaStatus::project)
+            .collect();
+        let trash: Vec<&Nota> = self
+            .notas
+            .iter()
+            .filter(|n| n.status == NotaStatus::trash)
+            .collect();
 
         // Serialize each status array (only if non-empty)
         if !inbox.is_empty() {
