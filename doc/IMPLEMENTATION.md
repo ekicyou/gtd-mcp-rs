@@ -55,7 +55,7 @@ The server uses a format version system to enable backwards-compatible changes t
   name = "My Project"
   ```
 
-- **Version 2** (Current): Projects stored as HashMap `[projects.id]`
+- **Version 2** (Legacy): Projects stored as HashMap `[projects.id]`
   ```toml
   format_version = 2
   
@@ -63,7 +63,15 @@ The server uses a format version system to enable backwards-compatible changes t
   name = "My Project"
   ```
 
-**Automatic Migration**: When loading a version 1 file, the server automatically migrates it to version 2 format. On the next save, the file will be written in version 2 format. This ensures backwards compatibility while allowing the data structure to evolve.
+- **Version 3** (Current): Same structure as Version 2, with enhanced migration support
+  ```toml
+  format_version = 3
+  
+  [projects.project-1]
+  name = "My Project"
+  ```
+
+**Automatic Migration**: When loading a version 1 or version 2 file, the server automatically migrates it to version 3 format. On the next save, the file will be written in version 3 format. This ensures backwards compatibility while allowing the data structure to evolve. The internal implementation also supports a unified `Nota` structure for future enhancements.
 
 ## MCP Tools
 
