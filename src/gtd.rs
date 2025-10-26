@@ -166,16 +166,16 @@ impl Nota {
     /// Convert this Nota to a Project (if status is project)
     pub fn to_project(&self) -> Option<Project> {
         if self.status == NotaStatus::project {
-            Some(Project {
-                id: self.id.clone(),
-                title: self.title.clone(),
-                notes: self.notes.clone(),
-                project: self.project.clone(),
-                context: self.context.clone(),
-                start_date: self.start_date,
-                created_at: self.created_at,
-                updated_at: self.updated_at,
-            })
+            Some(Project::new(
+                self.id.clone(),
+                self.title.clone(),
+                self.notes.clone(),
+                self.project.clone(),
+                self.context.clone(),
+                self.start_date,
+                self.created_at,
+                self.updated_at,
+            ))
         } else {
             None
         }
@@ -1483,6 +1483,7 @@ mod tests {
     #[test]
     fn test_project_creation() {
         let project = Project {
+            status: None,
             id: "project-1".to_string(),
             title: "Test Project".to_string(),
             notes: Some("Test description".to_string()),
@@ -1503,6 +1504,7 @@ mod tests {
     #[test]
     fn test_project_without_description() {
         let project = Project {
+            status: None,
             id: "project-1".to_string(),
             title: "Test Project".to_string(),
             notes: None,
@@ -1524,6 +1526,7 @@ mod tests {
     fn test_gtd_data_insert_project() {
         let mut data = GtdData::new();
         let project = Project {
+            status: None,
             id: "project-1".to_string(),
             title: "Test Project".to_string(),
             notes: None,
@@ -1667,6 +1670,7 @@ mod tests {
     fn test_project_serialization() {
         let mut data = GtdData::new();
         let project = Project {
+            status: None,
             id: "project-1".to_string(),
             title: "Test Project".to_string(),
             notes: Some("Test description".to_string()),
@@ -1740,6 +1744,7 @@ mod tests {
         data.add_task(task);
 
         let project = Project {
+            status: None,
             id: "project-1".to_string(),
             title: "Test Project".to_string(),
             notes: None,
@@ -2010,6 +2015,7 @@ mod tests {
 
         for i in 1..=2 {
             data.add_project(Project {
+                status: None,
                 id: format!("project-{}", i),
                 title: format!("Project {}", i),
                 notes: None,
@@ -2072,6 +2078,7 @@ mod tests {
 
         // 全フィールドを設定したプロジェクトを追加
         data.add_project(Project {
+            status: None,
             id: "project-001".to_string(),
             title: "Documentation Project".to_string(),
             notes: Some("Comprehensive project documentation update".to_string()),
@@ -2252,6 +2259,7 @@ name = "Home"
         let mut data = GtdData::new();
 
         data.add_project(Project {
+            status: None,
             id: "project-1".to_string(),
             title: "Test Project".to_string(),
             notes: None,
@@ -2401,6 +2409,7 @@ name = "Home"
         let mut data = GtdData::new();
 
         data.add_project(Project {
+            status: None,
             id: "project-1".to_string(),
             title: "Test Project".to_string(),
             notes: None,
@@ -2478,6 +2487,7 @@ name = "Home"
         let mut data = GtdData::new();
 
         data.add_project(Project {
+            status: None,
             id: "project-1".to_string(),
             title: "Test Project".to_string(),
             notes: None,
@@ -2712,6 +2722,7 @@ name = "Home"
         });
 
         let project = Project {
+            status: None,
             id: "project-1".to_string(),
             title: "Test Project".to_string(),
             notes: None,
@@ -2732,6 +2743,7 @@ name = "Home"
         let data = GtdData::new();
 
         let project = Project {
+            status: None,
             id: "project-1".to_string(),
             title: "Test Project".to_string(),
             notes: None,
@@ -2752,6 +2764,7 @@ name = "Home"
         let data = GtdData::new();
 
         let project = Project {
+            status: None,
             id: "project-1".to_string(),
             title: "Test Project".to_string(),
             notes: None,
@@ -2784,6 +2797,7 @@ name = "Home"
         });
 
         let project = Project {
+            status: None,
             id: "project-1".to_string(),
             title: "Office Project".to_string(),
             notes: None,
@@ -3346,6 +3360,7 @@ updated_at = "2024-01-01"
     #[test]
     fn test_nota_from_project() {
         let project = Project {
+            status: None,
             id: "proj-1".to_string(),
             title: "Test Project".to_string(),
             notes: Some("Project notes".to_string()),
