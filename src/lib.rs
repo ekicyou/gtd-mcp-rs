@@ -767,7 +767,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_change_task_status_batch_operation() {
+    async fn test_change_nota_status_batch_operation() {
         let (handler, _temp_file) = get_test_handler();
 
         // Create multiple tasks
@@ -1935,7 +1935,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_trash_tasks_multiple_tasks() {
+    async fn test_trash_notas_multiple() {
         let (handler, _temp_file) = get_test_handler();
 
         // 複数のタスクを作成
@@ -1982,7 +1982,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_trash_tasks_partial_success() {
+    async fn test_trash_notas_partial_success() {
         let (handler, _temp_file) = get_test_handler();
 
         // 有効なタスクを2つ作成
@@ -2053,19 +2053,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_trash_tasks_empty_list() {
-        let (_handler, _temp_file) = get_test_handler();
-
-        // 空のリスト
-        let task_ids: Vec<String> = Vec::new();
-
-        // Empty list - no change_status needed
-        assert!(task_ids.is_empty());
-        // Empty list case - nothing to assert
-    }
-
-    #[tokio::test]
-    async fn test_trash_tasks_from_different_statuses() {
+    async fn test_trash_notas_from_different_statuses() {
         let (handler, _temp_file) = get_test_handler();
 
         // inboxからタスクを作成
