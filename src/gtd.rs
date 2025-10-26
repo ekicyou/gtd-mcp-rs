@@ -16,7 +16,7 @@ pub fn local_date_today() -> NaiveDate {
 /// Represents the different states a task can be in according to GTD methodology.
 /// Uses snake_case naming to match TOML serialization format.
 #[allow(non_camel_case_types)]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum NotaStatus {
     /// Unprocessed items
     inbox,
@@ -400,92 +400,50 @@ impl Serialize for GtdData {
         S: Serializer,
     {
         use serde::ser::SerializeStruct;
+        use std::collections::HashMap;
 
         let mut state = serializer.serialize_struct("GtdData", 13)?;
         state.serialize_field("format_version", &self.format_version)?;
 
-        // Separate notas by status (Version 5 format)
-        let inbox: Vec<&Nota> = self
-            .notas
-            .iter()
-            .filter(|n| n.status == NotaStatus::inbox)
-            .collect();
-        let next_action: Vec<&Nota> = self
-            .notas
-            .iter()
-            .filter(|n| n.status == NotaStatus::next_action)
-            .collect();
-        let waiting_for: Vec<&Nota> = self
-            .notas
-            .iter()
-            .filter(|n| n.status == NotaStatus::waiting_for)
-            .collect();
-        let later: Vec<&Nota> = self
-            .notas
-            .iter()
-            .filter(|n| n.status == NotaStatus::later)
-            .collect();
-        let calendar: Vec<&Nota> = self
-            .notas
-            .iter()
-            .filter(|n| n.status == NotaStatus::calendar)
-            .collect();
-        let someday: Vec<&Nota> = self
-            .notas
-            .iter()
-            .filter(|n| n.status == NotaStatus::someday)
-            .collect();
-        let done: Vec<&Nota> = self
-            .notas
-            .iter()
-            .filter(|n| n.status == NotaStatus::done)
-            .collect();
-        let context: Vec<&Nota> = self
-            .notas
-            .iter()
-            .filter(|n| n.status == NotaStatus::context)
-            .collect();
-        let project: Vec<&Nota> = self
-            .notas
-            .iter()
-            .filter(|n| n.status == NotaStatus::project)
-            .collect();
-        let trash: Vec<&Nota> = self
-            .notas
-            .iter()
-            .filter(|n| n.status == NotaStatus::trash)
-            .collect();
+        // Separate notas by status in a single pass (Version 5 format)
+        let mut status_map: HashMap<NotaStatus, Vec<&Nota>> = HashMap::new();
+        for nota in &self.notas {
+            status_map
+                .entry(nota.status.clone())
+                .or_default()
+                .push(nota);
+        }
 
-        // Serialize each status array (only if non-empty)
-        if !inbox.is_empty() {
-            state.serialize_field("inbox", &inbox)?;
+        // Serialize each status array (only if non-empty), in the order they appear in the enum
+        if let Some(inbox) = status_map.get(&NotaStatus::inbox) {
+            state.serialize_field("inbox", inbox)?;
         }
-        if !next_action.is_empty() {
-            state.serialize_field("next_action", &next_action)?;
+        if let Some(next_action) = status_map.get(&NotaStatus::next_action) {
+            state.serialize_field("next_action", next_action)?;
         }
-        if !waiting_for.is_empty() {
-            state.serialize_field("waiting_for", &waiting_for)?;
+        if let Some(waiting_for) = status_map.get(&NotaStatus::waiting_for) {
+            state.serialize_field("waiting_for", waiting_for)?;
         }
-        if !later.is_empty() {
-            state.serialize_field("later", &later)?;
+        if let Some(later) = status_map.get(&NotaStatus::later) {
+            state.serialize_field("later", later)?;
         }
-        if !calendar.is_empty() {
-            state.serialize_field("calendar", &calendar)?;
+        if let Some(calendar) = status_map.get(&NotaStatus::calendar) {
+            state.serialize_field("calendar", calendar)?;
         }
-        if !someday.is_empty() {
-            state.serialize_field("someday", &someday)?;
+        if let Some(someday) = status_map.get(&NotaStatus::someday) {
+            state.serialize_field("someday", someday)?;
         }
-        if !done.is_empty() {
-            state.serialize_field("done", &done)?;
+        if let Some(done) = status_map.get(&NotaStatus::done) {
+            state.serialize_field("done", done)?;
         }
-        if !context.is_empty() {
-            state.serialize_field("context", &context)?;
+        if let Some(context) = status_map.get(&NotaStatus::context) {
+            state.serialize_field("context", context)?;
         }
-        if !project.is_empty() {
-            state.serialize_field("project", &project)?;
+        if let Some(project) = status_map.get(&NotaStatus::project) {
+            state.serialize_field("project", project)?;
         }
-        if !trash.is_empty() {
-            state.serialize_field("trash", &trash)?;
+        if let Some(trash) = status_map.get(&NotaStatus::trash) {
+            state.serialize_field("trash", trash)?;
         }
 
         if self.task_counter != 0 {
