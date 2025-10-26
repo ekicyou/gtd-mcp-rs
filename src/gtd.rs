@@ -4024,4 +4024,64 @@ updated_at = "2024-01-01"
         // Verify Vec and HashMap are in sync
         assert_eq!(loaded.notas.len(), loaded.nota_map.len());
     }
+
+    /// Test that trash appears at the end in TOML serialization
+    ///
+    /// This validates that the serialization order follows the NotaStatus enum order,
+    /// with trash being the last status type in the TOML output.
+    #[test]
+    fn test_toml_serialization_order_trash_at_end() {
+        let mut data = GtdData::new();
+
+        // Add tasks for all statuses in random order to verify serialization order
+        let statuses = [
+            ("trash", NotaStatus::trash),
+            ("inbox", NotaStatus::inbox),
+            ("done", NotaStatus::done),
+            ("next_action", NotaStatus::next_action),
+            ("reference", NotaStatus::reference),
+        ];
+
+        for (name, status) in &statuses {
+            let nota = Nota {
+                id: format!("{}-1", name),
+                title: format!("Test {}", name),
+                status: status.clone(),
+                project: None,
+                context: None,
+                notes: None,
+                start_date: None,
+                created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+                updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            };
+            data.add(nota);
+        }
+
+        let toml_str = toml::to_string_pretty(&data).unwrap();
+
+        // Find positions of each section
+        let inbox_pos = toml_str.find("[[inbox]]").unwrap();
+        let next_action_pos = toml_str.find("[[next_action]]").unwrap();
+        let done_pos = toml_str.find("[[done]]").unwrap();
+        let reference_pos = toml_str.find("[[reference]]").unwrap();
+        let trash_pos = toml_str.find("[[trash]]").unwrap();
+
+        // Verify order: inbox < next_action < done < reference < trash
+        assert!(
+            inbox_pos < next_action_pos,
+            "inbox should come before next_action"
+        );
+        assert!(
+            next_action_pos < done_pos,
+            "next_action should come before done"
+        );
+        assert!(
+            done_pos < reference_pos,
+            "done should come before reference"
+        );
+        assert!(
+            reference_pos < trash_pos,
+            "reference should come before trash (trash should be last)"
+        );
+    }
 }
