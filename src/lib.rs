@@ -2037,7 +2037,7 @@ mod tests {
         let (handler, _temp_file) = get_test_handler();
 
         // すべて無効なタスクID
-        let task_ids = vec![
+        let task_ids = [
             "#999".to_string(),
             "invalid-id".to_string(),
             "task-999".to_string(),
@@ -2054,7 +2054,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_trash_tasks_empty_list() {
-        let (handler, _temp_file) = get_test_handler();
+        let (_handler, _temp_file) = get_test_handler();
 
         // 空のリスト
         let task_ids: Vec<String> = Vec::new();
