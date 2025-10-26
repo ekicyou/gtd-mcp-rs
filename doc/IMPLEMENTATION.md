@@ -71,7 +71,7 @@ The server uses a format version system to enable backwards-compatible changes t
   name = "My Project"
   ```
 
-**Automatic Migration**: When loading a version 1 or version 2 file, the server automatically migrates it to version 3 format. On the next save, the file will be written in version 3 format. This ensures backwards compatibility while allowing the data structure to evolve. The internal implementation also supports a unified `Nota` structure for future enhancements.
+**Automatic Migration**: When loading a version 1 or version 2 file, the server automatically migrates it to version 3 format. On the next save, the file will be written in version 3 format. This ensures backwards compatibility while allowing the data structure to evolve. The internal implementation includes infrastructure prepared for future unified `Nota` structure support.
 
 ## MCP Tools
 
