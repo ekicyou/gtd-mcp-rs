@@ -1526,7 +1526,6 @@ mod tests {
     // コンテキストのシリアライゼーションテスト
     // コンテキストをTOML形式にシリアライズし、デシリアライズして元のデータと一致することを確認
     // Note: name フィールドは skip_serializing されるため、TOML には含まれない
-    #[test]
     // Context serialization test for Version 3
     // In V3 format, contexts are stored in [[context]] arrays, so name must be serialized
     #[test]
@@ -2009,7 +2008,6 @@ mod tests {
     }
 
     // 後方互換性テスト: 旧形式（nameフィールド付き）のTOMLも正しく読み込めることを確認
-    #[test]
     // Test backward compatibility with name field in contexts (Version 2 format)
     // Version 2 used HashMap format where name was the key, so name field was redundant
     // Version 3 uses Vec format where name must be included

@@ -638,7 +638,7 @@ impl McpServer for GtdServerHandler {
 mod tests {
     use super::*;
     use crate::gtd::{Nota, local_date_today};
-    use crate::migration::{Context, Project, Task};
+    use crate::migration::Task;
     use chrono::NaiveDate;
     use tempfile::NamedTempFile;
 
