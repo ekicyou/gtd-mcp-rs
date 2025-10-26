@@ -948,7 +948,6 @@ mod tests {
     fn test_gtd_data_new() {
         let data = GtdData::new();
         assert!(data.notas.is_empty());
-        assert_eq!(data.notas.len(), 0);
     }
 
     // GtdDataへのNota挿入テスト
