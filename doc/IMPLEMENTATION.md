@@ -2,25 +2,28 @@
 
 ## Overview
 
-This is a basic implementation of a GTD (Getting Things Done) MCP (Model Context Protocol) server in Rust. The server provides task and project management capabilities through MCP tools.
+This is a unified nota implementation of a GTD (Getting Things Done) MCP (Model Context Protocol) server in Rust. The server provides task, project, and context management through a simplified 5-tool interface.
 
-**Version 0.7.1**
+**Version 0.7.2**
 
-This version uses `mcp-attr` v0.0.7 for declarative server building:
+This version uses `mcp-attr` v0.0.7 for declarative server building and implements a unified nota interface:
 
 - ✅ Uses declarative server building with `#[mcp_server]` and `#[tool]` macros
 - ✅ Automatic JSON Schema generation from function signatures
 - ✅ Full MCP 2025-03-26 protocol support
+- ✅ Unified nota interface (5 tools handle all operations)
+- ✅ Client-provided arbitrary string IDs
+- ✅ Type transformations via status changes
 
 ## Architecture
 
 ### Components
 
 1. **Data Structures** (`src/gtd.rs`)
-   - `Task`: Represents a GTD task with status (inbox, next_action, waiting_for, someday, done, trash) and optional start date for calendar management
-   - `Project`: Represents a project with status (active, on_hold, completed)
-   - `Context`: Represents a context (e.g., @office, @home)
-   - `GtdData`: Container for all tasks, projects, and contexts
+   - `Nota`: Unified type representing tasks, projects, and contexts
+   - `NotaStatus`: Enum defining status types (inbox, next_action, waiting_for, later, calendar, someday, done, trash, project, context)
+   - `Task`, `Project`, `Context`: Type aliases for nota filtering (deprecated internal types)
+   - `GtdData`: Container managing all notas with unified storage and access methods
 
 2. **Storage** (`src/storage.rs`)
    - TOML-based serialization and deserialization
@@ -64,219 +67,91 @@ The server uses a format version system to enable backwards-compatible changes t
 
 ## MCP Tools
 
-The server exposes the following tools:
+The server implements 5 unified tools that handle all GTD operations:
 
-### Task Management
-
-#### add_task
-Adds a new task to the inbox.
+### inbox
+Captures anything that needs attention (GTD Capture step). All items start here.
 
 **Parameters:**
-- `title` (required): Task title
-- `project` (optional): Project ID (must exist if specified)
-- `context` (optional): Context name (must exist if specified)
-- `notes` (optional): Additional notes
-- `start_date` (optional): Start date in YYYY-MM-DD format for GTD tickler file workflow
+- `id` (required): Any string identifier (e.g., "call-john", "website-redesign")
+- `title` (required): Brief description of the item
+- `status` (required): inbox/next_action/waiting_for/later/calendar/someday/done/project/context/trash
+- `project` (optional): Parent project ID (must exist if specified)
+- `context` (optional): Context name (e.g., "@office", "@home") (must exist if specified)
+- `notes` (optional): Additional details in Markdown format
+- `start_date` (optional): Start date in YYYY-MM-DD format (required for calendar status)
 
 **Automatic Fields:**
-- `created_at` (date): Automatically set to current local date when task is created
-- `updated_at` (date): Automatically set to current local date when task is created or modified
+- `created_at` (date): Automatically set to current local date
+- `updated_at` (date): Automatically set to current local date
 
-**Referential Integrity:** If a project or context is specified, the server validates that it exists before creating the task.
+**Referential Integrity:** Project and context references are validated before creating the nota.
 
-#### list_tasks
-Lists all tasks with optional status filtering.
+**Type Determination:** Status determines the nota type:
+- Task statuses: inbox, next_action, waiting_for, later, calendar, someday, done, trash
+- Project status: project
+- Context status: context
+
+### list
+Reviews all notas with optional filtering (GTD Review step).
 
 **Parameters:**
-- `status` (optional): Filter by status (inbox, next_action, waiting_for, someday, later, done, trash, calendar)
-- `date` (optional): Filter by date in YYYY-MM-DD format. Tasks with start_date in the future (later than the specified date) are excluded.
+- `status` (optional): Filter by status (inbox, next_action, waiting_for, later, calendar, someday, done, trash, project, context). Empty = all notas.
+- `date` (optional): Date filter in YYYY-MM-DD format. For calendar status, only shows tasks with start_date <= this date.
 - `exclude_notes` (optional): Set to `true` to exclude notes from output and reduce token usage. Default is `false`.
 
-**Output Format:** Each task is displayed with:
-- Task ID
-- Task title
+**Output Format:** Each nota is displayed with:
+- Nota ID
+- Title
 - Status
+- Type (task/project/context)
 - Start date (if set)
 - Project reference (if set)
 - Context reference (if set)
 - Notes (if set and not excluded)
-- Creation date
-- Last update date
 
-#### update_task
-Updates an existing task. All parameters are optional except the task_id. Only provided fields will be updated.
+### update
+Updates nota details (GTD Clarify/Organize step). All parameters are optional except the ID.
 
 **Parameters:**
-- `task_id` (required): Task ID to update
-- `title` (optional): New task title
-- `project` (optional): New project ID (use empty string to remove)
-- `context` (optional): New context name (use empty string to remove)
-- `notes` (optional): New notes (use empty string to remove)
-- `start_date` (optional): New start date in YYYY-MM-DD format (use empty string to remove)
+- `id` (required): Nota ID to update
+- `title` (optional): New title
+- `status` (optional): New status - can transform nota type (task↔project↔context)
+- `project` (optional): New project ID (use empty string "" to remove)
+- `context` (optional): New context name (use empty string "" to remove)
+- `notes` (optional): New notes (use empty string "" to remove)
+- `start_date` (optional): New start date in YYYY-MM-DD format (use empty string "" to remove)
 
 **Automatic Updates:**
-- `updated_at` (date): Automatically updated to current local date when task is modified
+- `updated_at` (date): Automatically updated to current local date
 
-**Note:** 
-- Project and context references are validated to ensure referential integrity.
-- To change task status, use the specialized status movement methods instead of this method.
+**Referential Integrity:** Project and context references are validated to ensure they exist.
 
-### Status Movement Methods
+**Note:** Changing status can transform the nota type (e.g., task to project, task to context).
 
-All status movement methods support batch operations (moving multiple tasks at once) and automatically update the `updated_at` timestamp.
-
-#### trash_tasks
-Moves one or more tasks to trash.
+### change_status
+Moves nota through GTD workflow stages (GTD Do/Organize step).
 
 **Parameters:**
-- `task_ids` (required): Array of task IDs to move to trash
+- `id` (required): Nota ID to move
+- `new_status` (required): Target status (inbox, next_action, waiting_for, later, calendar, someday, done, trash, project, context)
+- `start_date` (optional): Start date in YYYY-MM-DD format (required when moving to calendar status if nota doesn't already have a start_date)
 
-**Example:**
-```json
-{
-  "task_ids": ["#1", "#3", "#5"]
-}
-```
-
-#### inbox_tasks
-Move one or more tasks to inbox.
-
-**Parameters:**
-- `task_ids` (required): Array of task IDs to move to inbox
-
-#### next_action_tasks
-Move one or more tasks to next action.
-
-**Parameters:**
-- `task_ids` (required): Array of task IDs to move to next action
-
-#### waiting_for_tasks
-Move one or more tasks to waiting for.
-
-**Parameters:**
-- `task_ids` (required): Array of task IDs to move to waiting for
-
-#### someday_tasks
-Move one or more tasks to someday/maybe.
-
-**Parameters:**
-- `task_ids` (required): Array of task IDs to move to someday
-
-#### later_tasks
-Move one or more tasks to later (deferred but not someday).
-
-**Parameters:**
-- `task_ids` (required): Array of task IDs to move to later
-
-#### done_tasks
-Move one or more tasks to done.
-
-**Parameters:**
-- `task_ids` (required): Array of task IDs to move to done
-
-#### calendar_tasks
-Move one or more tasks to calendar (GTD tickler file).
-
-**Parameters:**
-- `task_ids` (required): Array of task IDs to move
-- `start_date` (optional): Start date in YYYY-MM-DD format. If provided, all tasks will have their start_date set to this value. If not provided, each task must already have a `start_date`.
+**Automatic Updates:**
+- `updated_at` (date): Automatically updated to current local date
 
 **Validation:**
-- Each task must have a `start_date` to be moved to calendar status
-- If a task doesn't have a `start_date` and you don't provide one, that task will fail to move (but others may succeed)
-- If you provide a `start_date`, it will be applied to all tasks
+- Calendar status requires a start_date (either provided or already set)
+- Cannot trash notas that are still referenced by other items
 
-**Example (setting new start date for all tasks):**
-```json
-{
-  "task_ids": ["#1", "#2"],
-  "start_date": "2024-12-25"
-}
-```
-
-**Example (using existing start dates):**
-```json
-{
-  "task_ids": ["#1", "#2"]
-}
-```
+**Type Transformation:** Changing status can transform nota types (e.g., task→project by setting status="project").
 
 ### empty_trash
-Permanently deletes all trashed tasks.
+Permanently deletes all trashed notas (GTD Purge step).
 
 **Parameters:** None
 
-### Project Management
-
-#### add_project
-Creates a new project.
-
-**Parameters:**
-- `name` (required): Project name
-- `description` (optional): Project description
-- `context` (optional): Context name (must exist if specified)
-- `id` (optional): Custom project ID (auto-generated if not specified)
-
-**Referential Integrity:** 
-- If a context is specified, the server validates that it exists before creating the project.
-- If a custom ID is specified, the server validates that it doesn't already exist.
-
-**Auto-generated IDs:** If no custom ID is provided, the server generates sequential IDs in the format `project-1`, `project-2`, etc.
-
-#### list_projects
-Lists all projects with their status, description, and context information.
-
-**Parameters:** None
-
-**Output Format:** Each project is displayed with:
-- Project ID
-- Project name
-- Status (active, on_hold, completed)
-- Description (if set)
-- Context (if set)
-
-#### update_project
-Updates an existing project. All parameters are optional except the project_id. Only provided fields will be updated.
-
-**Parameters:**
-- `project_id` (required): Project ID to update
-- `id` (optional): New project ID
-- `name` (optional): New project name
-- `description` (optional): New description (empty string to remove)
-- `status` (optional): New status (active, on_hold, completed)
-- `context` (optional): New context name (empty string to remove)
-
-**Note:** 
-- Context references are validated to ensure referential integrity.
-- If a new project ID is specified, the server validates that it doesn't conflict with existing projects.
-- When a project ID is changed, all task references to the old project ID are automatically updated to the new ID.
-
-### Context Management
-
-#### add_context
-Creates a new context.
-
-**Parameters:**
-- `name` (required): Context name
-- `description` (optional): Context description
-
-#### list_contexts
-Lists all contexts alphabetically.
-
-**Parameters:** None
-
-#### update_context
-Updates an existing context's description.
-
-**Parameters:**
-- `name` (required): Context name
-- `description` (optional): New description (empty string to remove)
-
-#### delete_context
-Deletes a context from the system.
-
-**Parameters:**
-- `name` (required): Context name to delete
+**Safety:** Automatically validates that no other notas reference the items being deleted.
 
 ## MCP Prompts
 
@@ -315,9 +190,9 @@ Guide for identifying and managing next actions:
 - Choosing what to do (consider context, time, energy, priority)
 - Post-completion steps
 
-### add_task_guide
-Best practices for creating well-formed tasks:
-- Good vs. poor task title examples
+### inbox_guide
+Best practices for capturing notas (tasks, projects, contexts):
+- Good vs. poor nota title examples
 - When to use optional fields (project, context, notes, start_date)
 - Recommended workflow (quick capture → process → add details)
 
@@ -329,31 +204,28 @@ Data is stored in TOML format in `gtd.toml`:
 format_version = 2
 
 [[inbox]]
-id = "#1"
+id = "review-proposal"
 title = "Review project proposal"
-project = "project-1"
+project = "q1-marketing"
 context = "Office"
 start_date = "2024-12-25"
 created_at = "2024-01-01"
 updated_at = "2024-01-01"
 
 [[next_action]]
-id = "#2"
+id = "complete-docs"
 title = "Complete documentation"
 notes = "Review all sections and update examples"
 created_at = "2024-01-01"
 updated_at = "2024-01-01"
 
-[projects.project-1]
+[projects.q1-marketing]
 name = "Q1 Marketing Campaign"
 description = "Launch new product marketing campaign"
 status = "active"
 
 [contexts.Office]
 description = "Work environment with desk and computer"
-
-task_counter = 2
-project_counter = 1
 ```
 
 ### Line Ending Handling
@@ -413,27 +285,31 @@ Or with the release build:
 - `git2` (0.20): Git operations for automatic version control
 - `clap` (4.x): Command-line argument parsing
 
-## LLM-Friendly ID Generation
+## Client-Provided ID System
 
-The server uses sequential counter-based IDs instead of UUIDs for better LLM interaction:
+The server uses a flexible client-provided ID system for optimal LLM interaction and user control:
 
-- **Task IDs**: `#1`, `#2`, `#3`, ... (2-3 characters, GitHub issue tracker style)
-- **Project IDs**: `project-1`, `project-2`, `project-3`, ... (9-11 characters, descriptive format)
+### ID Format
+- **Arbitrary strings**: Any string identifier chosen by the MCP client (e.g., "call-john", "website-redesign", "meeting-prep")
+- **No restrictions**: IDs can be descriptive, numeric, or follow any naming convention the user prefers
+- **Unique across all nota types**: Each ID must be unique across tasks, projects, and contexts
 
 ### Benefits:
-- ✅ **94%+ reduction** in character count for task IDs compared to UUIDs (36 chars → 2-3 chars)
-- ✅ **GitHub issue tracker style** for tasks (`#1`, `#2`, `#42`) - instantly familiar
-- ✅ **Descriptive project IDs** (`project-1`) - more readable as projects are fewer
-- ✅ **Human-readable** and easy to remember (`#42` vs `d8f5f3c1-7e4d-4b2a-9f8e-1c2d3e4f5a6b`)
-- ✅ **LLM-friendly** - easier for language models to reference and recall
-- ✅ **Lower token cost** when transmitting task lists to LLMs
-- ✅ **Persistent counters** stored in `gtd.toml` ensure uniqueness across sessions
+- ✅ **Maximum flexibility** - Users choose meaningful IDs that make sense for their workflow
+- ✅ **Descriptive identifiers** - IDs like "call-sarah" are more memorable than auto-generated numbers
+- ✅ **LLM-friendly** - Language models can more easily reference and understand semantic IDs
+- ✅ **User control** - Complete freedom in ID naming conventions
+- ✅ **Portable** - IDs travel with the data and have semantic meaning outside the system
 
-Example output:
+### Example IDs:
 ```
-Old: - [d8f5f3c1-7e4d-4b2a-9f8e-1c2d3e4f5a6b] Complete documentation
-New: - [#1] Complete documentation
+Tasks: "call-john", "review-q1-report", "buy-groceries", "meeting-prep"
+Projects: "website-redesign", "q1-budget", "home-renovation"
+Contexts: "@office", "@home", "@computer", "@phone"
 ```
+
+### Migration from Previous Versions:
+Previous versions (pre-0.7.x) used auto-generated counter-based IDs (`#1`, `#2`, `project-1`, `project-2`). The unified nota interface (0.7.x+) switched to client-provided arbitrary string IDs for improved flexibility and semantic clarity.
 
 ## Future Enhancements
 
@@ -459,7 +335,7 @@ The `gtd.toml` file features automatic git synchronization using the git2 crate:
 
 When `gtd.toml` is in a git-managed directory and `--sync-git` flag is enabled, the server automatically:
 1. **Pulls** latest changes from remote before loading data
-2. **Commits** changes with descriptive messages based on the operation (e.g., "Add task to inbox: Task title", "Mark task #1 as done", "Add project: Project name")
+2. **Commits** changes with descriptive messages based on the operation (e.g., "Add nota review-proposal", "Update nota complete-docs")
 3. **Pushes** to remote repository after successful save
 
 This provides:

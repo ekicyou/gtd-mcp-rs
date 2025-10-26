@@ -92,109 +92,43 @@ Once configured, you can ask your LLM assistant to help you manage tasks using t
 
 ## MCP Tools
 
-### Core Unified Tools (Recommended)
+The system provides 5 unified tools that handle all GTD operations:
 
-The system provides 5 core tools that handle all GTD operations in a unified way:
+### Capture and Review
 
-**add** - Capture any nota (task/project/context)
-- Required: `id`, `title`, `status`
+**inbox** - Capture anything that needs attention (GTD Capture step)
+- Required: `id` (any string, e.g., "call-john", "website-redesign"), `title`, `status`
 - Optional: `project`, `context`, `notes`, `start_date` (YYYY-MM-DD)
 - Status determines type: inbox/next_action/etc→task, project→project, context→context
+- Use this as the first step in GTD workflow - quickly capture everything to process later
 
-**list** - Review all notas with optional status filter
-- Optional: `status` - Filter by specific status
+**list** - Review all notas with optional filters (GTD Review step)
+- Optional: `status` - Filter by specific status (inbox, next_action, waiting_for, later, calendar, someday, done, trash, project, context)
+- Optional: `date` (YYYY-MM-DD) - For calendar status, shows tasks with start_date <= this date
+- Optional: `exclude_notes` (boolean) - Reduce token usage by excluding notes
+- Review regularly (daily/weekly) to keep your system current
 
-**update** - Clarify and organize nota details
+### Organize and Execute
+
+**update** - Clarify and organize nota details (GTD Clarify/Organize step)
 - Required: `id`
 - Optional: `title`, `status`, `project`, `context`, `notes`, `start_date`
-- Can transform types by changing status
+- Can transform types by changing status (task→project, task→context, etc.)
+- Use empty string "" to clear optional fields
+- After capturing to inbox, use this to add context and clarify next steps
 
-**change_status** - Move notas through GTD workflow stages
+**change_status** - Move notas through GTD workflow stages (GTD Do/Organize step)
 - Required: `id`, `new_status`
+- Optional: `start_date` (YYYY-MM-DD, required when moving to calendar status)
 - Supports all workflow transitions including type transformations
+- Common workflow: inbox → next_action → done, or inbox → waiting_for, or inbox → trash
 
-**empty_trash** - Permanently delete all trashed notas
-- No parameters
-- Irreversible operation with safety checks for referenced notas
+### Maintenance
 
-### Legacy Tools (Backward Compatibility)
-
-The following task-specific tools are maintained for compatibility but the unified tools above are recommended:
-
-### Task Management
-
-**add_task** - Add a new task to inbox (deprecated: use `add` with status="inbox")
-- Required: `title`
-- Optional: `project`, `context`, `notes`, `start_date` (YYYY-MM-DD)
-
-**list_tasks** - List tasks with optional filters
-- Optional: `status` (inbox, next_action, waiting_for, someday, later, done, trash, calendar)
-- Optional: `date` (YYYY-MM-DD) - Filter tasks by start date
-- Optional: `exclude_notes` (boolean) - Reduce token usage by excluding notes
-
-**update_task** - Update an existing task
-- Required: `task_id`
-- Optional: `title`, `project`, `context`, `notes`, `start_date`
-- Note: Use empty string to remove optional fields
-
-### Status Management
-
-**change_task_status** - Change status of one or more tasks in GTD workflow
-- Required: `task_ids` (array like ["#1", "#2", "#3"]), `status` (target status)
-- Optional: `start_date` (YYYY-MM-DD format, required for calendar status)
-- Supports: inbox, next_action, waiting_for, someday, later, calendar, done, trash
-- Batch operation: Move multiple tasks at once
-
-Example (move to next_action):
-```json
-{
-  "task_ids": ["#1", "#2", "#3"],
-  "status": "next_action"
-}
-```
-
-Example (move to calendar with date):
-```json
-{
-  "task_ids": ["#5"],
-  "status": "calendar",
-  "start_date": "2024-12-25"
-}
-```
-
-**empty_trash** - Permanently delete all trashed tasks (irreversible)
-
-### Project Management
-
-**add_project** - Create a new project
-- Required: `name`, `id`
-- Optional: `description`, `context`
-
-**list_projects** - List all projects
-
-**update_project** - Update an existing project
-- Required: `project_id`
-- Optional: `name`, `description`, `status` (active, on_hold, completed), `context`
-
-**delete_project** - Delete a project
-- Required: `project_id`
-- Note: Cannot delete project if tasks reference it
-
-### Context Management
-
-**add_context** - Create a new context (e.g., @office, @home)
-- Required: `name`
-- Optional: `description`
-
-**list_contexts** - List all contexts
-
-**update_context** - Update a context
-- Required: `name`
-- Optional: `description`
-
-**delete_context** - Delete a context
-- Required: `name`
-- Note: Cannot delete context if tasks or projects reference it
+**empty_trash** - Permanently delete all trashed notas (GTD Purge step)
+- No parameters required
+- Irreversible operation - run weekly as part of GTD review
+- Automatically checks for references to prevent broken links
 
 ## MCP Prompts
 
