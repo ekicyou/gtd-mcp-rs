@@ -521,15 +521,10 @@ impl GtdData {
         format!("#{}", self.task_counter)
     }
 
-    /// Count total number of notas (all types: tasks, projects, contexts)
-    #[allow(dead_code)]
-    pub fn nota_count(&self) -> usize {
-        self.notas.len()
-    }
-
-    /// Count total number of task notas across all task statuses
-    #[allow(dead_code)]
-    pub fn task_count(&self) -> usize {
+    // Test helper method for counting tasks
+    /// Count total number of task notas across all task statuses (test helper)
+    #[cfg(test)]
+    pub(crate) fn task_count(&self) -> usize {
         self.notas.iter().filter(|n| n.is_task()).count()
     }
 
@@ -556,15 +551,10 @@ impl GtdData {
         self.notas.iter_mut().find(|n| n.id == id)
     }
 
-    /// Find a task by its ID (for compatibility)
-    ///
-    /// # Arguments
-    /// * `id` - The task ID to search for (e.g., "#1")
-    ///
-    /// # Returns
-    /// An optional Nota reference if found and it's a task
-    #[allow(dead_code)]
-    pub fn find_task_by_id(&self, id: &str) -> Option<&Nota> {
+    // Test helper method for finding tasks by ID
+    /// Find a task by its ID (test helper)
+    #[cfg(test)]
+    pub(crate) fn find_task_by_id(&self, id: &str) -> Option<&Nota> {
         self.notas.iter().find(|n| n.id == id && n.is_task())
     }
 
@@ -601,8 +591,7 @@ impl GtdData {
     ///
     /// # Returns
     /// The removed nota if found
-    #[allow(dead_code)]
-    pub fn remove_nota(&mut self, id: &str) -> Option<Nota> {
+    fn remove_nota(&mut self, id: &str) -> Option<Nota> {
         // Find and remove nota
         if let Some(pos) = self.notas.iter().position(|n| n.id == id) {
             let nota = self.notas.remove(pos);
@@ -645,20 +634,6 @@ impl GtdData {
     pub fn find_project_by_id(&self, id: &str) -> Option<&Nota> {
         self.notas
             .iter()
-            .find(|n| n.id == id && n.status == NotaStatus::project)
-    }
-
-    /// Find a project by its ID and return a mutable reference (for compatibility)
-    ///
-    /// # Arguments
-    /// * `id` - The project ID to search for (e.g., "project-1")
-    ///
-    /// # Returns
-    /// An optional mutable reference to the nota if found and it's a project
-    #[allow(dead_code)]
-    pub fn find_project_by_id_mut(&mut self, id: &str) -> Option<&mut Nota> {
-        self.notas
-            .iter_mut()
             .find(|n| n.id == id && n.status == NotaStatus::project)
     }
 
@@ -769,7 +744,6 @@ impl GtdData {
     ///
     /// # Returns
     /// The removed Nota if found
-    #[allow(dead_code)]
     pub fn remove(&mut self, id: &str) -> Option<Nota> {
         self.remove_nota(id)
     }
@@ -781,7 +755,6 @@ impl GtdData {
     ///
     /// # Returns
     /// Vector of Nota objects matching the filter
-    #[allow(dead_code)]
     pub fn list_all(&self, status_filter: Option<NotaStatus>) -> Vec<Nota> {
         if let Some(status) = status_filter {
             self.notas
@@ -803,89 +776,90 @@ impl GtdData {
     ///
     /// # Returns
     /// True if the ID is referenced by other notas
-    #[allow(dead_code)]
     pub fn is_referenced(&self, id: &str) -> bool {
         self.notas
             .iter()
             .any(|nota| nota.project.as_deref() == Some(id) || nota.context.as_deref() == Some(id))
     }
 
-    // Compatibility properties for tests
-    /// Get inbox notas (for compatibility)
-    #[allow(dead_code)]
-    pub fn inbox(&self) -> Vec<&Nota> {
+    // Test helper methods - these provide convenient access to notas by status
+    // Used by unit tests to verify status-based organization
+
+    /// Get inbox notas (test helper)
+    #[cfg(test)]
+    pub(crate) fn inbox(&self) -> Vec<&Nota> {
         self.notas
             .iter()
             .filter(|n| n.status == NotaStatus::inbox)
             .collect()
     }
 
-    /// Get next_action notas (for compatibility)
-    #[allow(dead_code)]
-    pub fn next_action(&self) -> Vec<&Nota> {
+    /// Get next_action notas (test helper)
+    #[cfg(test)]
+    pub(crate) fn next_action(&self) -> Vec<&Nota> {
         self.notas
             .iter()
             .filter(|n| n.status == NotaStatus::next_action)
             .collect()
     }
 
-    /// Get waiting_for notas (for compatibility)
-    #[allow(dead_code)]
-    pub fn waiting_for(&self) -> Vec<&Nota> {
+    /// Get waiting_for notas (test helper)
+    #[cfg(test)]
+    pub(crate) fn waiting_for(&self) -> Vec<&Nota> {
         self.notas
             .iter()
             .filter(|n| n.status == NotaStatus::waiting_for)
             .collect()
     }
 
-    /// Get later notas (for compatibility)
-    #[allow(dead_code)]
-    pub fn later(&self) -> Vec<&Nota> {
+    /// Get later notas (test helper)
+    #[cfg(test)]
+    pub(crate) fn later(&self) -> Vec<&Nota> {
         self.notas
             .iter()
             .filter(|n| n.status == NotaStatus::later)
             .collect()
     }
 
-    /// Get calendar notas (for compatibility)
-    #[allow(dead_code)]
-    pub fn calendar(&self) -> Vec<&Nota> {
+    /// Get calendar notas (test helper)
+    #[cfg(test)]
+    pub(crate) fn calendar(&self) -> Vec<&Nota> {
         self.notas
             .iter()
             .filter(|n| n.status == NotaStatus::calendar)
             .collect()
     }
 
-    /// Get someday notas (for compatibility)
-    #[allow(dead_code)]
-    pub fn someday(&self) -> Vec<&Nota> {
+    /// Get someday notas (test helper)
+    #[cfg(test)]
+    pub(crate) fn someday(&self) -> Vec<&Nota> {
         self.notas
             .iter()
             .filter(|n| n.status == NotaStatus::someday)
             .collect()
     }
 
-    /// Get done notas (for compatibility)
-    #[allow(dead_code)]
-    pub fn done(&self) -> Vec<&Nota> {
+    /// Get done notas (test helper)
+    #[cfg(test)]
+    pub(crate) fn done(&self) -> Vec<&Nota> {
         self.notas
             .iter()
             .filter(|n| n.status == NotaStatus::done)
             .collect()
     }
 
-    /// Get trash notas (for compatibility)
-    #[allow(dead_code)]
-    pub fn trash(&self) -> Vec<&Nota> {
+    /// Get trash notas (test helper)
+    #[cfg(test)]
+    pub(crate) fn trash(&self) -> Vec<&Nota> {
         self.notas
             .iter()
             .filter(|n| n.status == NotaStatus::trash)
             .collect()
     }
 
-    /// Get projects map (for compatibility)
-    #[allow(dead_code)]
-    pub fn projects(&self) -> HashMap<String, &Nota> {
+    /// Get projects map (test helper)
+    #[cfg(test)]
+    pub(crate) fn projects(&self) -> HashMap<String, &Nota> {
         self.notas
             .iter()
             .filter(|n| n.status == NotaStatus::project)
@@ -893,9 +867,9 @@ impl GtdData {
             .collect()
     }
 
-    /// Get contexts map (for compatibility)
-    #[allow(dead_code)]
-    pub fn contexts(&self) -> HashMap<String, &Nota> {
+    /// Get contexts map (test helper)
+    #[cfg(test)]
+    pub(crate) fn contexts(&self) -> HashMap<String, &Nota> {
         self.notas
             .iter()
             .filter(|n| n.status == NotaStatus::context)
@@ -903,27 +877,28 @@ impl GtdData {
             .collect()
     }
 
-    /// Add a task (for compatibility with tests)
-    #[allow(dead_code)]
-    pub fn add_task(&mut self, task: Task) {
+    // Test helpers for backward compatibility with legacy Task/Project/Context types
+    /// Add a task (test helper)
+    #[cfg(test)]
+    pub(crate) fn add_task(&mut self, task: Task) {
         self.add(Nota::from_task(task));
     }
 
-    /// Remove a task (for compatibility with tests)
-    #[allow(dead_code)]
-    pub fn remove_task(&mut self, id: &str) -> Option<Task> {
+    /// Remove a task (test helper)
+    #[cfg(test)]
+    pub(crate) fn remove_task(&mut self, id: &str) -> Option<Task> {
         self.remove_nota(id).and_then(|n| n.to_task())
     }
 
-    /// Add a project (for compatibility with tests)
-    #[allow(dead_code)]
-    pub fn add_project(&mut self, project: Project) {
+    /// Add a project (test helper)
+    #[cfg(test)]
+    pub(crate) fn add_project(&mut self, project: Project) {
         self.add(Nota::from_project(project));
     }
 
-    /// Add a context (for compatibility with tests)
-    #[allow(dead_code)]
-    pub fn add_context(&mut self, context: Context) {
+    /// Add a context (test helper)
+    #[cfg(test)]
+    pub(crate) fn add_context(&mut self, context: Context) {
         self.add(Nota::from_context(context));
     }
 
@@ -972,15 +947,8 @@ mod tests {
     #[test]
     fn test_gtd_data_new() {
         let data = GtdData::new();
-        assert!(data.inbox().is_empty());
-        assert!(data.next_action().is_empty());
-        assert!(data.waiting_for().is_empty());
-        assert!(data.someday().is_empty());
-        assert!(data.later().is_empty());
-        assert!(data.done().is_empty());
-        assert!(data.trash().is_empty());
-        assert!(data.projects().is_empty());
-        assert!(data.contexts().is_empty());
+        assert!(data.notas.is_empty());
+        assert_eq!(data.notas.len(), 0);
     }
 
     // GtdDataへのNota挿入テスト

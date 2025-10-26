@@ -90,16 +90,10 @@ impl Storage {
         Ok(data)
     }
 
-    /// Save GTD data to the storage file with a default commit message
-    ///
-    /// # Arguments
-    /// * `data` - The GtdData to save
-    ///
-    /// # Returns
-    /// Result indicating success or an error
-    #[allow(dead_code)]
-    pub fn save(&self, data: &GtdData) -> Result<()> {
-        self.save_with_message(data, "Update GTD data")
+    /// Save GTD data with default message (test helper)
+    #[cfg(test)]
+    pub(crate) fn save(&self, data: &GtdData) -> Result<()> {
+        self.save_with_message(data, "Test save")
     }
 
     /// Save GTD data to the storage file with a custom commit message

@@ -79,41 +79,11 @@ impl GtdServerHandler {
         Ok(Self { data, storage })
     }
 
-    /// Save GTD data with a default message
-    #[allow(dead_code)]
-    fn save_data(&self) -> Result<()> {
-        let data = self.data.lock().unwrap();
-        self.storage.save(&data)?;
-        Ok(())
-    }
-
     /// Save GTD data with a custom commit message
     fn save_data_with_message(&self, message: &str) -> Result<()> {
         let data = self.data.lock().unwrap();
         self.storage.save_with_message(&data, message)?;
         Ok(())
-    }
-
-    /// Normalize task ID by returning it as-is (no transformation)
-    ///
-    /// This helper function previously added '#' prefix for backwards compatibility,
-    /// but now task IDs are arbitrary strings chosen by the MCP client.
-    ///
-    /// # Arguments
-    /// * `task_id` - The task ID (e.g., "task-1", "meeting-prep")
-    ///
-    /// # Returns
-    /// The task ID unchanged
-    ///
-    /// # Examples
-    /// ```
-    /// # use gtd_mcp::GtdServerHandler;
-    /// // normalize_task_id("task-1") -> "task-1"
-    /// // normalize_task_id("meeting-prep") -> "meeting-prep"
-    /// ```
-    #[allow(dead_code)]
-    fn normalize_task_id(task_id: &str) -> String {
-        task_id.trim().to_string()
     }
 
     /// Extract ID from response message
@@ -676,7 +646,7 @@ mod tests {
         drop(data);
 
         // 保存
-        let save_result = handler.save_data();
+        let save_result = handler.save_data_with_message("Test save");
         assert!(save_result.is_ok());
 
         // ファイルが作成されていることを確認
@@ -688,31 +658,6 @@ mod tests {
         assert_eq!(loaded_data.task_count(), 1);
         let loaded_task = loaded_data.find_task_by_id("test-task").unwrap();
         assert_eq!(loaded_task.title, "Test Task");
-    }
-
-    #[test]
-    fn test_normalize_task_id() {
-        // Test with arbitrary task IDs - normalize should just trim
-        assert_eq!(GtdServerHandler::normalize_task_id("task-1"), "task-1");
-        assert_eq!(
-            GtdServerHandler::normalize_task_id("meeting-prep"),
-            "meeting-prep"
-        );
-        assert_eq!(
-            GtdServerHandler::normalize_task_id("call-sarah"),
-            "call-sarah"
-        );
-
-        // Test with whitespace - should be trimmed
-        assert_eq!(GtdServerHandler::normalize_task_id(" task-1 "), "task-1");
-        assert_eq!(
-            GtdServerHandler::normalize_task_id("  meeting-prep  "),
-            "meeting-prep"
-        );
-
-        // Old-style IDs with # are also valid
-        assert_eq!(GtdServerHandler::normalize_task_id("#1"), "#1");
-        assert_eq!(GtdServerHandler::normalize_task_id(" #42 "), "#42");
     }
 
     #[tokio::test]
@@ -1037,7 +982,7 @@ mod tests {
                 updated_at: None,
             }));
             drop(data);
-            let _ = handler.save_data();
+            let _ = handler.save_data_with_message("Add context");
         }
 
         // Add a task
@@ -1619,7 +1564,7 @@ mod tests {
                 updated_at: None,
             }));
             drop(data);
-            let _ = handler.save_data();
+            let _ = handler.save_data_with_message("Add context");
         }
 
         // Add a task
