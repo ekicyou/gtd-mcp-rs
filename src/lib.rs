@@ -180,8 +180,12 @@ impl McpServer for GtdServerHandler {
     async fn empty_trash(&self) -> McpResult<String> {
         let mut data = self.data.lock().unwrap();
 
-        let count = data.trash.len();
-        data.trash.clear();
+        // Count and remove all trash notas
+        let count = data.notas.iter().filter(|n| n.status == NotaStatus::trash).count();
+        data.notas.retain(|n| n.status != NotaStatus::trash);
+        
+        // Update nota_map
+        data.nota_map.retain(|_, status| *status != NotaStatus::trash);
 
         drop(data);
 
@@ -217,10 +221,7 @@ impl McpServer for GtdServerHandler {
         let mut data = self.data.lock().unwrap();
 
         // Check for duplicate ID across all notas
-        if data.task_map.contains_key(&id)
-            || data.projects.contains_key(&id)
-            || data.contexts.contains_key(&id)
-        {
+        if data.nota_map.contains_key(&id) {
             drop(data);
             bail!("Nota ID '{}' already exists. Please use a unique ID.", id);
         }

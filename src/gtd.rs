@@ -322,12 +322,8 @@ impl Nota {
 
 /// The main GTD data structure
 ///
-/// This struct holds all tasks organized by status, along with projects and contexts.
-/// Tasks are stored in separate vectors based on their status to facilitate
-/// efficient serialization to TOML with a clear, human-readable structure.
-///
-/// Internally, a HashMap is maintained to prevent duplicate task IDs and enable
-/// fast lookups by ID.
+/// This struct holds all GTD items (tasks, projects, contexts) as unified Nota objects.
+/// The Nota structure is the fundamental data type that can represent any GTD item.
 ///
 /// The data is designed to be serialized to/from TOML format for persistent storage.
 ///
@@ -335,35 +331,18 @@ impl Nota {
 ///
 /// - Version 1 (legacy): Projects stored as `Vec<Project>` (TOML: `[[projects]]`)
 /// - Version 2 (legacy): Projects stored as `HashMap<String, Project>` (TOML: `[projects.id]`), separate arrays for each status
-/// - Version 3 (current): Projects and contexts stored as Vec (TOML: `[[project]]`, `[[context]]`)
+/// - Version 3 (legacy): Projects and contexts stored as Vec (TOML: `[[project]]`, `[[context]]`)
+/// - Version 4 (current): All items stored as unified Nota array (TOML: `[[notas]]`)
 ///
 /// The deserializer automatically migrates from older versions to the current internal format.
 #[derive(Debug)]
 pub struct GtdData {
-    /// Format version for the TOML file (current: 3)
+    /// Format version for the TOML file (current: 4)
     pub format_version: u32,
-    /// Tasks in the inbox (not yet processed)
-    pub inbox: Vec<Task>,
-    /// Tasks marked as next actions (ready to do)
-    pub next_action: Vec<Task>,
-    /// Tasks waiting for external input
-    pub waiting_for: Vec<Task>,
-    /// Tasks to be done later
-    pub later: Vec<Task>,
-    /// Tasks scheduled for specific dates
-    pub calendar: Vec<Task>,
-    /// Tasks that might be done someday
-    pub someday: Vec<Task>,
-    /// Completed tasks
-    pub done: Vec<Task>,
-    /// Deleted tasks
-    pub trash: Vec<Task>,
-    /// All projects (keyed by ID)
-    pub projects: HashMap<String, Project>,
-    /// All contexts (keyed by name)
-    pub contexts: HashMap<String, Context>,
-    /// Internal map of all tasks by ID for duplicate checking (not serialized)
-    pub(crate) task_map: HashMap<String, NotaStatus>,
+    /// All GTD items stored as Nota objects
+    pub(crate) notas: Vec<Nota>,
+    /// Internal map of all nota IDs for duplicate checking (not serialized)
+    pub(crate) nota_map: HashMap<String, NotaStatus>,
     /// Counter for generating unique task IDs
     pub task_counter: u32,
     /// Counter for generating unique project IDs
@@ -373,18 +352,9 @@ pub struct GtdData {
 impl Default for GtdData {
     fn default() -> Self {
         Self {
-            format_version: 3,
-            inbox: Vec::new(),
-            next_action: Vec::new(),
-            waiting_for: Vec::new(),
-            later: Vec::new(),
-            calendar: Vec::new(),
-            someday: Vec::new(),
-            done: Vec::new(),
-            trash: Vec::new(),
-            projects: HashMap::new(),
-            contexts: HashMap::new(),
-            task_map: HashMap::new(),
+            format_version: 4,
+            notas: Vec::new(),
+            nota_map: HashMap::new(),
             task_counter: 0,
             project_counter: 0,
         }
@@ -394,7 +364,7 @@ impl Default for GtdData {
 /// Default format version for new files
 #[allow(dead_code)] // Used by serde
 fn default_format_version() -> u32 {
-    3
+    4
 }
 
 impl<'de> Deserialize<'de> for GtdData {
@@ -403,138 +373,127 @@ impl<'de> Deserialize<'de> for GtdData {
         D: Deserializer<'de>,
     {
         use crate::migration::{
-            GtdDataMigrationHelper, migrate_notas_v3_to_internal, migrate_projects_to_latest,
+            GtdDataMigrationHelper, migrate_projects_to_latest,
             normalize_context_line_endings, normalize_project_line_endings,
             normalize_task_line_endings, populate_context_names, populate_project_ids,
         };
 
         let helper = GtdDataMigrationHelper::deserialize(deserializer)?;
 
-        // Initialize the collections
-        let mut inbox = helper.inbox;
-        let mut next_action = helper.next_action;
-        let mut waiting_for = helper.waiting_for;
-        let mut later = helper.later;
-        let mut calendar = helper.calendar;
-        let mut someday = helper.someday;
-        let mut done = helper.done;
-        let mut trash = helper.trash;
-        let mut projects = migrate_projects_to_latest(helper.projects);
-        let mut contexts = helper.contexts;
+        // Start with notas from Version 4 format if available
+        let mut notas = helper.notas;
 
-        // If this is Version 3 format with Vec arrays for projects/contexts, convert to HashMap
-        if !helper.project.is_empty() {
-            for project in helper.project {
-                projects.insert(project.id.clone(), project);
+        // If notas is empty, we need to migrate from older formats
+        if notas.is_empty() {
+            // Initialize collections for migration
+            let mut inbox = helper.inbox;
+            let mut next_action = helper.next_action;
+            let mut waiting_for = helper.waiting_for;
+            let mut later = helper.later;
+            let mut calendar = helper.calendar;
+            let mut someday = helper.someday;
+            let mut done = helper.done;
+            let mut trash = helper.trash;
+            let mut projects = migrate_projects_to_latest(helper.projects);
+            let mut contexts = helper.contexts;
+
+            // If this is Version 3 format with Vec arrays for projects/contexts, convert to HashMap
+            if !helper.project.is_empty() {
+                for project in helper.project {
+                    projects.insert(project.id.clone(), project);
+                }
+            }
+            if !helper.context.is_empty() {
+                for context in helper.context {
+                    contexts.insert(context.name.clone(), context);
+                }
+            }
+
+            // Populate the name/id fields
+            populate_context_names(&mut contexts);
+            populate_project_ids(&mut projects);
+
+            // Normalize line endings in all string fields
+            normalize_task_line_endings(&mut inbox);
+            normalize_task_line_endings(&mut next_action);
+            normalize_task_line_endings(&mut waiting_for);
+            normalize_task_line_endings(&mut later);
+            normalize_task_line_endings(&mut calendar);
+            normalize_task_line_endings(&mut someday);
+            normalize_task_line_endings(&mut done);
+            normalize_task_line_endings(&mut trash);
+            normalize_project_line_endings(&mut projects);
+            normalize_context_line_endings(&mut contexts);
+
+            // Set the status field for each task based on which collection it's in
+            for task in &mut inbox {
+                task.status = NotaStatus::inbox;
+            }
+            for task in &mut next_action {
+                task.status = NotaStatus::next_action;
+            }
+            for task in &mut waiting_for {
+                task.status = NotaStatus::waiting_for;
+            }
+            for task in &mut later {
+                task.status = NotaStatus::later;
+            }
+            for task in &mut calendar {
+                task.status = NotaStatus::calendar;
+            }
+            for task in &mut someday {
+                task.status = NotaStatus::someday;
+            }
+            for task in &mut done {
+                task.status = NotaStatus::done;
+            }
+            for task in &mut trash {
+                task.status = NotaStatus::trash;
+            }
+
+            // Convert all old structures to Nota
+            for task in inbox {
+                notas.push(Nota::from_task(task));
+            }
+            for task in next_action {
+                notas.push(Nota::from_task(task));
+            }
+            for task in waiting_for {
+                notas.push(Nota::from_task(task));
+            }
+            for task in later {
+                notas.push(Nota::from_task(task));
+            }
+            for task in calendar {
+                notas.push(Nota::from_task(task));
+            }
+            for task in someday {
+                notas.push(Nota::from_task(task));
+            }
+            for task in done {
+                notas.push(Nota::from_task(task));
+            }
+            for task in trash {
+                notas.push(Nota::from_task(task));
+            }
+            for project in projects.into_values() {
+                notas.push(Nota::from_project(project));
+            }
+            for context in contexts.into_values() {
+                notas.push(Nota::from_context(context));
             }
         }
-        if !helper.context.is_empty() {
-            for context in helper.context {
-                contexts.insert(context.name.clone(), context);
-            }
-        }
 
-        // If this is Version 3 format (unified notas), migrate to internal format
-        if !helper.notas.is_empty() {
-            migrate_notas_v3_to_internal(
-                helper.notas,
-                &mut inbox,
-                &mut next_action,
-                &mut waiting_for,
-                &mut later,
-                &mut calendar,
-                &mut someday,
-                &mut done,
-                &mut trash,
-                &mut projects,
-                &mut contexts,
-            );
-        }
-
-        // Populate the name field in each Context from the HashMap key
-        populate_context_names(&mut contexts);
-
-        // Populate the id field in each Project from the HashMap key
-        populate_project_ids(&mut projects);
-
-        // Normalize line endings in all string fields
-        normalize_task_line_endings(&mut inbox);
-        normalize_task_line_endings(&mut next_action);
-        normalize_task_line_endings(&mut waiting_for);
-        normalize_task_line_endings(&mut later);
-        normalize_task_line_endings(&mut calendar);
-        normalize_task_line_endings(&mut someday);
-        normalize_task_line_endings(&mut done);
-        normalize_task_line_endings(&mut trash);
-        normalize_project_line_endings(&mut projects);
-        normalize_context_line_endings(&mut contexts);
-
-        // Set the status field for each task based on which collection it's in
-        for task in &mut inbox {
-            task.status = NotaStatus::inbox;
-        }
-        for task in &mut next_action {
-            task.status = NotaStatus::next_action;
-        }
-        for task in &mut waiting_for {
-            task.status = NotaStatus::waiting_for;
-        }
-        for task in &mut later {
-            task.status = NotaStatus::later;
-        }
-        for task in &mut calendar {
-            task.status = NotaStatus::calendar;
-        }
-        for task in &mut someday {
-            task.status = NotaStatus::someday;
-        }
-        for task in &mut done {
-            task.status = NotaStatus::done;
-        }
-        for task in &mut trash {
-            task.status = NotaStatus::trash;
-        }
-
-        // Build task_map from all tasks for duplicate checking
-        let mut task_map = HashMap::new();
-        for task in &inbox {
-            task_map.insert(task.id.clone(), NotaStatus::inbox);
-        }
-        for task in &next_action {
-            task_map.insert(task.id.clone(), NotaStatus::next_action);
-        }
-        for task in &waiting_for {
-            task_map.insert(task.id.clone(), NotaStatus::waiting_for);
-        }
-        for task in &later {
-            task_map.insert(task.id.clone(), NotaStatus::later);
-        }
-        for task in &calendar {
-            task_map.insert(task.id.clone(), NotaStatus::calendar);
-        }
-        for task in &someday {
-            task_map.insert(task.id.clone(), NotaStatus::someday);
-        }
-        for task in &done {
-            task_map.insert(task.id.clone(), NotaStatus::done);
-        }
-        for task in &trash {
-            task_map.insert(task.id.clone(), NotaStatus::trash);
+        // Build nota_map from all notas for duplicate checking
+        let mut nota_map = HashMap::new();
+        for nota in &notas {
+            nota_map.insert(nota.id.clone(), nota.status.clone());
         }
 
         Ok(GtdData {
-            format_version: 3, // Use version 3 for in-memory representation
-            inbox,
-            next_action,
-            waiting_for,
-            later,
-            calendar,
-            someday,
-            done,
-            trash,
-            projects,
-            contexts,
-            task_map,
+            format_version: 4, // Use version 4 for in-memory representation
+            notas,
+            nota_map,
             task_counter: helper.task_counter,
             project_counter: helper.project_counter,
         })
@@ -548,46 +507,12 @@ impl Serialize for GtdData {
     {
         use serde::ser::SerializeStruct;
 
-        // Convert HashMap to Vec for projects and contexts (Version 3 format)
-        let projects_vec: Vec<&Project> = self.projects.values().collect();
-        let contexts_vec: Vec<&Context> = self.contexts.values().collect();
-
-        let mut state = serializer.serialize_struct("GtdData", 15)?;
+        let mut state = serializer.serialize_struct("GtdData", 4)?;
         state.serialize_field("format_version", &self.format_version)?;
 
-        if !self.inbox.is_empty() {
-            state.serialize_field("inbox", &self.inbox)?;
-        }
-        if !self.next_action.is_empty() {
-            state.serialize_field("next_action", &self.next_action)?;
-        }
-        if !self.waiting_for.is_empty() {
-            state.serialize_field("waiting_for", &self.waiting_for)?;
-        }
-        if !self.later.is_empty() {
-            state.serialize_field("later", &self.later)?;
-        }
-        if !self.calendar.is_empty() {
-            state.serialize_field("calendar", &self.calendar)?;
-        }
-        if !self.someday.is_empty() {
-            state.serialize_field("someday", &self.someday)?;
-        }
-        if !self.done.is_empty() {
-            state.serialize_field("done", &self.done)?;
-        }
-        if !self.trash.is_empty() {
-            state.serialize_field("trash", &self.trash)?;
-        }
-
-        // Serialize projects as Vec (Version 3 format: [[project]])
-        if !projects_vec.is_empty() {
-            state.serialize_field("project", &projects_vec)?;
-        }
-
-        // Serialize contexts as Vec (Version 3 format: [[context]])
-        if !contexts_vec.is_empty() {
-            state.serialize_field("context", &contexts_vec)?;
+        // Serialize all items as unified notas array (Version 4 format: [[notas]])
+        if !self.notas.is_empty() {
+            state.serialize_field("notas", &self.notas)?;
         }
 
         if self.task_counter != 0 {
@@ -613,331 +538,219 @@ impl GtdData {
         format!("#{}", self.task_counter)
     }
 
-    /// Get a reference to the task list for the given status
+    /// Count total number of notas (all types: tasks, projects, contexts)
     #[allow(dead_code)]
-    fn get_task_list(&self, status: &NotaStatus) -> &Vec<Task> {
-        match status {
-            NotaStatus::inbox => &self.inbox,
-            NotaStatus::next_action => &self.next_action,
-            NotaStatus::waiting_for => &self.waiting_for,
-            NotaStatus::someday => &self.someday,
-            NotaStatus::later => &self.later,
-            NotaStatus::done => &self.done,
-            NotaStatus::trash => &self.trash,
-            NotaStatus::calendar => &self.calendar,
-            NotaStatus::context | NotaStatus::project => {
-                panic!("context and project statuses are not task statuses")
-            }
-        }
+    pub fn nota_count(&self) -> usize {
+        self.notas.len()
     }
 
-    /// Get a mutable reference to the task list for the given status
-    fn get_task_list_mut(&mut self, status: &NotaStatus) -> &mut Vec<Task> {
-        match status {
-            NotaStatus::inbox => &mut self.inbox,
-            NotaStatus::next_action => &mut self.next_action,
-            NotaStatus::waiting_for => &mut self.waiting_for,
-            NotaStatus::someday => &mut self.someday,
-            NotaStatus::later => &mut self.later,
-            NotaStatus::done => &mut self.done,
-            NotaStatus::trash => &mut self.trash,
-            NotaStatus::calendar => &mut self.calendar,
-            NotaStatus::context | NotaStatus::project => {
-                panic!("context and project statuses are not task statuses")
-            }
-        }
-    }
-
-    /// Get all task lists as an array of references
-    fn all_task_lists(&self) -> [&Vec<Task>; 8] {
-        [
-            &self.inbox,
-            &self.next_action,
-            &self.waiting_for,
-            &self.someday,
-            &self.later,
-            &self.done,
-            &self.trash,
-            &self.calendar,
-        ]
-    }
-
-    /// Get all task lists as an array of mutable references
-    fn all_task_lists_mut(&mut self) -> [&mut Vec<Task>; 8] {
-        [
-            &mut self.inbox,
-            &mut self.next_action,
-            &mut self.waiting_for,
-            &mut self.someday,
-            &mut self.later,
-            &mut self.done,
-            &mut self.trash,
-            &mut self.calendar,
-        ]
-    }
-
-    /// Get all tasks as a single vector (for testing and compatibility)
-    #[allow(dead_code)]
-    pub fn all_tasks(&self) -> Vec<&Task> {
-        let mut tasks = Vec::new();
-        for list in self.all_task_lists() {
-            tasks.extend(list.iter());
-        }
-        tasks
-    }
-
-    /// Count total number of tasks across all statuses
+    /// Count total number of task notas across all task statuses
     #[allow(dead_code)]
     pub fn task_count(&self) -> usize {
-        self.inbox.len()
-            + self.next_action.len()
-            + self.waiting_for.len()
-            + self.someday.len()
-            + self.later.len()
-            + self.done.len()
-            + self.trash.len()
-            + self.calendar.len()
+        self.notas.iter().filter(|n| n.is_task()).count()
     }
 
-    /// Find a task by its ID across all status containers
+    /// Find a nota by its ID
+    ///
+    /// # Arguments
+    /// * `id` - The nota ID to search for
+    ///
+    /// # Returns
+    /// An optional reference to the nota if found
+    #[allow(dead_code)]
+    fn find_nota_by_id(&self, id: &str) -> Option<&Nota> {
+        self.notas.iter().find(|n| n.id == id)
+    }
+
+    /// Find a nota by its ID and return a mutable reference
+    ///
+    /// # Arguments
+    /// * `id` - The nota ID to search for
+    ///
+    /// # Returns
+    /// An optional mutable reference to the nota if found
+    fn find_nota_by_id_mut(&mut self, id: &str) -> Option<&mut Nota> {
+        self.notas.iter_mut().find(|n| n.id == id)
+    }
+
+    /// Find a task by its ID (for compatibility)
     ///
     /// # Arguments
     /// * `id` - The task ID to search for (e.g., "#1")
     ///
     /// # Returns
-    /// An optional reference to the task if found
+    /// An optional Nota reference if found and it's a task
     #[allow(dead_code)]
-    pub fn find_task_by_id(&self, id: &str) -> Option<&Task> {
-        for list in self.all_task_lists() {
-            if let Some(task) = list.iter().find(|t| t.id == id) {
-                return Some(task);
-            }
-        }
-        None
+    pub fn find_task_by_id(&self, id: &str) -> Option<&Nota> {
+        self.notas
+            .iter()
+            .find(|n| n.id == id && n.is_task())
     }
 
-    /// Find a task by its ID and return a mutable reference
+    /// Find a task by its ID and return a mutable reference (for compatibility)
     ///
     /// # Arguments
     /// * `id` - The task ID to search for (e.g., "#1")
     ///
     /// # Returns
-    /// An optional mutable reference to the task if found
-    pub fn find_task_by_id_mut(&mut self, id: &str) -> Option<&mut Task> {
-        for list in self.all_task_lists_mut() {
-            if let Some(task) = list.iter_mut().find(|t| t.id == id) {
-                return Some(task);
-            }
-        }
-        None
+    /// An optional mutable Nota reference if found and it's a task
+    pub fn find_task_by_id_mut(&mut self, id: &str) -> Option<&mut Nota> {
+        self.notas
+            .iter_mut()
+            .find(|n| n.id == id && n.is_task())
     }
 
-    /// Add a task to the appropriate status container
-    ///
-    /// The task will be added to the container matching its status field.
+    /// Add a nota to the collection
     ///
     /// # Arguments
-    /// * `task` - The task to add
-    pub fn add_task(&mut self, task: Task) {
-        let status = task.status.clone();
-        let id = task.id.clone();
+    /// * `nota` - The nota to add
+    pub fn add_nota(&mut self, nota: Nota) {
+        let id = nota.id.clone();
+        let status = nota.status.clone();
 
-        // Add to task_map for duplicate checking
-        self.task_map.insert(id, status.clone());
+        // Add to nota_map for duplicate checking
+        self.nota_map.insert(id, status);
 
-        // Add to appropriate status list
-        self.get_task_list_mut(&status).push(task);
+        // Add to notas vector
+        self.notas.push(nota);
     }
 
-    /// Remove a task from its container and return it
+    /// Remove a nota from the collection and return it
     ///
     /// # Arguments
-    /// * `id` - The task ID to remove (e.g., "task-1")
+    /// * `id` - The nota ID to remove
     ///
     /// # Returns
-    /// The removed task if found
+    /// The removed nota if found
     #[allow(dead_code)]
-    pub fn remove_task(&mut self, id: &str) -> Option<Task> {
-        // Find and remove task from its list
-        let mut removed_task = None;
-        for list in self.all_task_lists_mut() {
-            if let Some(pos) = list.iter().position(|t| t.id == id) {
-                removed_task = Some(list.remove(pos));
-                break;
-            }
+    pub fn remove_nota(&mut self, id: &str) -> Option<Nota> {
+        // Find and remove nota
+        if let Some(pos) = self.notas.iter().position(|n| n.id == id) {
+            let nota = self.notas.remove(pos);
+            self.nota_map.remove(id);
+            Some(nota)
+        } else {
+            None
         }
-
-        // If found, remove from task_map as well
-        if removed_task.is_some() {
-            self.task_map.remove(id);
-        }
-
-        removed_task
     }
 
-    /// Move a task to a different status container
+    /// Move a nota to a different status
     ///
-    /// This method removes the task from its current container, updates its status,
-    /// and adds it to the new container.
+    /// This method updates the status of the nota.
     ///
     /// # Arguments
-    /// * `id` - The task ID to move (e.g., "#1")
+    /// * `id` - The nota ID to move
     /// * `new_status` - The target status
     ///
     /// # Returns
-    /// `Some(())` if the task was found and moved, `None` otherwise
+    /// `Some(())` if the nota was found and moved, `None` otherwise
     pub fn move_status(&mut self, id: &str, new_status: NotaStatus) -> Option<()> {
-        // Remove task from its current container
-        let mut task = self.remove_task(id)?;
-
-        // Update the task's status
-        task.status = new_status;
-
-        // Add task to the new status container
-        self.add_task(task);
-
-        Some(())
+        if let Some(nota) = self.find_nota_by_id_mut(id) {
+            nota.status = new_status.clone();
+            nota.updated_at = local_date_today();
+            self.nota_map.insert(id.to_string(), new_status);
+            Some(())
+        } else {
+            None
+        }
     }
 
-    /// Find a project by its ID
+    /// Find a project by its ID (for compatibility)
     ///
     /// # Arguments
     /// * `id` - The project ID to search for (e.g., "project-1")
     ///
     /// # Returns
-    /// An optional reference to the project if found
+    /// An optional reference to the nota if found and it's a project
     #[allow(dead_code)]
-    pub fn find_project_by_id(&self, id: &str) -> Option<&Project> {
-        self.projects.get(id)
+    pub fn find_project_by_id(&self, id: &str) -> Option<&Nota> {
+        self.notas
+            .iter()
+            .find(|n| n.id == id && n.status == NotaStatus::project)
     }
 
-    /// Find a project by its ID and return a mutable reference
+    /// Find a project by its ID and return a mutable reference (for compatibility)
     ///
     /// # Arguments
     /// * `id` - The project ID to search for (e.g., "project-1")
     ///
     /// # Returns
-    /// An optional mutable reference to the project if found
+    /// An optional mutable reference to the nota if found and it's a project
     #[allow(dead_code)]
-    pub fn find_project_by_id_mut(&mut self, id: &str) -> Option<&mut Project> {
-        self.projects.get_mut(id)
+    pub fn find_project_by_id_mut(&mut self, id: &str) -> Option<&mut Nota> {
+        self.notas
+            .iter_mut()
+            .find(|n| n.id == id && n.status == NotaStatus::project)
     }
 
-    /// Add a project to the projects map
-    ///
-    /// # Arguments
-    /// * `project` - The project to add (will be keyed by its ID)
-    pub fn add_project(&mut self, project: Project) {
-        self.projects.insert(project.id.clone(), project);
-    }
-
-    /// Find a context by its name
+    /// Find a context by its name (for compatibility)
     ///
     /// # Arguments
     /// * `name` - The context name to search for (e.g., "Office")
     ///
     /// # Returns
-    /// An optional reference to the context if found
+    /// An optional reference to the nota if found and it's a context
     #[allow(dead_code)]
-    pub fn find_context_by_name(&self, name: &str) -> Option<&Context> {
-        self.contexts.get(name)
+    pub fn find_context_by_name(&self, name: &str) -> Option<&Nota> {
+        self.notas
+            .iter()
+            .find(|n| n.id == name && n.status == NotaStatus::context)
     }
 
-    /// Add a context to the contexts map
-    ///
-    /// # Arguments
-    /// * `context` - The context to add (will be keyed by its name)
-    #[allow(dead_code)]
-    pub fn add_context(&mut self, context: Context) {
-        self.contexts.insert(context.name.clone(), context);
-    }
-
-    /// Validate that a task's project reference exists (if specified)
-    /// Returns true if the task has no project reference or if the reference is valid
-    pub fn validate_task_project(&self, task: &Task) -> bool {
-        match &task.project {
+    /// Validate that a nota's project reference exists (if specified)
+    /// Returns true if the nota has no project reference or if the reference is valid
+    pub fn validate_nota_project(&self, nota: &Nota) -> bool {
+        match &nota.project {
             None => true,
             Some(project_id) => self.find_project_by_id(project_id).is_some(),
         }
     }
 
-    /// Validate that a task's context reference exists (if specified)
-    /// Returns true if the task has no context reference or if the reference is valid
-    pub fn validate_task_context(&self, task: &Task) -> bool {
-        match &task.context {
+    /// Validate that a nota's context reference exists (if specified)
+    /// Returns true if the nota has no context reference or if the reference is valid
+    pub fn validate_nota_context(&self, nota: &Nota) -> bool {
+        match &nota.context {
             None => true,
             Some(context_name) => self.find_context_by_name(context_name).is_some(),
         }
     }
 
-    /// Validate that a task's references (project and context) exist
+    /// Validate that a nota's references (project and context) exist
     /// Returns true if all references are valid or not specified
-    pub fn validate_task_references(&self, task: &Task) -> bool {
-        self.validate_task_project(task) && self.validate_task_context(task)
+    pub fn validate_nota_references(&self, nota: &Nota) -> bool {
+        self.validate_nota_project(nota) && self.validate_nota_context(nota)
     }
 
-    /// Validate that a project's context reference exists (if specified)
-    /// Returns true if the project has no context reference or if the reference is valid
-    pub fn validate_project_context(&self, project: &Project) -> bool {
-        match &project.context {
-            None => true,
-            Some(context_name) => self.find_context_by_name(context_name).is_some(),
-        }
-    }
-
-    /// Update project ID references in all tasks
+    /// Update project ID references in all notas
     ///
-    /// When a project ID changes, this method updates all task references
+    /// When a project ID changes, this method updates all nota references
     /// from the old ID to the new ID.
     ///
     /// # Arguments
     /// * `old_id` - The old project ID
     /// * `new_id` - The new project ID
-    pub fn update_project_id_in_tasks(&mut self, old_id: &str, new_id: &str) {
-        for task_list in self.all_task_lists_mut() {
-            for task in task_list.iter_mut() {
-                if let Some(ref project_id) = task.project
-                    && project_id == old_id
-                {
-                    task.project = Some(new_id.to_string());
-                }
+    pub fn update_project_id_in_notas(&mut self, old_id: &str, new_id: &str) {
+        for nota in self.notas.iter_mut() {
+            if let Some(ref project_id) = nota.project
+                && project_id == old_id
+            {
+                nota.project = Some(new_id.to_string());
             }
         }
     }
 
     /// Add a nota (unified task/project/context)
     ///
-    /// Depending on the nota's status, it will be stored as:
-    /// - Task (if status is inbox, next_action, waiting_for, later, calendar, someday, done, trash)
-    /// - Project (if status is project)
-    /// - Context (if status is context)
-    ///
     /// # Arguments
     /// * `nota` - The nota to add
     #[allow(dead_code)]
     pub fn add(&mut self, nota: Nota) {
-        match nota.status {
-            NotaStatus::context => {
-                if let Some(context) = nota.to_context() {
-                    self.add_context(context);
-                }
-            }
-            NotaStatus::project => {
-                if let Some(project) = nota.to_project() {
-                    self.add_project(project);
-                }
-            }
-            _ => {
-                if let Some(task) = nota.to_task() {
-                    self.add_task(task);
-                }
-            }
-        }
+        self.add_nota(nota);
     }
 
     /// Find a nota by its ID
     ///
-    /// Searches across all tasks, projects, and contexts.
+    /// Searches across all notas.
     ///
     /// # Arguments
     /// * `id` - The nota ID to search for
@@ -946,27 +759,31 @@ impl GtdData {
     /// An optional Nota if found
     #[allow(dead_code)]
     pub fn find_by_id(&self, id: &str) -> Option<Nota> {
-        // Try to find as task
-        if let Some(task) = self.find_task_by_id(id) {
-            return Some(Nota::from_task(task.clone()));
-        }
+        self.find_nota_by_id(id).cloned()
+    }
 
-        // Try to find as project
-        if let Some(project) = self.find_project_by_id(id) {
-            return Some(Nota::from_project(project.clone()));
+    /// Update a nota by its ID
+    ///
+    /// # Arguments
+    /// * `id` - The nota ID to update
+    /// * `nota` - The new nota data
+    ///
+    /// # Returns
+    /// The old nota if found and replaced
+    pub fn update(&mut self, id: &str, nota: Nota) -> Option<Nota> {
+        if let Some(pos) = self.notas.iter().position(|n| n.id == id) {
+            let old_nota = self.notas.remove(pos);
+            self.notas.push(nota.clone());
+            self.nota_map.insert(nota.id.clone(), nota.status.clone());
+            Some(old_nota)
+        } else {
+            None
         }
-
-        // Try to find as context
-        if let Some(context) = self.find_context_by_name(id) {
-            return Some(Nota::from_context(context.clone()));
-        }
-
-        None
     }
 
     /// Remove a nota by its ID
     ///
-    /// Searches across all tasks, projects, and contexts and removes the nota if found.
+    /// Searches across all notas and removes if found.
     ///
     /// # Arguments
     /// * `id` - The nota ID to remove
@@ -975,22 +792,7 @@ impl GtdData {
     /// The removed Nota if found
     #[allow(dead_code)]
     pub fn remove(&mut self, id: &str) -> Option<Nota> {
-        // Try to remove as task
-        if let Some(task) = self.remove_task(id) {
-            return Some(Nota::from_task(task));
-        }
-
-        // Try to remove as project
-        if let Some(project) = self.projects.remove(id) {
-            return Some(Nota::from_project(project));
-        }
-
-        // Try to remove as context
-        if let Some(context) = self.contexts.remove(id) {
-            return Some(Nota::from_context(context));
-        }
-
-        None
+        self.remove_nota(id)
     }
 
     /// List all notas with optional status filter
@@ -1002,54 +804,15 @@ impl GtdData {
     /// Vector of Nota objects matching the filter
     #[allow(dead_code)]
     pub fn list_all(&self, status_filter: Option<NotaStatus>) -> Vec<Nota> {
-        let mut notas = Vec::new();
-
-        // Add tasks
-        for task_list in self.all_task_lists() {
-            for task in task_list {
-                if status_filter.is_none() || Some(&task.status) == status_filter.as_ref() {
-                    notas.push(Nota::from_task(task.clone()));
-                }
-            }
+        if let Some(status) = status_filter {
+            self.notas
+                .iter()
+                .filter(|n| n.status == status)
+                .cloned()
+                .collect()
+        } else {
+            self.notas.clone()
         }
-
-        // Add projects
-        if status_filter.is_none() || status_filter == Some(NotaStatus::project) {
-            for project in self.projects.values() {
-                notas.push(Nota::from_project(project.clone()));
-            }
-        }
-
-        // Add contexts
-        if status_filter.is_none() || status_filter == Some(NotaStatus::context) {
-            for context in self.contexts.values() {
-                notas.push(Nota::from_context(context.clone()));
-            }
-        }
-
-        notas
-    }
-
-    /// Update a nota's fields
-    ///
-    /// Finds the nota by ID and updates its fields. The nota type (task/project/context)
-    /// is determined by its current status.
-    ///
-    /// # Arguments
-    /// * `id` - The nota ID to update
-    /// * `nota` - The nota with updated fields
-    ///
-    /// # Returns
-    /// `Some(())` if the nota was found and updated, `None` otherwise
-    #[allow(dead_code)]
-    pub fn update(&mut self, id: &str, nota: Nota) -> Option<()> {
-        // Remove the old nota
-        let _old_nota = self.remove(id)?;
-
-        // If status changed, this will automatically place it in the correct container
-        self.add(nota);
-
-        Some(())
     }
 
     /// Check if a nota ID is referenced by other notas
@@ -1063,30 +826,76 @@ impl GtdData {
     /// True if the ID is referenced by other notas
     #[allow(dead_code)]
     pub fn is_referenced(&self, id: &str) -> bool {
-        // Check if any task references this ID
-        for task_list in self.all_task_lists() {
-            for task in task_list {
-                if task.project.as_deref() == Some(id) || task.context.as_deref() == Some(id) {
-                    return true;
-                }
-            }
-        }
+        self.notas.iter().any(|nota| {
+            nota.project.as_deref() == Some(id) || nota.context.as_deref() == Some(id)
+        })
+    }
 
-        // Check if any project references this ID
-        for project in self.projects.values() {
-            if project.project.as_deref() == Some(id) || project.context.as_deref() == Some(id) {
-                return true;
-            }
-        }
+    // Compatibility properties for tests
+    /// Get inbox notas (for compatibility)
+    #[allow(dead_code)]
+    pub fn inbox(&self) -> Vec<&Nota> {
+        self.notas.iter().filter(|n| n.status == NotaStatus::inbox).collect()
+    }
 
-        // Check if any context references this ID
-        for context in self.contexts.values() {
-            if context.project.as_deref() == Some(id) || context.context.as_deref() == Some(id) {
-                return true;
-            }
-        }
+    /// Get next_action notas (for compatibility)
+    #[allow(dead_code)]
+    pub fn next_action(&self) -> Vec<&Nota> {
+        self.notas.iter().filter(|n| n.status == NotaStatus::next_action).collect()
+    }
 
-        false
+    /// Get waiting_for notas (for compatibility)
+    #[allow(dead_code)]
+    pub fn waiting_for(&self) -> Vec<&Nota> {
+        self.notas.iter().filter(|n| n.status == NotaStatus::waiting_for).collect()
+    }
+
+    /// Get later notas (for compatibility)
+    #[allow(dead_code)]
+    pub fn later(&self) -> Vec<&Nota> {
+        self.notas.iter().filter(|n| n.status == NotaStatus::later).collect()
+    }
+
+    /// Get calendar notas (for compatibility)
+    #[allow(dead_code)]
+    pub fn calendar(&self) -> Vec<&Nota> {
+        self.notas.iter().filter(|n| n.status == NotaStatus::calendar).collect()
+    }
+
+    /// Get someday notas (for compatibility)
+    #[allow(dead_code)]
+    pub fn someday(&self) -> Vec<&Nota> {
+        self.notas.iter().filter(|n| n.status == NotaStatus::someday).collect()
+    }
+
+    /// Get done notas (for compatibility)
+    #[allow(dead_code)]
+    pub fn done(&self) -> Vec<&Nota> {
+        self.notas.iter().filter(|n| n.status == NotaStatus::done).collect()
+    }
+
+    /// Get trash notas (for compatibility)
+    #[allow(dead_code)]
+    pub fn trash(&self) -> Vec<&Nota> {
+        self.notas.iter().filter(|n| n.status == NotaStatus::trash).collect()
+    }
+
+    /// Get projects map (for compatibility)
+    #[allow(dead_code)]
+    pub fn projects(&self) -> HashMap<String, &Nota> {
+        self.notas.iter()
+            .filter(|n| n.status == NotaStatus::project)
+            .map(|n| (n.id.clone(), n))
+            .collect()
+    }
+
+    /// Get contexts map (for compatibility)
+    #[allow(dead_code)]
+    pub fn contexts(&self) -> HashMap<String, &Nota> {
+        self.notas.iter()
+            .filter(|n| n.status == NotaStatus::context)
+            .map(|n| (n.id.clone(), n))
+            .collect()
     }
 }
 
