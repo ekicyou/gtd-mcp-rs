@@ -63,15 +63,20 @@ The server uses a format version system to enable backwards-compatible changes t
   name = "My Project"
   ```
 
-- **Version 3** (Current): Same structure as Version 2, with enhanced migration support
+- **Version 3** (Current): Projects and contexts stored as arrays `[[project]]`, `[[context]]`
   ```toml
   format_version = 3
   
-  [projects.project-1]
-  name = "My Project"
+  [[project]]
+  id = "project-1"
+  title = "My Project"
+  
+  [[context]]
+  name = "Office"
+  notes = "Work environment"
   ```
 
-**Automatic Migration**: When loading a version 1 or version 2 file, the server automatically migrates it to version 3 format. On the next save, the file will be written in version 3 format. This ensures backwards compatibility while allowing the data structure to evolve. The internal implementation includes infrastructure prepared for future unified `Nota` structure support.
+**Automatic Migration**: When loading a version 1 or version 2 file, the server automatically migrates it to version 3 format. On the next save, the file will be written in version 3 format with Vec-based arrays for projects and contexts. This ensures backwards compatibility while allowing the data structure to evolve.
 
 ## MCP Tools
 

@@ -59,7 +59,11 @@ pub struct GtdDataMigrationHelper {
     pub(crate) projects: Option<ProjectsFormat>,
     #[serde(default)]
     pub(crate) contexts: HashMap<String, Context>,
-    // Version 3 format field (unified notas array)
+    // Version 3 format fields (Vec arrays)
+    #[serde(default)]
+    pub(crate) project: Vec<Project>,
+    #[serde(default)]
+    pub(crate) context: Vec<Context>,
     #[serde(default)]
     pub(crate) notas: Vec<Nota>,
     #[serde(default)]

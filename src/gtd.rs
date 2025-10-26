@@ -1,5 +1,5 @@
 use chrono::{Local, NaiveDate};
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashMap;
 use std::str::FromStr;
 
@@ -111,8 +111,7 @@ impl FromStr for NotaStatus {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Project {
     /// Unique project identifier (e.g., "project-1", "project-2")
-    /// Not serialized to TOML (used as HashMap key)
-    #[serde(skip_serializing, default)]
+    #[serde(default)]
     pub id: String,
     /// Project title
     pub title: String,
@@ -138,12 +137,10 @@ pub struct Project {
 ///
 /// Contexts represent locations, tools, or situations where tasks can be performed
 /// (e.g., "@office", "@home", "@computer", "@phone", "@errands").
-/// The name field is maintained internally but not serialized to TOML
-/// to avoid redundancy with the HashMap key in GtdData.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Context {
-    /// Context name (e.g., "Office", "Home") - not serialized to TOML (serves as ID)
-    #[serde(skip_serializing, default)]
+    /// Context name (e.g., "Office", "Home") - serves as ID
+    #[serde(default)]
     pub name: String,
     /// Context title (same as name for contexts)
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -338,50 +335,38 @@ impl Nota {
 ///
 /// - Version 1 (legacy): Projects stored as `Vec<Project>` (TOML: `[[projects]]`)
 /// - Version 2 (legacy): Projects stored as `HashMap<String, Project>` (TOML: `[projects.id]`), separate arrays for each status
-/// - Version 3 (current): Unified `[[notas]]` array with status field to determine type
+/// - Version 3 (current): Projects and contexts stored as Vec (TOML: `[[project]]`, `[[context]]`)
 ///
 /// The deserializer automatically migrates from older versions to the current internal format.
-#[derive(Debug, Serialize)]
+#[derive(Debug)]
 pub struct GtdData {
     /// Format version for the TOML file (current: 3)
-    #[serde(default = "default_format_version")]
     pub format_version: u32,
     /// Tasks in the inbox (not yet processed)
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub inbox: Vec<Task>,
     /// Tasks marked as next actions (ready to do)
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub next_action: Vec<Task>,
     /// Tasks waiting for external input
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub waiting_for: Vec<Task>,
     /// Tasks to be done later
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub later: Vec<Task>,
     /// Tasks scheduled for specific dates
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub calendar: Vec<Task>,
     /// Tasks that might be done someday
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub someday: Vec<Task>,
     /// Completed tasks
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub done: Vec<Task>,
     /// Deleted tasks
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub trash: Vec<Task>,
     /// All projects (keyed by ID)
     pub projects: HashMap<String, Project>,
     /// All contexts (keyed by name)
     pub contexts: HashMap<String, Context>,
     /// Internal map of all tasks by ID for duplicate checking (not serialized)
-    #[serde(skip)]
     pub(crate) task_map: HashMap<String, NotaStatus>,
     /// Counter for generating unique task IDs
-    #[serde(default, skip_serializing_if = "is_zero")]
     pub task_counter: u32,
     /// Counter for generating unique project IDs
-    #[serde(default, skip_serializing_if = "is_zero")]
     pub project_counter: u32,
 }
 
@@ -412,11 +397,6 @@ fn default_format_version() -> u32 {
     3
 }
 
-/// Check if a counter value is zero (used for skipping serialization)
-fn is_zero(n: &u32) -> bool {
-    *n == 0
-}
-
 impl<'de> Deserialize<'de> for GtdData {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -441,6 +421,18 @@ impl<'de> Deserialize<'de> for GtdData {
         let mut trash = helper.trash;
         let mut projects = migrate_projects_to_latest(helper.projects);
         let mut contexts = helper.contexts;
+
+        // If this is Version 3 format with Vec arrays for projects/contexts, convert to HashMap
+        if !helper.project.is_empty() {
+            for project in helper.project {
+                projects.insert(project.id.clone(), project);
+            }
+        }
+        if !helper.context.is_empty() {
+            for context in helper.context {
+                contexts.insert(context.name.clone(), context);
+            }
+        }
 
         // If this is Version 3 format (unified notas), migrate to internal format
         if !helper.notas.is_empty() {
@@ -546,6 +538,66 @@ impl<'de> Deserialize<'de> for GtdData {
             task_counter: helper.task_counter,
             project_counter: helper.project_counter,
         })
+    }
+}
+
+impl Serialize for GtdData {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        use serde::ser::SerializeStruct;
+
+        // Convert HashMap to Vec for projects and contexts (Version 3 format)
+        let projects_vec: Vec<&Project> = self.projects.values().collect();
+        let contexts_vec: Vec<&Context> = self.contexts.values().collect();
+
+        let mut state = serializer.serialize_struct("GtdData", 15)?;
+        state.serialize_field("format_version", &self.format_version)?;
+
+        if !self.inbox.is_empty() {
+            state.serialize_field("inbox", &self.inbox)?;
+        }
+        if !self.next_action.is_empty() {
+            state.serialize_field("next_action", &self.next_action)?;
+        }
+        if !self.waiting_for.is_empty() {
+            state.serialize_field("waiting_for", &self.waiting_for)?;
+        }
+        if !self.later.is_empty() {
+            state.serialize_field("later", &self.later)?;
+        }
+        if !self.calendar.is_empty() {
+            state.serialize_field("calendar", &self.calendar)?;
+        }
+        if !self.someday.is_empty() {
+            state.serialize_field("someday", &self.someday)?;
+        }
+        if !self.done.is_empty() {
+            state.serialize_field("done", &self.done)?;
+        }
+        if !self.trash.is_empty() {
+            state.serialize_field("trash", &self.trash)?;
+        }
+
+        // Serialize projects as Vec (Version 3 format: [[project]])
+        if !projects_vec.is_empty() {
+            state.serialize_field("project", &projects_vec)?;
+        }
+
+        // Serialize contexts as Vec (Version 3 format: [[context]])
+        if !contexts_vec.is_empty() {
+            state.serialize_field("context", &contexts_vec)?;
+        }
+
+        if self.task_counter != 0 {
+            state.serialize_field("task_counter", &self.task_counter)?;
+        }
+        if self.project_counter != 0 {
+            state.serialize_field("project_counter", &self.project_counter)?;
+        }
+
+        state.end()
     }
 }
 
@@ -1697,6 +1749,9 @@ mod tests {
     // コンテキストをTOML形式にシリアライズし、デシリアライズして元のデータと一致することを確認
     // Note: name フィールドは skip_serializing されるため、TOML には含まれない
     #[test]
+    // Context serialization test for Version 3
+    // In V3 format, contexts are stored in [[context]] arrays, so name must be serialized
+    #[test]
     fn test_context_serialization() {
         let context = Context {
             name: "Office".to_string(),
@@ -1711,15 +1766,14 @@ mod tests {
         };
 
         let serialized = toml::to_string(&context).unwrap();
-        // name フィールドは serialization でスキップされるため、TOML には含まれない
+        // In Version 3, name field is serialized as part of the [[context]] array
         assert!(
-            !serialized.contains("name"),
-            "name field should not be serialized"
+            serialized.contains("name"),
+            "name field should be serialized in Version 3"
         );
 
         let deserialized: Context = toml::from_str(&serialized).unwrap();
-        // standalone でデシリアライズすると name は空文字列になる（default）
-        assert_eq!(deserialized.name, "");
+        assert_eq!(deserialized.name, "Office");
         assert_eq!(deserialized.notes, None);
     }
 
@@ -2119,13 +2173,15 @@ start_date = "2024-03-15"
 created_at = "2024-01-01"
 updated_at = "2024-01-01"
 
-[projects.project-001]
+[[project]]
+id = "project-001"
 title = "Documentation Project"
 notes = "Comprehensive project documentation update"
 created_at = "2024-01-01"
 updated_at = "2024-01-01"
 
-[contexts.Office]
+[[context]]
+name = "Office"
 notes = "Work environment with desk and computer"
 "#;
 
@@ -2182,8 +2238,12 @@ notes = "Work environment with desk and computer"
 
     // 後方互換性テスト: 旧形式（nameフィールド付き）のTOMLも正しく読み込めることを確認
     #[test]
+    // Test backward compatibility with name field in contexts (Version 2 format)
+    // Version 2 used HashMap format where name was the key, so name field was redundant
+    // Version 3 uses Vec format where name must be included
+    #[test]
     fn test_backward_compatibility_with_name_field() {
-        // 旧形式のTOML（nameフィールドが含まれている）
+        // 旧形式のTOML（nameフィールドが含まれている）- Version 2 HashMap format
         let old_format_toml = r#"
 [[tasks]]
 id = "task-001"
@@ -2215,15 +2275,19 @@ name = "Home"
         assert_eq!(home.name, "Home");
         assert_eq!(home.notes, None);
 
-        // 再シリアライズすると新形式（nameフィールドなし）になることを確認
+        // 再シリアライズするとVersion 3形式（[[context]]配列でnameフィールドあり）になることを確認
         let reserialized = toml::to_string_pretty(&deserialized).unwrap();
         assert!(
-            !reserialized.contains("name = \"Office\""),
-            "Reserialized TOML should not contain redundant name field"
+            reserialized.contains("[[context]]"),
+            "Reserialized TOML should use [[context]] array format"
         );
         assert!(
-            !reserialized.contains("name = \"Home\""),
-            "Reserialized TOML should not contain redundant name field"
+            reserialized.contains("name = \"Office\""),
+            "Reserialized TOML should contain name field in Version 3 format"
+        );
+        assert!(
+            reserialized.contains("name = \"Home\""),
+            "Reserialized TOML should contain name field in Version 3 format"
         );
     }
 
@@ -2862,11 +2926,11 @@ updated_at = "2024-01-01"
         // Save to new format
         let new_format_toml = toml::to_string_pretty(&data).unwrap();
 
-        // Verify new format has HashMap syntax and version 3
+        // Verify new format has Vec array syntax ([[project]]) and version 3
         assert!(new_format_toml.contains("format_version = 3"));
-        assert!(new_format_toml.contains("[projects.project-1]"));
-        assert!(new_format_toml.contains("[projects.project-2]"));
+        assert!(new_format_toml.contains("[[project]]"));
         assert!(!new_format_toml.contains("[[projects]]"));
+        assert!(!new_format_toml.contains("[projects.project-1]"));
 
         // Verify round-trip works
         let reloaded: GtdData = toml::from_str(&new_format_toml).unwrap();
