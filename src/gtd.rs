@@ -642,20 +642,6 @@ impl GtdData {
             .find(|n| n.id == id && n.status == NotaStatus::project)
     }
 
-    /// Find a project by its ID and return a mutable reference (for compatibility)
-    ///
-    /// # Arguments
-    /// * `id` - The project ID to search for (e.g., "project-1")
-    ///
-    /// # Returns
-    /// An optional mutable reference to the nota if found and it's a project
-    #[allow(dead_code)]
-    pub fn find_project_by_id_mut(&mut self, id: &str) -> Option<&mut Nota> {
-        self.notas
-            .iter_mut()
-            .find(|n| n.id == id && n.status == NotaStatus::project)
-    }
-
     /// Find a context by its name (for compatibility)
     ///
     /// # Arguments
