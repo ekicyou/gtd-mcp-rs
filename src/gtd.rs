@@ -3,48 +3,8 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashMap;
 use std::str::FromStr;
 
-/// A GTD (Getting Things Done) task
-///
-/// Tasks represent individual actionable items in the GTD system.
-/// Each task has a unique ID, title, status (inbox, next_action, etc.),
-/// and optional metadata like project association, context, notes, and start date.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Task {
-    /// Unique task identifier (e.g., "#1", "#2")
-    pub id: String,
-    /// Task title describing the action
-    pub title: String,
-    /// Current status of the task (inbox, next_action, waiting_for, etc.)
-    #[serde(skip, default = "default_task_status")]
-    pub status: NotaStatus,
-    /// Optional project ID this task belongs to
-    pub project: Option<String>,
-    /// Optional context where this task can be performed (e.g., "@office", "@home")
-    pub context: Option<String>,
-    /// Optional additional notes in Markdown format
-    pub notes: Option<String>,
-    /// Optional start date for the task (format: YYYY-MM-DD)
-    pub start_date: Option<NaiveDate>,
-    /// Date when the task was created
-    pub created_at: NaiveDate,
-    /// Date when the task was last updated
-    pub updated_at: NaiveDate,
-}
-
-/// Default task status for deserialization
-fn default_task_status() -> NotaStatus {
-    NotaStatus::inbox
-}
-
-/// Default context status for deserialization
-fn default_context_status() -> NotaStatus {
-    NotaStatus::context
-}
-
-/// Check if status is context (for skipping serialization)
-fn is_context_status(status: &NotaStatus) -> bool {
-    *status == NotaStatus::context
-}
+// Import legacy types from migration module (for backward compatibility only)
+use crate::migration::{Context, Project, Task};
 
 /// Get the current date in local timezone
 pub fn local_date_today() -> NaiveDate {
@@ -101,73 +61,6 @@ impl FromStr for NotaStatus {
             )),
         }
     }
-}
-
-/// A GTD project
-///
-/// Projects represent multi-step outcomes that require more than one action.
-/// Each project has a unique ID, title, and optional notes and context.
-/// Projects use NotaStatus::project as their status.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Project {
-    /// Unique project identifier (e.g., "project-1", "project-2")
-    #[serde(default)]
-    pub id: String,
-    /// Project title
-    pub title: String,
-    /// Optional project notes
-    pub notes: Option<String>,
-    /// Optional parent project (None for projects, as projects don't have parent projects)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub project: Option<String>,
-    /// Optional context where this project can be worked on
-    pub context: Option<String>,
-    /// Optional start date (for scheduled projects)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub start_date: Option<NaiveDate>,
-    /// Creation date
-    #[serde(default = "local_date_today")]
-    pub created_at: NaiveDate,
-    /// Last update date
-    #[serde(default = "local_date_today")]
-    pub updated_at: NaiveDate,
-}
-
-/// A GTD context
-///
-/// Contexts represent locations, tools, or situations where tasks can be performed
-/// (e.g., "@office", "@home", "@computer", "@phone", "@errands").
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Context {
-    /// Context name (e.g., "Office", "Home") - serves as ID
-    #[serde(default)]
-    pub name: String,
-    /// Context title (same as name for contexts)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub title: Option<String>,
-    /// Optional notes about the context
-    pub notes: Option<String>,
-    /// Status (always NotaStatus::context for context notas)
-    #[serde(
-        default = "default_context_status",
-        skip_serializing_if = "is_context_status"
-    )]
-    pub status: NotaStatus,
-    /// Parent project (None for contexts)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub project: Option<String>,
-    /// Parent context (None for contexts)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub context: Option<String>,
-    /// Optional start date
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub start_date: Option<NaiveDate>,
-    /// Creation date
-    #[serde(skip_serializing_if = "Option::is_none", default)]
-    pub created_at: Option<NaiveDate>,
-    /// Last update date
-    #[serde(skip_serializing_if = "Option::is_none", default)]
-    pub updated_at: Option<NaiveDate>,
 }
 
 /// A unified nota (note) in the GTD system
