@@ -401,9 +401,7 @@ impl McpServer for GtdServerHandler {
             if let Some(ref ctx) = nota.context {
                 result.push_str(&format!("  Context: {}\n", ctx));
             }
-            if !exclude_notes_flag
-                && let Some(ref n) = nota.notes
-            {
+            if !exclude_notes_flag && let Some(ref n) = nota.notes {
                 result.push_str(&format!("  Notes: {}\n", n));
             }
             if let Some(ref date) = nota.start_date {
