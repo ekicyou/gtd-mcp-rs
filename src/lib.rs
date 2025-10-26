@@ -1020,7 +1020,7 @@ mod tests {
 
         {
             let mut data = handler.data.lock().unwrap();
-            data.add(Nota::from_context(gtd::Context {
+            data.add(Nota::from_context(migration::Context {
                 name: "Office".to_string(),
                 notes: None,
                 title: None,
@@ -1602,7 +1602,7 @@ mod tests {
         // Add a context
         {
             let mut data = handler.data.lock().unwrap();
-            data.add(Nota::from_context(gtd::Context {
+            data.add(Nota::from_context(migration::Context {
                 name: "Office".to_string(),
                 notes: None,
                 title: None,

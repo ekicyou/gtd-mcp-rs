@@ -1350,7 +1350,7 @@ mod tests {
         };
 
         data.add_project(project.clone());
-        assert_eq!(data.projects.len(), 1);
+        assert_eq!(data.projects().len(), 1);
         assert_eq!(
             data.find_project_by_id("project-1").unwrap().title,
             "Test Project"
@@ -1419,8 +1419,8 @@ mod tests {
         };
 
         data.add_context(context.clone());
-        assert_eq!(data.contexts.len(), 1);
-        assert_eq!(data.find_context_by_name("Office").unwrap().name, "Office");
+        assert_eq!(data.contexts().len(), 1);
+        assert_eq!(data.find_context_by_name("Office").unwrap().id, "Office");
     }
 
     // 複数コンテキストの挿入テスト
@@ -1445,7 +1445,7 @@ mod tests {
             data.add_context(context);
         }
 
-        assert_eq!(data.contexts.len(), 4);
+        assert_eq!(data.contexts().len(), 4);
     }
 
     // タスクのシリアライゼーションテスト
@@ -1497,7 +1497,8 @@ mod tests {
         let serialized = toml::to_string(&data).unwrap();
         let deserialized: GtdData = toml::from_str(&serialized).unwrap();
 
-        let deserialized_project = deserialized.projects.get("project-1").unwrap();
+        let deserialized_projects = deserialized.projects();
+        let deserialized_project = deserialized_projects.get("project-1").unwrap();
         assert_eq!(project.id, deserialized_project.id);
         assert_eq!(project.title, deserialized_project.title);
         assert_eq!(project.notes, deserialized_project.notes);
@@ -1583,8 +1584,8 @@ mod tests {
         let deserialized: GtdData = toml::from_str(&serialized).unwrap();
 
         assert_eq!(data.task_count(), deserialized.task_count());
-        assert_eq!(data.projects.len(), deserialized.projects.len());
-        assert_eq!(data.contexts.len(), deserialized.contexts.len());
+        assert_eq!(data.projects().len(), deserialized.projects().len());
+        assert_eq!(data.contexts().len(), deserialized.contexts().len());
     }
 
     // ステータスによるタスクフィルタリングテスト
@@ -1654,7 +1655,7 @@ mod tests {
             data.add_task(task);
         }
 
-        let all_tasks = data.all_tasks();
+        let all_tasks = data.list_all(None);
         let project_tasks: Vec<_> = all_tasks
             .iter()
             .filter(|t| t.project.as_ref().is_some_and(|p| p == "project-1"))
@@ -1687,7 +1688,7 @@ mod tests {
             data.add_task(task);
         }
 
-        let all_tasks = data.all_tasks();
+        let all_tasks = data.list_all(None);
         let context_tasks: Vec<_> = all_tasks
             .iter()
             .filter(|t| t.context.as_ref().is_some_and(|c| c == "context-1"))
@@ -1790,7 +1791,8 @@ mod tests {
 
         // Verify that tasks maintain insertion order
         assert_eq!(data.inbox().len(), 5);
-        for (i, task) in data.inbox.iter().enumerate() {
+        let data_inbox = data.inbox();
+        for (i, task) in data_inbox.iter().enumerate() {
             assert_eq!(task.id, format!("task-{}", i + 1));
             assert_eq!(task.title, format!("Task {}", i + 1));
         }
@@ -1835,12 +1837,13 @@ mod tests {
 
         // Verify deserialized data maintains insertion order for tasks
         assert_eq!(deserialized.inbox.len(), 3);
-        for (i, task) in deserialized.inbox.iter().enumerate() {
+        let deserialized_inbox = deserialized.inbox();
+        for (i, task) in deserialized_inbox.iter().enumerate() {
             assert_eq!(task.id, format!("task-{}", i + 1));
         }
 
         // Verify all projects are present (HashMap doesn't guarantee order)
-        assert_eq!(deserialized.projects.len(), 2);
+        assert_eq!(deserialized.projects().len(), 2);
         assert!(deserialized.projects.contains_key("project-1"));
         assert!(deserialized.projects.contains_key("project-2"));
     }
@@ -1974,8 +1977,9 @@ notes = "Work environment with desk and computer"
         assert_eq!(task1.start_date, NaiveDate::from_ymd_opt(2024, 3, 15));
 
         // プロジェクトフィールドを検証
-        assert_eq!(deserialized.projects.len(), 1);
-        let project1 = deserialized.projects.get("project-001").unwrap();
+        assert_eq!(deserialized.projects().len(), 1);
+        let deserialized_projects = deserialized.projects();
+        let project1 = deserialized_projects.get("project-001").unwrap();
         assert_eq!(project1.id, "project-001");
         assert_eq!(project1.title, "Documentation Project");
         assert_eq!(
@@ -1984,10 +1988,11 @@ notes = "Work environment with desk and computer"
         );
 
         // コンテキストフィールドを検証
-        assert_eq!(deserialized.contexts.len(), 1);
+        assert_eq!(deserialized.contexts().len(), 1);
 
-        let context_office = deserialized.contexts.get("Office").unwrap();
-        assert_eq!(context_office.name, "Office");
+        let deserialized_contexts = deserialized.contexts();
+        let context_office = deserialized_contexts.get("Office").unwrap();
+        assert_eq!(context_office.id, "Office");
         assert_eq!(
             context_office.notes,
             Some("Work environment with desk and computer".to_string())
@@ -2018,19 +2023,21 @@ name = "Home"
         // 旧形式のTOMLを読み込めることを確認
         let deserialized: GtdData = toml::from_str(old_format_toml).unwrap();
 
-        assert_eq!(deserialized.contexts.len(), 2);
+        assert_eq!(deserialized.contexts().len(), 2);
 
         // Officeコンテキストを検証
-        let office = deserialized.contexts.get("Office").unwrap();
-        assert_eq!(office.name, "Office");
+        let deserialized_contexts = deserialized.contexts();
+        let office = deserialized_contexts.get("Office").unwrap();
+        assert_eq!(office.id, "Office");
         assert_eq!(
             office.notes,
             Some("Work environment with desk and computer".to_string())
         );
 
         // Homeコンテキストを検証
-        let home = deserialized.contexts.get("Home").unwrap();
-        assert_eq!(home.name, "Home");
+        let deserialized_contexts = deserialized.contexts();
+        let home = deserialized_contexts.get("Home").unwrap();
+        assert_eq!(home.id, "Home");
         assert_eq!(home.notes, None);
 
         // 再シリアライズするとVersion 3形式（[[context]]配列でnameフィールドあり）になることを確認
@@ -2629,9 +2636,10 @@ notes = "Project without context field"
 "#;
 
         let data: GtdData = toml::from_str(toml_str).unwrap();
-        assert_eq!(data.projects.len(), 1);
+        assert_eq!(data.projects().len(), 1);
 
-        let project = data.projects.get("project-1").unwrap();
+        let projects = data.projects();
+        let project = projects.get("project-1").unwrap();
         assert_eq!(project.id, "project-1");
         assert_eq!(project.title, "Old Project");
         assert_eq!(project.context, None);
@@ -2665,15 +2673,17 @@ updated_at = "2024-01-01"
 
         // Verify it's automatically migrated to version 3
         assert_eq!(data.format_version, 3);
-        assert_eq!(data.projects.len(), 2);
+        assert_eq!(data.projects().len(), 2);
 
         // Verify projects are in HashMap
-        let project1 = data.projects.get("project-1").unwrap();
+        let data_projects = data.projects();
+        let project1 = data_projects.get("project-1").unwrap();
         assert_eq!(project1.id, "project-1");
         assert_eq!(project1.title, "First Project");
         assert_eq!(project1.notes, Some("Original format".to_string()));
 
-        let project2 = data.projects.get("project-2").unwrap();
+        let data_projects = data.projects();
+        let project2 = data_projects.get("project-2").unwrap();
         assert_eq!(project2.id, "project-2");
         assert_eq!(project2.title, "Second Project");
 
@@ -2728,20 +2738,22 @@ notes = "Office context"
         // Verify it's automatically migrated to version 3
         assert_eq!(data.format_version, 3);
         assert_eq!(data.inbox().len(), 1);
-        assert_eq!(data.projects.len(), 1);
-        assert_eq!(data.contexts.len(), 1);
+        assert_eq!(data.projects().len(), 1);
+        assert_eq!(data.contexts().len(), 1);
 
         // Verify data integrity
         let task = &data.inbox[0];
         assert_eq!(task.id, "#1");
         assert_eq!(task.title, "Test task");
 
-        let project = data.projects.get("project-1").unwrap();
+        let projects = data.projects();
+        let project = projects.get("project-1").unwrap();
         assert_eq!(project.title, "Test Project");
         assert_eq!(project.notes, Some("Version 2 format".to_string()));
 
-        let context = data.contexts.get("Office").unwrap();
-        assert_eq!(context.name, "Office");
+        let contexts = data.contexts();
+        let context = contexts.get("Office").unwrap();
+        assert_eq!(context.id, "Office");
         assert_eq!(context.notes, Some("Office context".to_string()));
 
         // Save to new format
@@ -2919,8 +2931,8 @@ notes = "Office context"
         data.add_task(task1);
 
         // Verify task is in map
-        assert!(data.task_map.contains_key("test-task"));
-        assert_eq!(data.task_map.get("test-task"), Some(&NotaStatus::inbox));
+        assert!(data.nota_map.contains_key("test-task"));
+        assert_eq!(data.nota_map.get("test-task"), Some(&NotaStatus::inbox));
 
         // Try to add another task with same ID in a different status
         let task2 = Task {
@@ -2942,7 +2954,7 @@ notes = "Office context"
 
         // The task_map should now show the new status (last one wins)
         assert_eq!(
-            data.task_map.get("test-task"),
+            data.nota_map.get("test-task"),
             Some(&NotaStatus::next_action)
         );
 
@@ -2970,14 +2982,14 @@ notes = "Office context"
         data.add_task(task);
 
         // Verify task is in map
-        assert!(data.task_map.contains_key("remove-test"));
+        assert!(data.nota_map.contains_key("remove-test"));
 
         // Remove task
         let removed = data.remove_task("remove-test");
         assert!(removed.is_some());
 
         // Verify task is removed from map
-        assert!(!data.task_map.contains_key("remove-test"));
+        assert!(!data.nota_map.contains_key("remove-test"));
     }
 
     #[test]
@@ -2998,14 +3010,14 @@ notes = "Office context"
         data.add_task(task);
 
         // Verify initial status
-        assert_eq!(data.task_map.get("status-test"), Some(&NotaStatus::inbox));
+        assert_eq!(data.nota_map.get("status-test"), Some(&NotaStatus::inbox));
 
         // Move to next_action
         data.move_status("status-test", NotaStatus::next_action);
 
         // Verify status updated in map
         assert_eq!(
-            data.task_map.get("status-test"),
+            data.nota_map.get("status-test"),
             Some(&NotaStatus::next_action)
         );
     }
@@ -3032,9 +3044,9 @@ updated_at = "2024-01-01"
         let data: GtdData = toml::from_str(toml_str).unwrap();
 
         // Verify both tasks are in task_map with correct statuses
-        assert_eq!(data.task_map.len(), 2);
-        assert_eq!(data.task_map.get("task-1"), Some(&NotaStatus::inbox));
-        assert_eq!(data.task_map.get("task-2"), Some(&NotaStatus::next_action));
+        assert_eq!(data.nota_map.len(), 2);
+        assert_eq!(data.nota_map.get("task-1"), Some(&NotaStatus::inbox));
+        assert_eq!(data.nota_map.get("task-2"), Some(&NotaStatus::next_action));
     }
 
     // Step 4: Test HashMap serialization order
@@ -3322,7 +3334,7 @@ updated_at = "2024-01-01"
         };
 
         data.add(nota.clone());
-        assert_eq!(data.projects.len(), 1);
+        assert_eq!(data.projects().len(), 1);
 
         let found = data.find_by_id("proj-1").unwrap();
         assert_eq!(found.title, "Test Project");
@@ -3346,7 +3358,7 @@ updated_at = "2024-01-01"
         };
 
         data.add(nota.clone());
-        assert_eq!(data.contexts.len(), 1);
+        assert_eq!(data.contexts().len(), 1);
 
         let found = data.find_by_id("Office").unwrap();
         assert_eq!(found.title, "Office Context");

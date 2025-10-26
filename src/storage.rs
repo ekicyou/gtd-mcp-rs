@@ -154,7 +154,8 @@ impl Storage {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::gtd::{Context, NotaStatus, Project, Task};
+    use crate::gtd::NotaStatus;
+    use crate::migration::{Context, Project, Task};
     use chrono::NaiveDate;
     use std::env;
     use std::fs;
