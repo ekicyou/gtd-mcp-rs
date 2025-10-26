@@ -897,6 +897,64 @@ impl GtdData {
             .map(|n| (n.id.clone(), n))
             .collect()
     }
+
+    /// Add a task (for compatibility with tests)
+    #[allow(dead_code)]
+    pub fn add_task(&mut self, task: Task) {
+        self.add(Nota::from_task(task));
+    }
+
+    /// Remove a task (for compatibility with tests)
+    #[allow(dead_code)]
+    pub fn remove_task(&mut self, id: &str) -> Option<Task> {
+        self.remove_nota(id).and_then(|n| n.to_task())
+    }
+
+    /// Add a project (for compatibility with tests)
+    #[allow(dead_code)]
+    pub fn add_project(&mut self, project: Project) {
+        self.add(Nota::from_project(project));
+    }
+
+    /// Add a context (for compatibility with tests)
+    #[allow(dead_code)]
+    pub fn add_context(&mut self, context: Context) {
+        self.add(Nota::from_context(context));
+    }
+
+    /// Validate task project (for compatibility)
+    pub fn validate_task_project(&self, task: &Task) -> bool {
+        match &task.project {
+            None => true,
+            Some(project_id) => self.find_project_by_id(project_id).is_some(),
+        }
+    }
+
+    /// Validate task context (for compatibility)
+    pub fn validate_task_context(&self, task: &Task) -> bool {
+        match &task.context {
+            None => true,
+            Some(context_name) => self.find_context_by_name(context_name).is_some(),
+        }
+    }
+
+    /// Validate task references (for compatibility)
+    pub fn validate_task_references(&self, task: &Task) -> bool {
+        self.validate_task_project(task) && self.validate_task_context(task)
+    }
+
+    /// Validate project context (for compatibility)
+    pub fn validate_project_context(&self, project: &Project) -> bool {
+        match &project.context {
+            None => true,
+            Some(context_name) => self.find_context_by_name(context_name).is_some(),
+        }
+    }
+
+    /// Update project ID in tasks (for compatibility)
+    pub fn update_project_id_in_tasks(&mut self, old_id: &str, new_id: &str) {
+        self.update_project_id_in_notas(old_id, new_id);
+    }
 }
 
 #[cfg(test)]
@@ -905,27 +963,27 @@ mod tests {
     use chrono::{Datelike, NaiveDate};
 
     // GtdDataの新規作成テスト
-    // 空のタスク、プロジェクト、コンテキストのHashMapが初期化されることを確認
+    // 空のnotasが初期化されることを確認
     #[test]
     fn test_gtd_data_new() {
         let data = GtdData::new();
-        assert!(data.inbox.is_empty());
-        assert!(data.next_action.is_empty());
-        assert!(data.waiting_for.is_empty());
-        assert!(data.someday.is_empty());
-        assert!(data.later.is_empty());
-        assert!(data.done.is_empty());
-        assert!(data.trash.is_empty());
-        assert!(data.projects.is_empty());
-        assert!(data.contexts.is_empty());
+        assert!(data.inbox().is_empty());
+        assert!(data.next_action().is_empty());
+        assert!(data.waiting_for().is_empty());
+        assert!(data.someday().is_empty());
+        assert!(data.later().is_empty());
+        assert!(data.done().is_empty());
+        assert!(data.trash().is_empty());
+        assert!(data.projects().is_empty());
+        assert!(data.contexts().is_empty());
     }
 
-    // GtdDataへのタスク挿入テスト
-    // タスクを1つ追加し、正しく格納・取得できることを確認
+    // GtdDataへのNota挿入テスト
+    // Notaを1つ追加し、正しく格納・取得できることを確認
     #[test]
-    fn test_gtd_data_insert_task() {
+    fn test_gtd_data_insert_nota() {
         let mut data = GtdData::new();
-        let task = Task {
+        let nota = Nota {
             id: "task-1".to_string(),
             title: "Test Task".to_string(),
             status: NotaStatus::inbox,
@@ -937,20 +995,20 @@ mod tests {
             updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
         };
 
-        data.add_task(task.clone());
+        data.add(nota.clone());
         assert_eq!(data.task_count(), 1);
-        assert_eq!(data.inbox.len(), 1);
+        assert_eq!(data.inbox().len(), 1);
         assert_eq!(data.find_task_by_id("task-1").unwrap().title, "Test Task");
     }
 
-    // 複数タスクの挿入テスト
-    // 5つのタスクを追加し、すべて正しく格納されることを確認
+    // 複数Notaの挿入テスト
+    // 5つのNotaを追加し、すべて正しく格納されることを確認
     #[test]
-    fn test_gtd_data_insert_multiple_tasks() {
+    fn test_gtd_data_insert_multiple_notas() {
         let mut data = GtdData::new();
 
         for i in 1..=5 {
-            let task = Task {
+            let nota = Nota {
                 id: format!("task-{}", i),
                 title: format!("Test Task {}", i),
                 status: NotaStatus::inbox,
@@ -961,21 +1019,21 @@ mod tests {
                 created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
                 updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
             };
-            data.add_task(task);
+            data.add(nota);
         }
 
         assert_eq!(data.task_count(), 5);
-        assert_eq!(data.inbox.len(), 5);
+        assert_eq!(data.inbox().len(), 5);
     }
 
-    // タスクステータスの更新テスト
-    // タスクのステータスをInboxからNextActionに更新し、正しく反映されることを確認
+    // Notaステータスの更新テスト
+    // NotaのステータスをInboxからNextActionに更新し、正しく反映されることを確認
     #[test]
-    fn test_gtd_data_update_task_status() {
+    fn test_gtd_data_update_nota_status() {
         let mut data = GtdData::new();
-        let task_id = "task-1".to_string();
-        let task = Task {
-            id: task_id.clone(),
+        let nota_id = "task-1".to_string();
+        let nota = Nota {
+            id: nota_id.clone(),
             title: "Test Task".to_string(),
             status: NotaStatus::inbox,
             project: None,
@@ -986,15 +1044,13 @@ mod tests {
             updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
         };
 
-        data.add_task(task);
+        data.add(nota);
 
         // Update status
-        if let Some(task) = data.find_task_by_id_mut(&task_id) {
-            task.status = NotaStatus::next_action;
-        }
+        data.move_status(&nota_id, NotaStatus::next_action);
 
         assert!(matches!(
-            data.find_task_by_id(&task_id).unwrap().status,
+            data.find_task_by_id(&nota_id).unwrap().status,
             NotaStatus::next_action
         ));
     }
@@ -1019,11 +1075,11 @@ mod tests {
 
         data.add_task(task);
         assert_eq!(data.task_count(), 1);
-        assert_eq!(data.inbox.len(), 1);
+        assert_eq!(data.inbox().len(), 1);
 
         data.remove_task(&task_id);
         assert_eq!(data.task_count(), 0);
-        assert_eq!(data.inbox.len(), 0);
+        assert_eq!(data.inbox().len(), 0);
     }
 
     // ステータス移動テスト - inbox から trash への移動
@@ -1045,16 +1101,16 @@ mod tests {
         };
 
         data.add_task(task);
-        assert_eq!(data.inbox.len(), 1);
-        assert_eq!(data.trash.len(), 0);
+        assert_eq!(data.inbox().len(), 1);
+        assert_eq!(data.trash().len(), 0);
 
         // Move task to trash
         let result = data.move_status(&task_id, NotaStatus::trash);
         assert!(result.is_some());
 
         // Verify task was moved
-        assert_eq!(data.inbox.len(), 0);
-        assert_eq!(data.trash.len(), 1);
+        assert_eq!(data.inbox().len(), 0);
+        assert_eq!(data.trash().len(), 1);
         assert_eq!(data.task_count(), 1);
 
         // Verify task status was updated
@@ -1081,16 +1137,16 @@ mod tests {
         };
 
         data.add_task(task);
-        assert_eq!(data.next_action.len(), 1);
-        assert_eq!(data.done.len(), 0);
+        assert_eq!(data.next_action().len(), 1);
+        assert_eq!(data.done().len(), 0);
 
         // Move task to done
         let result = data.move_status(&task_id, NotaStatus::done);
         assert!(result.is_some());
 
         // Verify task was moved
-        assert_eq!(data.next_action.len(), 0);
-        assert_eq!(data.done.len(), 1);
+        assert_eq!(data.next_action().len(), 0);
+        assert_eq!(data.done().len(), 1);
         assert_eq!(data.task_count(), 1);
 
         // Verify task status was updated
@@ -1120,8 +1176,8 @@ mod tests {
 
         // inbox -> next_action
         data.move_status(&task_id, NotaStatus::next_action);
-        assert_eq!(data.inbox.len(), 0);
-        assert_eq!(data.next_action.len(), 1);
+        assert_eq!(data.inbox().len(), 0);
+        assert_eq!(data.next_action().len(), 1);
         assert!(matches!(
             data.find_task_by_id(&task_id).unwrap().status,
             NotaStatus::next_action
@@ -1129,8 +1185,8 @@ mod tests {
 
         // next_action -> waiting_for
         data.move_status(&task_id, NotaStatus::waiting_for);
-        assert_eq!(data.next_action.len(), 0);
-        assert_eq!(data.waiting_for.len(), 1);
+        assert_eq!(data.next_action().len(), 0);
+        assert_eq!(data.waiting_for().len(), 1);
         assert!(matches!(
             data.find_task_by_id(&task_id).unwrap().status,
             NotaStatus::waiting_for
@@ -1138,8 +1194,8 @@ mod tests {
 
         // waiting_for -> done
         data.move_status(&task_id, NotaStatus::done);
-        assert_eq!(data.waiting_for.len(), 0);
-        assert_eq!(data.done.len(), 1);
+        assert_eq!(data.waiting_for().len(), 0);
+        assert_eq!(data.done().len(), 1);
         assert!(matches!(
             data.find_task_by_id(&task_id).unwrap().status,
             NotaStatus::done
@@ -1147,8 +1203,8 @@ mod tests {
 
         // done -> trash
         data.move_status(&task_id, NotaStatus::trash);
-        assert_eq!(data.done.len(), 0);
-        assert_eq!(data.trash.len(), 1);
+        assert_eq!(data.done().len(), 0);
+        assert_eq!(data.trash().len(), 1);
         assert!(matches!(
             data.find_task_by_id(&task_id).unwrap().status,
             NotaStatus::trash
@@ -1175,13 +1231,13 @@ mod tests {
         };
 
         data.add_task(task);
-        assert_eq!(data.inbox.len(), 1);
+        assert_eq!(data.inbox().len(), 1);
 
         // inbox -> calendar
         let result = data.move_status(&task_id, NotaStatus::calendar);
         assert!(result.is_some());
-        assert_eq!(data.inbox.len(), 0);
-        assert_eq!(data.calendar.len(), 1);
+        assert_eq!(data.inbox().len(), 0);
+        assert_eq!(data.calendar().len(), 1);
 
         let moved_task = data.find_task_by_id(&task_id).unwrap();
         assert!(matches!(moved_task.status, NotaStatus::calendar));
@@ -1671,10 +1727,10 @@ mod tests {
         }
 
         // Filter by Inbox
-        assert_eq!(data.inbox.len(), 1);
+        assert_eq!(data.inbox().len(), 1);
 
         // Filter by Done
-        assert_eq!(data.done.len(), 1);
+        assert_eq!(data.done().len(), 1);
 
         // Verify all statuses have exactly one task
         assert_eq!(data.task_count(), 8);
@@ -1840,7 +1896,7 @@ mod tests {
         }
 
         // Verify that tasks maintain insertion order
-        assert_eq!(data.inbox.len(), 5);
+        assert_eq!(data.inbox().len(), 5);
         for (i, task) in data.inbox.iter().enumerate() {
             assert_eq!(task.id, format!("task-{}", i + 1));
             assert_eq!(task.title, format!("Task {}", i + 1));
@@ -2729,7 +2785,7 @@ updated_at = "2024-01-01"
         assert_eq!(project2.title, "Second Project");
 
         // Verify task references still work
-        assert_eq!(data.inbox.len(), 1);
+        assert_eq!(data.inbox().len(), 1);
         assert_eq!(data.inbox[0].project, Some("project-1".to_string()));
 
         // Save to new format
@@ -2778,7 +2834,7 @@ notes = "Office context"
 
         // Verify it's automatically migrated to version 3
         assert_eq!(data.format_version, 3);
-        assert_eq!(data.inbox.len(), 1);
+        assert_eq!(data.inbox().len(), 1);
         assert_eq!(data.projects.len(), 1);
         assert_eq!(data.contexts.len(), 1);
 
@@ -2999,8 +3055,8 @@ notes = "Office context"
 
         // But there are actually TWO tasks with same ID (one in inbox, one in next_action)
         // This demonstrates why the application layer MUST check task_map before adding
-        assert_eq!(data.inbox.len(), 1);
-        assert_eq!(data.next_action.len(), 1);
+        assert_eq!(data.inbox().len(), 1);
+        assert_eq!(data.next_action().len(), 1);
     }
 
     #[test]
@@ -3349,7 +3405,7 @@ updated_at = "2024-01-01"
 
         data.add(nota.clone());
         assert_eq!(data.task_count(), 1);
-        assert_eq!(data.inbox.len(), 1);
+        assert_eq!(data.inbox().len(), 1);
 
         let found = data.find_by_id("task-1").unwrap();
         assert_eq!(found.title, "Test Task");
@@ -3571,7 +3627,7 @@ updated_at = "2024-01-01"
         assert_eq!(found.title, "New Title");
         assert_eq!(found.status, NotaStatus::next_action);
         assert_eq!(found.notes, Some("New notes".to_string()));
-        assert_eq!(data.next_action.len(), 1);
-        assert_eq!(data.inbox.len(), 0);
+        assert_eq!(data.next_action().len(), 1);
+        assert_eq!(data.inbox().len(), 0);
     }
 }
