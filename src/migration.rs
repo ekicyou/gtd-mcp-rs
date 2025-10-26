@@ -14,10 +14,11 @@
 //! ## Current Versions
 //!
 //! - **Version 1**: Projects stored as `Vec<Project>` (TOML: `[[projects]]`)
-//! - **Version 2**: Projects stored as `HashMap<String, Project>` (TOML: `[projects.id]`)
+//! - **Version 2**: Projects stored as `HashMap<String, Project>` (TOML: `[projects.id]`), separate arrays for each status
+//! - **Version 3**: Unified `[[notas]]` array with status field to determine type
 
 #[allow(unused_imports)]
-use crate::gtd::{Context, Project, Task, local_date_today};
+use crate::gtd::{Context, Nota, Project, Task, local_date_today};
 use serde::Deserialize;
 use std::collections::HashMap;
 
@@ -35,8 +36,8 @@ pub enum ProjectsFormat {
 #[derive(Deserialize)]
 pub struct GtdDataMigrationHelper {
     #[serde(default)]
-    #[allow(dead_code)] // Used for format detection
     pub(crate) format_version: u32,
+    // Version 2 format fields (separate arrays)
     #[serde(default)]
     pub(crate) inbox: Vec<Task>,
     #[serde(default)]
@@ -57,6 +58,9 @@ pub struct GtdDataMigrationHelper {
     pub(crate) projects: Option<ProjectsFormat>,
     #[serde(default)]
     pub(crate) contexts: HashMap<String, Context>,
+    // Version 3 format field (unified notas array)
+    #[serde(default)]
+    pub(crate) notas: Vec<Nota>,
     #[serde(default)]
     pub(crate) task_counter: u32,
     #[serde(default)]
@@ -186,6 +190,95 @@ pub fn normalize_context_line_endings(contexts: &mut HashMap<String, Context>) {
     for context in contexts.values_mut() {
         if let Some(notes) = &context.notes {
             context.notes = Some(normalize_string_line_endings(notes));
+        }
+    }
+}
+
+/// Convert unified notas from Version 3 format to separate arrays (Version 2 internal format)
+///
+/// Version 3 stores all items (tasks, projects, contexts) in a single `[[notas]]` array.
+/// This function separates them into the internal Version 2 format for easier processing.
+///
+/// # Arguments
+///
+/// * `notas` - Vector of notas from Version 3 format
+/// * `inbox` - Output vector for inbox tasks
+/// * `next_action` - Output vector for next_action tasks
+/// * `waiting_for` - Output vector for waiting_for tasks
+/// * `later` - Output vector for later tasks
+/// * `calendar` - Output vector for calendar tasks
+/// * `someday` - Output vector for someday tasks
+/// * `done` - Output vector for done tasks
+/// * `trash` - Output vector for trash tasks
+/// * `projects` - Output HashMap for projects
+/// * `contexts` - Output HashMap for contexts
+pub fn migrate_notas_v3_to_internal(
+    notas: Vec<Nota>,
+    inbox: &mut Vec<Task>,
+    next_action: &mut Vec<Task>,
+    waiting_for: &mut Vec<Task>,
+    later: &mut Vec<Task>,
+    calendar: &mut Vec<Task>,
+    someday: &mut Vec<Task>,
+    done: &mut Vec<Task>,
+    trash: &mut Vec<Task>,
+    projects: &mut HashMap<String, Project>,
+    contexts: &mut HashMap<String, Context>,
+) {
+    use crate::gtd::NotaStatus;
+
+    for nota in notas {
+        match nota.status {
+            NotaStatus::inbox => {
+                if let Some(task) = nota.to_task() {
+                    inbox.push(task);
+                }
+            }
+            NotaStatus::next_action => {
+                if let Some(task) = nota.to_task() {
+                    next_action.push(task);
+                }
+            }
+            NotaStatus::waiting_for => {
+                if let Some(task) = nota.to_task() {
+                    waiting_for.push(task);
+                }
+            }
+            NotaStatus::later => {
+                if let Some(task) = nota.to_task() {
+                    later.push(task);
+                }
+            }
+            NotaStatus::calendar => {
+                if let Some(task) = nota.to_task() {
+                    calendar.push(task);
+                }
+            }
+            NotaStatus::someday => {
+                if let Some(task) = nota.to_task() {
+                    someday.push(task);
+                }
+            }
+            NotaStatus::done => {
+                if let Some(task) = nota.to_task() {
+                    done.push(task);
+                }
+            }
+            NotaStatus::trash => {
+                if let Some(task) = nota.to_task() {
+                    trash.push(task);
+                }
+            }
+            NotaStatus::project => {
+                if let Some(project) = nota.to_project() {
+                    projects.insert(project.id.clone(), project);
+                }
+            }
+            NotaStatus::context => {
+                if let Some(context) = nota.to_context() {
+                    contexts.insert(context.name.clone(), context);
+                }
+            }
         }
     }
 }
