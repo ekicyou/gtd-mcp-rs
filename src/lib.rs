@@ -41,7 +41,7 @@ use std::sync::Mutex;
 
 // Re-export commonly used types
 pub use git_ops::GitOps;
-pub use gtd::{Context, GtdData, Nota, NotaStatus, Project, Task, local_date_today};
+pub use gtd::{GtdData, Nota, NotaStatus, local_date_today};
 pub use storage::Storage;
 
 /// MCP Server handler for GTD task management
@@ -631,7 +631,7 @@ impl McpServer for GtdServerHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::gtd::{Nota, local_date_today};
+    use crate::gtd::{Context, Nota, Project, Task, local_date_today};
     use chrono::NaiveDate;
     use tempfile::NamedTempFile;
 
