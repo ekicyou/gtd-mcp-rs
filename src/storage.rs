@@ -284,6 +284,7 @@ mod tests {
             created_at: local_date_today(),
             updated_at: local_date_today(),
             context: None,
+            status: None,
         };
         data.add_project(project.clone());
 
@@ -382,6 +383,7 @@ mod tests {
                 start_date: None,
                 created_at: local_date_today(),
                 updated_at: local_date_today(),
+                status: None,
             };
             data.add_project(project);
         }

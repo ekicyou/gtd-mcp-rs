@@ -75,14 +75,23 @@ pub struct Task {
 /// Projects represent multi-step outcomes that require more than one action.
 /// This structure is kept for backward compatibility with old TOML formats.
 /// New code should use Nota instead.
+///
+/// ## Legacy Field Name Support
+///
+/// This struct supports legacy field names from older TOML formats:
+/// - `name` is accepted as an alias for `title`
+/// - `description` is accepted as an alias for `notes`
+/// - `status` field is accepted but ignored during migration (was used in very old formats)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Project {
     /// Unique project identifier (e.g., "project-1", "project-2")
     #[serde(default)]
     pub id: String,
-    /// Project title
+    /// Project title (legacy: also accepts "name")
+    #[serde(alias = "name")]
     pub title: String,
-    /// Optional project notes
+    /// Optional project notes (legacy: also accepts "description")
+    #[serde(alias = "description")]
     pub notes: Option<String>,
     /// Optional parent project
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -98,6 +107,48 @@ pub struct Project {
     /// Last update date
     #[serde(default = "local_date_today")]
     pub updated_at: NaiveDate,
+    /// Legacy status field - accepted during deserialization for backward compatibility
+    ///
+    /// Old TOML files (format_version = 2 and earlier) may contain a "status" field
+    /// for projects. This field is accepted during deserialization but is not used
+    /// in the current system (projects don't have status - only tasks/notas do).
+    /// The field is never serialized back to TOML, ensuring clean migration to the
+    /// new format where projects are simply identified by their `id` and contained
+    /// in the `[projects.{id}]` section.
+    ///
+    /// Defaults to None if not specified in the TOML file.
+    #[serde(skip_serializing, default)]
+    pub status: Option<String>,
+}
+
+impl Project {
+    /// Create a new Project with all required fields, status defaults to None
+    ///
+    /// This helper method is used during migration from legacy formats to ensure
+    /// the status field is always set to None (it's not persisted in new format).
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        id: String,
+        title: String,
+        notes: Option<String>,
+        project: Option<String>,
+        context: Option<String>,
+        start_date: Option<NaiveDate>,
+        created_at: NaiveDate,
+        updated_at: NaiveDate,
+    ) -> Self {
+        Self {
+            id,
+            title,
+            notes,
+            project,
+            context,
+            start_date,
+            created_at,
+            updated_at,
+            status: None,
+        }
+    }
 }
 
 /// A GTD context (legacy, used for migration only)
@@ -431,6 +482,7 @@ mod tests {
                 created_at: local_date_today(),
                 updated_at: local_date_today(),
                 context: None,
+                status: None,
             },
             Project {
                 id: "project-2".to_string(),
@@ -441,6 +493,7 @@ mod tests {
                 created_at: local_date_today(),
                 updated_at: local_date_today(),
                 context: Some("Office".to_string()),
+                status: None,
             },
         ];
 
@@ -489,11 +542,137 @@ mod tests {
                 created_at: local_date_today(),
                 updated_at: local_date_today(),
                 context: None,
+                status: None,
             },
         );
 
         populate_project_ids(&mut projects);
 
         assert_eq!(projects["proj-1"].id, "proj-1");
+    }
+
+    #[test]
+    fn test_project_legacy_field_names() {
+        // Test that "name" is accepted as alias for "title"
+        let toml_with_name = r#"
+[projects.test-proj]
+name = "Legacy Project Name"
+description = "Legacy description field"
+status = "active"
+context = "Office"
+"#;
+
+        // Need to wrap in a struct that has projects field
+        #[derive(Deserialize)]
+        struct Wrapper {
+            projects: std::collections::HashMap<String, Project>,
+        }
+
+        let wrapper: Wrapper = toml::from_str(toml_with_name).unwrap();
+        let mut data = wrapper.projects;
+
+        populate_project_ids(&mut data);
+        let project = &data["test-proj"];
+        assert_eq!(project.id, "test-proj");
+        assert_eq!(project.title, "Legacy Project Name");
+        assert_eq!(project.notes, Some("Legacy description field".to_string()));
+        assert_eq!(project.context, Some("Office".to_string()));
+    }
+
+    #[test]
+    fn test_project_legacy_and_new_fields_mixed() {
+        // Test that both old and new field names work
+        let toml_mixed = r#"
+[projects.old-style]
+name = "Old Style Project"
+description = "Old description"
+
+[projects.new-style]
+title = "New Style Project"
+notes = "New notes"
+"#;
+
+        #[derive(Deserialize)]
+        struct Wrapper {
+            projects: std::collections::HashMap<String, Project>,
+        }
+
+        let wrapper: Wrapper = toml::from_str(toml_mixed).unwrap();
+        let mut data = wrapper.projects;
+        populate_project_ids(&mut data);
+
+        let old_project = &data["old-style"];
+        assert_eq!(old_project.title, "Old Style Project");
+        assert_eq!(old_project.notes, Some("Old description".to_string()));
+
+        let new_project = &data["new-style"];
+        assert_eq!(new_project.title, "New Style Project");
+        assert_eq!(new_project.notes, Some("New notes".to_string()));
+    }
+
+    #[test]
+    fn test_user_toml_format_reproducer() {
+        // Reproduce the exact error from the issue
+        let user_toml = r##"
+format_version = 2
+task_counter = 62
+project_counter = 4
+
+[[next_action]]
+id = "#13"
+title = "4章を攻略する"
+project = "FFT"
+context = "自宅"
+created_at = "2025-10-10"
+updated_at = "2025-10-10"
+
+[projects.rust-gui]
+name = "Rust GUI フレームワーク開発"
+description = "RustでGUIフレームワークを作成するプロジェクト"
+status = "active"
+context = "自宅"
+
+[projects.ECI]
+name = "ECI"
+description = "仕事のソフトウェア開発プロジェクト"
+status = "active"
+context = "仕事"
+"##;
+
+        // This should not fail with "data did not match any variant of untagged enum ProjectsFormat"
+        let result: Result<crate::gtd::GtdData, _> = toml::from_str(user_toml);
+        assert!(
+            result.is_ok(),
+            "Failed to parse user's TOML: {:?}",
+            result.err()
+        );
+
+        let data = result.unwrap();
+
+        // Verify the projects were loaded correctly
+        let projects = data.projects();
+        assert_eq!(projects.len(), 2);
+
+        let rust_gui = projects.get("rust-gui").unwrap();
+        assert_eq!(rust_gui.title, "Rust GUI フレームワーク開発");
+        assert_eq!(
+            rust_gui.notes,
+            Some("RustでGUIフレームワークを作成するプロジェクト".to_string())
+        );
+        assert_eq!(rust_gui.context, Some("自宅".to_string()));
+
+        let eci = projects.get("ECI").unwrap();
+        assert_eq!(eci.title, "ECI");
+        assert_eq!(
+            eci.notes,
+            Some("仕事のソフトウェア開発プロジェクト".to_string())
+        );
+        assert_eq!(eci.context, Some("仕事".to_string()));
+
+        // Verify the task was loaded
+        assert_eq!(data.next_action().len(), 1);
+        let task = data.next_action()[0];
+        assert_eq!(task.id, "#13");
+        assert_eq!(task.title, "4章を攻略する");
     }
 }
