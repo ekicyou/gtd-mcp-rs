@@ -17,6 +17,7 @@
 //! - **Version 2**: Projects stored as `HashMap<String, Project>` (TOML: `[projects.id]`), separate arrays for each status
 //! - **Version 3**: Unified `[[notas]]` array with status field to determine type
 //! - **Version 4**: Internal storage uses `Vec<Nota>`, serializes as `[[notas]]`
+//! - **Version 5**: Internal storage uses `Vec<Nota>`, serializes as separate status arrays (`[[inbox]]`, `[[next_action]]`, etc.)
 
 use crate::gtd::{Nota, NotaStatus};
 use chrono::{Local, NaiveDate};
@@ -109,7 +110,8 @@ pub struct Project {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Context {
     /// Context name (e.g., "Office", "Home") - serves as ID
-    #[serde(default)]
+    /// Can also be deserialized from "id" field for V5 format compatibility
+    #[serde(default, alias = "id")]
     pub name: String,
     /// Context title (same as name for contexts)
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -155,7 +157,8 @@ pub struct GtdDataMigrationHelper {
     #[serde(default)]
     #[allow(dead_code)] // Used for format detection during deserialization
     pub(crate) format_version: u32,
-    // Version 2 format fields (separate arrays)
+    // Version 2/5 format fields (separate arrays)
+    // For V2, these are Vec<Task>. For V5, we also support Vec<Nota>.
     #[serde(default)]
     pub(crate) inbox: Vec<Task>,
     #[serde(default)]
@@ -181,6 +184,7 @@ pub struct GtdDataMigrationHelper {
     pub(crate) project: Vec<Project>,
     #[serde(default)]
     pub(crate) context: Vec<Context>,
+    // Version 4 format field (unified notas array)
     #[serde(default)]
     pub(crate) notas: Vec<Nota>,
     #[serde(default)]

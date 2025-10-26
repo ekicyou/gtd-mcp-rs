@@ -225,12 +225,13 @@ impl Nota {
 /// - Version 1 (legacy): Projects stored as `Vec<Project>` (TOML: `[[projects]]`)
 /// - Version 2 (legacy): Projects stored as `HashMap<String, Project>` (TOML: `[projects.id]`), separate arrays for each status
 /// - Version 3 (legacy): Projects and contexts stored as Vec (TOML: `[[project]]`, `[[context]]`)
-/// - Version 4 (current): All items stored as unified Nota array (TOML: `[[notas]]`)
+/// - Version 4 (legacy): All items stored as unified Nota array (TOML: `[[notas]]`)
+/// - Version 5 (current): Items stored in separate arrays by status (TOML: `[[inbox]]`, `[[next_action]]`, etc.)
 ///
 /// The deserializer automatically migrates from older versions to the current internal format.
 #[derive(Debug)]
 pub struct GtdData {
-    /// Format version for the TOML file (current: 4)
+    /// Format version for the TOML file (current: 5)
     pub format_version: u32,
     /// All GTD items stored as Nota objects
     pub(crate) notas: Vec<Nota>,
@@ -245,7 +246,7 @@ pub struct GtdData {
 impl Default for GtdData {
     fn default() -> Self {
         Self {
-            format_version: 4,
+            format_version: 5,
             notas: Vec::new(),
             nota_map: HashMap::new(),
             task_counter: 0,
@@ -257,7 +258,7 @@ impl Default for GtdData {
 /// Default format version for new files
 #[allow(dead_code)] // Used by serde
 fn default_format_version() -> u32 {
-    4
+    5
 }
 
 impl<'de> Deserialize<'de> for GtdData {
@@ -273,10 +274,10 @@ impl<'de> Deserialize<'de> for GtdData {
 
         let helper = GtdDataMigrationHelper::deserialize(deserializer)?;
 
-        // Start with notas from Version 4 format if available
+        // Start with notas from Version 4/5 format if available
         let mut notas = helper.notas;
 
-        // If notas is empty, we need to migrate from older formats
+        // If notas is empty, we need to migrate from older formats or Version 5 status-based arrays
         if notas.is_empty() {
             // Initialize collections for migration
             let mut inbox = helper.inbox;
@@ -384,7 +385,7 @@ impl<'de> Deserialize<'de> for GtdData {
         }
 
         Ok(GtdData {
-            format_version: 4, // Use version 4 for in-memory representation
+            format_version: 5, // Use version 5 for in-memory representation
             notas,
             nota_map,
             task_counter: helper.task_counter,
@@ -400,12 +401,51 @@ impl Serialize for GtdData {
     {
         use serde::ser::SerializeStruct;
 
-        let mut state = serializer.serialize_struct("GtdData", 4)?;
+        let mut state = serializer.serialize_struct("GtdData", 13)?;
         state.serialize_field("format_version", &self.format_version)?;
 
-        // Serialize all items as unified notas array (Version 4 format: [[notas]])
-        if !self.notas.is_empty() {
-            state.serialize_field("notas", &self.notas)?;
+        // Separate notas by status (Version 5 format)
+        let inbox: Vec<&Nota> = self.notas.iter().filter(|n| n.status == NotaStatus::inbox).collect();
+        let next_action: Vec<&Nota> = self.notas.iter().filter(|n| n.status == NotaStatus::next_action).collect();
+        let waiting_for: Vec<&Nota> = self.notas.iter().filter(|n| n.status == NotaStatus::waiting_for).collect();
+        let later: Vec<&Nota> = self.notas.iter().filter(|n| n.status == NotaStatus::later).collect();
+        let calendar: Vec<&Nota> = self.notas.iter().filter(|n| n.status == NotaStatus::calendar).collect();
+        let someday: Vec<&Nota> = self.notas.iter().filter(|n| n.status == NotaStatus::someday).collect();
+        let done: Vec<&Nota> = self.notas.iter().filter(|n| n.status == NotaStatus::done).collect();
+        let context: Vec<&Nota> = self.notas.iter().filter(|n| n.status == NotaStatus::context).collect();
+        let project: Vec<&Nota> = self.notas.iter().filter(|n| n.status == NotaStatus::project).collect();
+        let trash: Vec<&Nota> = self.notas.iter().filter(|n| n.status == NotaStatus::trash).collect();
+
+        // Serialize each status array (only if non-empty)
+        if !inbox.is_empty() {
+            state.serialize_field("inbox", &inbox)?;
+        }
+        if !next_action.is_empty() {
+            state.serialize_field("next_action", &next_action)?;
+        }
+        if !waiting_for.is_empty() {
+            state.serialize_field("waiting_for", &waiting_for)?;
+        }
+        if !later.is_empty() {
+            state.serialize_field("later", &later)?;
+        }
+        if !calendar.is_empty() {
+            state.serialize_field("calendar", &calendar)?;
+        }
+        if !someday.is_empty() {
+            state.serialize_field("someday", &someday)?;
+        }
+        if !done.is_empty() {
+            state.serialize_field("done", &done)?;
+        }
+        if !context.is_empty() {
+            state.serialize_field("context", &context)?;
+        }
+        if !project.is_empty() {
+            state.serialize_field("project", &project)?;
+        }
+        if !trash.is_empty() {
+            state.serialize_field("trash", &trash)?;
         }
 
         if self.task_counter != 0 {
@@ -1779,10 +1819,10 @@ mod tests {
         });
 
         let serialized = toml::to_string(&data).unwrap();
-        // V4 format uses [[notas]] with status field
+        // V5 format uses [[next_action]] with status field
         assert!(
-            serialized.contains("[[notas]]"),
-            "Expected '[[notas]]' in TOML output"
+            serialized.contains("[[next_action]]"),
+            "Expected '[[next_action]]' in TOML output"
         );
         assert!(
             serialized.contains("status = \"next_action\""),
@@ -1934,18 +1974,30 @@ mod tests {
 
         // TOML構造と可読性を確認
         println!(
-            "\n=== TOML Output (V4) ===\n{}\n===================\n",
+            "\n=== TOML Output (V5) ===\n{}\n===================\n",
             toml_output
         );
 
-        // V4形式の期待される構造を検証
+        // V5形式の期待される構造を検証
         assert!(
-            toml_output.contains("format_version = 4"),
-            "Should be version 4"
+            toml_output.contains("format_version = 5"),
+            "Should be version 5"
         );
         assert!(
-            toml_output.contains("[[notas]]"),
-            "Should have unified [[notas]] sections"
+            toml_output.contains("[[inbox]]"),
+            "Should have [[inbox]] section"
+        );
+        assert!(
+            toml_output.contains("[[next_action]]"),
+            "Should have [[next_action]] section"
+        );
+        assert!(
+            toml_output.contains("[[project]]"),
+            "Should have [[project]] section"
+        );
+        assert!(
+            toml_output.contains("[[context]]"),
+            "Should have [[context]] section"
         );
 
         // 各アイテムが含まれていることを確認
@@ -2047,11 +2099,11 @@ name = "Home"
         assert_eq!(home.id, "Home");
         assert_eq!(home.notes, None);
 
-        // 再シリアライズするとVersion 4形式（[[notas]]統一配列）になることを確認
+        // 再シリアライズするとVersion 5形式（status-based arrays）になることを確認
         let reserialized = toml::to_string_pretty(&deserialized).unwrap();
         assert!(
-            reserialized.contains("[[notas]]"),
-            "Reserialized TOML should use [[notas]] unified array format"
+            reserialized.contains("[[context]]"),
+            "Reserialized TOML should use [[context]] array format"
         );
         assert!(
             reserialized.contains("id = \"Office\""),
@@ -2682,8 +2734,8 @@ updated_at = "2024-01-01"
         // Load old format
         let data: GtdData = toml::from_str(old_format_toml).unwrap();
 
-        // Verify it's automatically migrated to version 4
-        assert_eq!(data.format_version, 4);
+        // Verify it's automatically migrated to version 5
+        assert_eq!(data.format_version, 5);
         assert_eq!(data.projects().len(), 2);
 
         // Verify projects are accessible
@@ -2704,22 +2756,22 @@ updated_at = "2024-01-01"
         // Save to new format
         let new_format_toml = toml::to_string_pretty(&data).unwrap();
 
-        // Verify new format has unified [[notas]] and version 4
-        assert!(new_format_toml.contains("format_version = 4"));
-        assert!(new_format_toml.contains("[[notas]]"));
-        assert!(!new_format_toml.contains("[[inbox]]"));
-        assert!(!new_format_toml.contains("[[projects]]"));
+        // Verify new format has status-based arrays and version 5
+        assert!(new_format_toml.contains("format_version = 5"));
+        assert!(new_format_toml.contains("[[inbox]]"));
+        assert!(new_format_toml.contains("[[project]]"));
+        assert!(!new_format_toml.contains("[[notas]]"));
 
         // Verify round-trip works
         let reloaded: GtdData = toml::from_str(&new_format_toml).unwrap();
-        assert_eq!(reloaded.format_version, 4);
+        assert_eq!(reloaded.format_version, 5);
         assert_eq!(reloaded.projects().len(), 2);
         assert!(reloaded.projects().contains_key("project-1"));
         assert!(reloaded.projects().contains_key("project-2"));
     }
 
-    // フォーマットバージョン2からバージョン4への自動マイグレーションテスト
-    // バージョン2形式のTOMLを読み込み、バージョン4で保存されることを確認
+    // フォーマットバージョン2からバージョン5への自動マイグレーションテスト
+    // バージョン2形式のTOMLを読み込み、バージョン5で保存されることを確認
     #[test]
     fn test_format_migration_v2_to_v4() {
         // Format version 2: projects as HashMap
@@ -2745,8 +2797,8 @@ notes = "Office context"
         // Load version 2 format
         let data: GtdData = toml::from_str(v2_format_toml).unwrap();
 
-        // Verify it's automatically migrated to version 4
-        assert_eq!(data.format_version, 4);
+        // Verify it's automatically migrated to version 5
+        assert_eq!(data.format_version, 5);
         assert_eq!(data.inbox().len(), 1);
         assert_eq!(data.projects().len(), 1);
         assert_eq!(data.contexts().len(), 1);
@@ -2767,13 +2819,15 @@ notes = "Office context"
         // Save to new format
         let new_format_toml = toml::to_string_pretty(&data).unwrap();
 
-        // Verify new format has version 4 and unified [[notas]]
-        assert!(new_format_toml.contains("format_version = 4"));
-        assert!(new_format_toml.contains("[[notas]]"));
+        // Verify new format has version 5 and status-based arrays
+        assert!(new_format_toml.contains("format_version = 5"));
+        assert!(new_format_toml.contains("[[inbox]]"));
+        assert!(new_format_toml.contains("[[project]]"));
+        assert!(new_format_toml.contains("[[context]]"));
 
         // Verify round-trip works
         let reloaded: GtdData = toml::from_str(&new_format_toml).unwrap();
-        assert_eq!(reloaded.format_version, 4);
+        assert_eq!(reloaded.format_version, 5);
         assert_eq!(reloaded.inbox().len(), 1);
         assert_eq!(reloaded.projects().len(), 1);
         assert_eq!(reloaded.contexts().len(), 1);
@@ -2885,17 +2939,17 @@ notes = "Office context"
 
         let toml_str = toml::to_string(&data).unwrap();
 
-        // V4 format uses unified [[notas]] section
+        // V5 format uses status-based arrays
         assert!(
-            toml_str.contains("[[notas]]"),
-            "Should contain [[notas]] section"
+            toml_str.contains("[[inbox]]"),
+            "Should contain [[inbox]] section"
         );
         assert!(
-            toml_str.contains("format_version = 4"),
-            "Should be version 4"
+            toml_str.contains("format_version = 5"),
+            "Should be version 5"
         );
 
-        // Verify all statuses are represented in the notas
+        // Verify all statuses are represented in their own sections
         for status in &statuses {
             let status_str = format!("{:?}", status);
             assert!(
