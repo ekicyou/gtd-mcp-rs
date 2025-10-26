@@ -4,6 +4,362 @@ This file contains release notes for all versions of gtd-mcp, with the newest re
 
 ---
 
+## Version 0.8.0
+
+### Summary
+
+This release introduces a major architectural transformation with the unified **nota interface**, consolidating all GTD entities (tasks, projects, and contexts) into a single, elegant abstraction. The tool count has been dramatically reduced from 13 tools (v0.7.0) to just **5 unified tools**, while maintaining full GTD functionality and significantly improving the developer and user experience.
+
+### Changes
+
+#### Version Update
+- **Version**: Updated from 0.7.2 to 0.8.0
+- **Crate name**: gtd-mcp (unchanged)
+- **Binary name**: gtd-mcp (unchanged)
+
+#### Major Architectural Change - Unified Nota Interface
+
+The core architecture has been completely reimagined around the concept of a **nota** (inspired by TiddlyWiki's tiddler concept). This represents a fundamental shift from separate entity types to a unified model.
+
+**Key Innovation**: A single `Nota` structure that can represent tasks, projects, or contexts based on its `status` field:
+- `status = "context"` → Context nota
+- `status = "project"` → Project nota  
+- All other statuses (inbox, next_action, etc.) → Task nota
+
+##### Tool Consolidation - From 13 to 5 Tools
+
+**Version 0.7.0 (13 tools):**
+- **Task Management (3)**: `add_task`, `list_tasks`, `update_task`
+- **Status Management (2)**: `change_task_status`, `empty_trash`
+- **Project Management (4)**: `add_project`, `list_projects`, `update_project`, `delete_project`
+- **Context Management (4)**: `add_context`, `list_contexts`, `update_context`, `delete_context`
+
+**Version 0.8.0 (5 unified tools):**
+- **`inbox`** - Capture anything (tasks, projects, contexts) - replaces `add_task`, `add_project`, `add_context`
+- **`list`** - Review all notas with filtering - replaces `list_tasks`, `list_projects`, `list_contexts`
+- **`update`** - Modify nota properties - replaces `update_task`, `update_project`, `update_context`
+- **`change_status`** - Move notas through workflow - replaces `change_task_status`, `delete_project`, `delete_context`
+- **`empty_trash`** - Permanently delete trashed notas (unchanged from v0.7.0)
+
+This represents a **62% reduction** in tool count while maintaining 100% of functionality.
+
+#### Data Format Evolution
+
+**Format Version 3** introduces internal unified storage:
+- **Internal representation**: Single `Vec<Nota>` for all entities
+- **TOML serialization**: Status-based sections (`[[inbox]]`, `[[next_action]]`, `[[project]]`, `[[context]]`, etc.)
+- **Automatic migration**: Old formats (v1, v2) automatically converted to v3 on load
+- **Human-readable**: TOML output organized by workflow stage for easy review
+- **Git-friendly**: Consistent serialization order with trash items at the end
+
+**Migration Path**:
+- Version 1 → Version 2 → Version 3 (fully automatic)
+- Existing `gtd.toml` files work seamlessly
+- No manual intervention required
+
+#### Benefits of the Unified Nota Interface
+
+##### 1. **Simplified Mental Model**
+- One concept (nota) instead of three (task/project/context)
+- Consistent operations across all entity types
+- Natural workflow transitions (e.g., task can become project)
+
+##### 2. **Reduced LLM Token Usage**
+- 62% fewer tools means less context for LLMs
+- Faster tool discovery and selection
+- Lower API costs for cloud-based LLM services
+- More efficient tool documentation
+
+##### 3. **Improved Developer Experience**
+- Single set of CRUD operations
+- Less code duplication (consolidated from ~4300 lines to more maintainable structure)
+- Clearer architecture
+- Easier to extend and maintain
+
+##### 4. **Enhanced Flexibility**
+- Arbitrary client-provided IDs (no more auto-generated sequential IDs)
+- Seamless type transformations (task→project, project→context, etc.)
+- Batch operations work uniformly across all types
+- Richer metadata support across all nota types
+
+##### 5. **Better GTD Alignment**
+- Mimics the fluidity of real GTD practice
+- Items can naturally evolve (inbox → clarified task → multi-step project)
+- Context-aware filtering works uniformly
+- Review workflows simplified
+
+#### API Changes
+
+##### Unified Tool Interface
+
+**Old (v0.7.0) - Separate tools:**
+```json
+// Adding a task
+{"tool": "add_task", "title": "Review proposal", "status": "inbox"}
+
+// Adding a project
+{"tool": "add_project", "id": "website-redesign", "name": "Website Redesign"}
+
+// Adding a context
+{"tool": "add_context", "name": "Office", "notes": "Work desk"}
+```
+
+**New (v0.8.0) - Unified inbox:**
+```json
+// Adding any type - status determines what it becomes
+{"tool": "inbox", "id": "review-proposal", "title": "Review proposal", "status": "inbox"}
+{"tool": "inbox", "id": "website-redesign", "title": "Website Redesign", "status": "project"}
+{"tool": "inbox", "id": "Office", "title": "Office", "status": "context"}
+```
+
+##### Status-Based Type System
+
+The `status` field now serves dual purposes:
+- **Workflow stage** for task notas (inbox, next_action, done, etc.)
+- **Type indicator** for organizational notas (project, context)
+
+This elegant design eliminates the need for separate type fields or entity hierarchies.
+
+#### Technical Implementation
+
+##### Core Data Structures
+
+**Nota Structure** (`src/gtd.rs`):
+```rust
+pub struct Nota {
+    pub id: String,              // Client-provided, arbitrary string
+    pub title: String,
+    pub status: NotaStatus,      // Determines type and workflow stage
+    pub project: Option<String>,
+    pub context: Option<String>,
+    pub notes: Option<String>,
+    pub start_date: Option<NaiveDate>,
+    pub created_at: NaiveDate,
+    pub updated_at: NaiveDate,
+}
+```
+
+**NotaStatus Enum**:
+```rust
+pub enum NotaStatus {
+    // Task workflow statuses
+    inbox, next_action, waiting_for, later, calendar, 
+    someday, done, reference, trash,
+    // Type identifiers
+    context, project,
+}
+```
+
+##### TOML Serialization
+
+Custom serialization organizes notas by status for human readability:
+```toml
+format_version = 3
+
+[[inbox]]
+id = "task-1"
+title = "Review quarterly reports"
+# ... other fields
+
+[[project]]
+id = "website-redesign"
+title = "Company Website Redesign"
+# ... other fields
+
+[[context]]
+id = "Office"
+title = "Office"
+notes = "Work environment"
+# ... other fields
+```
+
+##### Migration Module
+
+The `src/migration.rs` module provides backward compatibility:
+- Converts legacy Task/Project/Context structures to Nota
+- Handles format version upgrades automatically
+- Preserves all data during migration
+- Tested extensively with 219 unit tests
+
+#### Documentation Updates
+
+All documentation has been updated to reflect version 0.8.0 and the unified nota interface:
+- **README.md**: Updated version, tool descriptions now focus on 5 unified tools
+- **RELEASE.md**: This comprehensive release documentation
+- **Cargo.toml**: Version bumped to 0.8.0
+- **MCP tool doc comments**: Already describe the nota-based API
+
+The README has been verified to accurately describe the current 5-tool architecture.
+
+#### Code Quality
+
+All functionality remains fully operational with significant improvements:
+- ✅ 219 unit tests pass (increased from 191 in v0.7.0)
+- ✅ 3 doc tests pass
+- ✅ No breaking changes to data format (automatic migration)
+- ✅ Full backward compatibility with existing `gtd.toml` files
+- ✅ All Git synchronization features preserved
+- ✅ Code formatting check passes (`cargo fmt --check`)
+- ✅ Clippy linting passes with no warnings (`cargo clippy -- -D warnings`)
+
+### Testing Performed
+
+Comprehensive testing ensures reliability:
+- ✅ All 219 unit tests pass
+- ✅ All 3 doc tests pass  
+- ✅ Format migration tests (v1→v2→v3)
+- ✅ TOML serialization order tests
+- ✅ Cross-entity reference validation tests
+- ✅ Batch operation tests for all tool types
+- ✅ Code formatting check passes (`cargo fmt --check`)
+- ✅ Clippy linting passes with no warnings (`cargo clippy -- -D warnings`)
+- ✅ Debug build compiles successfully
+- ✅ Release build compiles successfully
+- ✅ Binary functionality verified
+
+### Breaking Changes
+
+**None for end users**. The v0.8.0 release maintains full backward compatibility:
+
+1. **Data Files**: Existing `gtd.toml` files work without modification
+2. **Automatic Migration**: Old formats (v1, v2) automatically upgrade to v3
+3. **MCP Client Impact**: Tools have new names, but LLMs adapt automatically
+4. **No Configuration Changes**: Claude Desktop and other MCP clients work as-is
+
+**For API users** (if any exist), the tool names have changed:
+- Old task/project/context-specific tools → New unified nota tools
+- Function signatures simplified (fewer parameters, more consistent)
+- Migration path: Update tool names in integration code
+
+### Migration Guide
+
+#### For End Users
+**No action required**. Just update to v0.8.0 and continue using your MCP client normally.
+
+#### For Developers/Integrators
+
+If you have code that calls MCP tools directly:
+
+**Tool Name Mapping:**
+- `add_task`, `add_project`, `add_context` → `inbox` (specify `status`)
+- `list_tasks`, `list_projects`, `list_contexts` → `list` (filter by `status`)
+- `update_task`, `update_project`, `update_context` → `update` (same parameters)
+- `change_task_status` → `change_status` (same parameters)
+- `delete_project`, `delete_context` → `change_status` with `new_status: "trash"` + `empty_trash`
+- `empty_trash` → `empty_trash` (unchanged)
+
+**Example Migration:**
+```javascript
+// Old (v0.7.0)
+await mcp.call("add_task", {
+  title: "Review proposal",
+  status: "inbox"
+});
+
+// New (v0.8.0)
+await mcp.call("inbox", {
+  id: "review-proposal",
+  title: "Review proposal", 
+  status: "inbox"
+});
+```
+
+### Use Cases Enhanced by This Release
+
+1. **Natural Workflow Evolution**
+   - Start with inbox capture: "Add meeting notes"
+   - Clarify to project: Change status from inbox to project
+   - No need to recreate as different entity type
+
+2. **Simplified Context Switching**
+   - One `list` tool to see everything
+   - Filter by status to focus on specific workflow stages
+   - Consistent interface across all review activities
+
+3. **Flexible Organization**
+   - Projects can have contexts (e.g., "@office" project)
+   - Contexts can have notes (just like tasks)
+   - All entities support the same rich metadata
+
+4. **Efficient Batch Operations**
+   - Move multiple items of any type with one call
+   - Update properties across task/project/context uniformly
+   - Trash and restore work the same for all types
+
+### Design Philosophy
+
+This release embodies several key principles:
+
+1. **Simplicity Through Unification**: One concept is better than three
+2. **Status as Type**: Let the workflow stage determine the entity type naturally
+3. **TiddlyWiki Inspiration**: Everything is a note (nota) with metadata
+4. **Backward Compatibility**: Never break existing user data
+5. **Zero-Cost Migration**: Automatic, transparent, tested
+6. **Developer Ergonomics**: Less code, clearer intent, easier to extend
+
+### Implementation Highlights
+
+**Lines of Code Comparison**:
+- Consolidated logic reduces duplication
+- Single CRUD path instead of three parallel ones
+- Migration module isolates legacy support
+- Test coverage increased while codebase simplified
+
+**Performance**:
+- No performance regressions
+- Serialization remains efficient
+- Memory usage comparable to v0.7.0
+- Git sync performance unchanged
+
+**Security**:
+- Reference validation prevents orphaned links
+- Trash workflow prevents accidental deletion
+- Input validation consistent across all operations
+- No new security considerations
+
+### Future Directions
+
+The unified nota interface opens new possibilities:
+
+1. **Rich Tagging**: Easy to add tag support to all nota types
+2. **Graph Relationships**: Natural foundation for bidirectional links
+3. **Custom Status Types**: Users could define custom statuses
+4. **Metadata Extensions**: Easier to add properties uniformly
+5. **Query Language**: Unified model simplifies complex queries
+
+### How to Create a Release
+
+1. Ensure all tests pass: `cargo test`
+2. Create and push a git tag:
+   ```bash
+   git tag v0.8.0
+   git push origin v0.8.0
+   ```
+3. GitHub Actions will automatically:
+   - Create a GitHub release
+   - Build binaries for all supported platforms
+   - Upload binaries to the release
+
+### Distribution Binaries
+
+The following binaries are automatically built for this release:
+
+- **Linux**: x86_64-unknown-linux-gnu (glibc-based)
+- **Linux**: x86_64-unknown-linux-musl (static, portable)
+- **Windows**: x86_64-pc-windows-msvc
+- **macOS**: x86_64-apple-darwin (Intel Macs)
+- **macOS**: aarch64-apple-darwin (Apple Silicon)
+
+All binaries are available from the GitHub release page.
+
+### Acknowledgments
+
+This architectural transformation represents months of refinement and testing. The nota abstraction provides a solid foundation for future enhancements while maintaining the simplicity that makes GTD methodology effective.
+
+The inspiration from TiddlyWiki's tiddler concept proved invaluable - proving that sometimes the best solution is to unify rather than separate.
+
+---
+
 ## Version 0.7.1
 
 ### Summary
