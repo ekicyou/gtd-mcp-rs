@@ -78,7 +78,7 @@ The unified nota API is **exceptionally well-designed for LLM use**:
 // Add to Task struct
 pub due_date: Option<NaiveDate>,
 
-// Update add_task and update_task to accept due_date parameter
+// Update inbox and update tools to accept due_date parameter
 ```
 
 #### 2. Task Priority/Energy Levels
@@ -171,7 +171,7 @@ async fn tickler_file_view(
 
 | GTD Concept | Implementation Status | Notes |
 |-------------|----------------------|-------|
-| **Capture** | ✅ Complete | `add_task` to inbox |
+| **Capture** | ✅ Complete | `inbox` tool |
 | **Clarify** | ✅ Complete | Status transitions |
 | **Organize** | ✅ Good | Projects, contexts, status |
 | **Reflect** | ⚠️ Partial | Missing weekly review views |

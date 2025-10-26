@@ -190,9 +190,9 @@ Guide for identifying and managing next actions:
 - Choosing what to do (consider context, time, energy, priority)
 - Post-completion steps
 
-### add_task_guide
-Best practices for creating well-formed tasks:
-- Good vs. poor task title examples
+### inbox_guide
+Best practices for capturing notas (tasks, projects, contexts):
+- Good vs. poor nota title examples
 - When to use optional fields (project, context, notes, start_date)
 - Recommended workflow (quick capture → process → add details)
 
