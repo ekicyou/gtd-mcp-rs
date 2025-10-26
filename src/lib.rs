@@ -154,29 +154,17 @@ impl Drop for GtdServerHandler {
     }
 }
 
-/// GTD (Getting Things Done) task management server implementing David Allen's productivity methodology.
+/// GTD task management server implementing David Allen's methodology.
+/// Workflow: Capture(inbox) → Review(list) → Clarify(update) → Organize(change_status) → Do → Purge(empty_trash)
 ///
-/// This server helps you capture, organize, and track tasks through a proven workflow system.
-/// GTD organizes tasks into different status categories (inbox, next_action, waiting_for, someday, later, calendar, done, reference, trash)
-/// and supports projects (multi-step endeavors) and contexts (environments/tools like @office, @home).
-///
-/// Key concepts:
-/// - **inbox**: Unprocessed items (start here)
-/// - **next_action**: Ready-to-execute tasks (focus here)
-/// - **waiting_for**: Blocked tasks awaiting someone/something
-/// - **someday**: Potential future actions
-/// - **later**: Deferred but planned tasks
-/// - **calendar**: Date-specific tasks
-/// - **done**: Completed tasks
-/// - **reference**: Non-actionable reference material for future use
-/// - **trash**: Deleted tasks
-///
-/// Task IDs use format: #1, #2, #3
-/// Project IDs: Use meaningful abbreviations (e.g., "website-redesign", "q1-budget")
+/// **Statuses**: inbox(start) | next_action(ready) | waiting_for(blocked) | later(deferred) | calendar(dated) | someday(maybe) | done | reference | trash
+/// **Types**: task | project(multi-step) | context(@location)
+/// **IDs**: Use meaningful strings (e.g., "call-john", "website-redesign")
 #[mcp_server]
 impl McpServer for GtdServerHandler {
-    /// **GTD Purge**: Permanently delete trashed items. Run weekly. Checks references to prevent broken links.
-    /// **Workflow**: Trash items via change_status first, then empty_trash to delete permanently.
+    /// **Purge**: Permanently delete all trashed items. Run weekly.
+    /// **When**: Part of weekly review - trash items first with change_status, then purge.
+    /// **Safety**: Checks references to prevent broken links.
     #[tool]
     async fn empty_trash(&self) -> McpResult<String> {
         let mut data = self.data.lock().unwrap();
@@ -202,26 +190,26 @@ impl McpServer for GtdServerHandler {
         Ok(format!("Deleted {} task(s) from trash", count))
     }
 
-    /// **GTD Capture (Inbox)**: Quickly capture anything needing attention. First step - all items start here.
-    /// **Status**: Use "inbox" for tasks, "project" for projects, "context" for contexts.
-    /// **Workflow**: 1) inbox everything → 2) list to review → 3) update/change_status to organize.
+    /// **Capture**: Quickly capture anything needing attention. First GTD step - all items start here.
+    /// **When**: Something crosses your mind? Capture immediately without thinking.
+    /// **Next**: Use list(status="inbox") to review, then update/change_status to organize.
     #[allow(clippy::too_many_arguments)]
     #[tool]
     async fn inbox(
         &self,
-        /// ID: any string (e.g., "call-john", "web-redesign")
+        /// Any string ID (e.g., "call-john", "web-redesign")
         id: String,
-        /// Title: brief description
+        /// Brief description
         title: String,
-        /// Status: inbox/next_action/waiting_for/later/calendar/someday/done/reference/project/context/trash
+        /// inbox | next_action | waiting_for | later | calendar | someday | done | reference | project | context | trash
         status: String,
-        /// Project: parent project ID (optional)
+        /// Optional: Parent project ID
         project: Option<String>,
-        /// Context: where applies (e.g., "@home", "@office") (optional)
+        /// Optional: Where applies (e.g., "@home", "@office")
         context: Option<String>,
-        /// Notes: Markdown details (optional)
+        /// Optional: Markdown notes
         notes: Option<String>,
-        /// Start date: YYYY-MM-DD, required for calendar status (optional)
+        /// Optional: YYYY-MM-DD, required for calendar status
         start_date: Option<String>,
     ) -> McpResult<String> {
         let mut data = self.data.lock().unwrap();
@@ -315,17 +303,17 @@ impl McpServer for GtdServerHandler {
         ))
     }
 
-    /// **GTD Review**: List/view all notas, filter by status.
-    /// **Workflow**: Start here - review regularly (daily/weekly). Filter status="inbox" for items needing processing.
-    /// **Use**: No filter=all; "inbox"=uncaptured; "next_action"=ready to do; "project"=all projects.
+    /// **Review**: List/filter all notas. Essential for daily/weekly reviews.
+    /// **When**: Daily - check next_action. Weekly - review all. Use filters to focus.
+    /// **Filters**: No filter=all | status="inbox"=unprocessed | status="next_action"=ready | status="calendar"+date=today's tasks.
     #[tool]
     async fn list(
         &self,
-        /// Status filter: inbox/next_action/waiting_for/later/calendar/someday/done/reference/project/context/trash. Empty=all.
+        /// Optional: Filter by status (inbox | next_action | waiting_for | later | calendar | someday | done | reference | project | context | trash)
         status: Option<String>,
-        /// Optional date filter (YYYY-MM-DD) - For calendar status, only shows tasks with start_date <= this date
+        /// Optional: Date filter YYYY-MM-DD - For calendar, shows tasks with start_date <= this date
         date: Option<String>,
-        /// Optional exclude_notes (boolean) - Reduce token usage by excluding notes from output
+        /// Optional: True to exclude notes and reduce token usage
         exclude_notes: Option<bool>,
     ) -> McpResult<String> {
         let data = self.data.lock().unwrap();
@@ -419,26 +407,26 @@ impl McpServer for GtdServerHandler {
         Ok(result)
     }
 
-    /// **GTD Clarify/Organize**: Update nota details. Add context, clarify next steps, link to project.
-    /// **Workflow**: After inbox, clarify what it is, add notes/context/project links.
-    /// **Tip**: Use empty string "" to clear optional fields.
+    /// **Clarify**: Update nota details. Add context, notes, project links after capturing.
+    /// **When**: After inbox capture, clarify what it is, why it matters, what's needed.
+    /// **Tip**: Use ""(empty string) to clear optional fields.
     #[allow(clippy::too_many_arguments)]
     #[tool]
     async fn update(
         &self,
-        /// ID of nota to update
+        /// Nota ID to update
         id: String,
-        /// New title (optional)
+        /// Optional: New title
         title: Option<String>,
-        /// New status - changes type if project/context (optional)
+        /// Optional: New status (changes type if project/context)
         status: Option<String>,
-        /// Project link, ""=clear (optional)
+        /// Optional: Project link, ""=clear
         project: Option<String>,
-        /// Context tag, ""=clear (optional)
+        /// Optional: Context tag, ""=clear
         context: Option<String>,
-        /// Notes in Markdown, ""=clear (optional)
+        /// Optional: Markdown notes, ""=clear
         notes: Option<String>,
-        /// Start date YYYY-MM-DD, ""=clear (optional)
+        /// Optional: Start date YYYY-MM-DD, ""=clear
         start_date: Option<String>,
     ) -> McpResult<String> {
         let mut data = self.data.lock().unwrap();
@@ -541,17 +529,17 @@ impl McpServer for GtdServerHandler {
         Ok(format!("Nota {} updated successfully", id))
     }
 
-    /// **GTD Do/Organize**: Move nota through workflow stages.
-    /// **Workflow**: inbox→next_action (ready to do), →waiting_for (blocked), →done (complete), →trash (discard).
-    /// **Tip**: status="project"/"context" transforms type. Use change_status before empty_trash to delete.
+    /// **Organize/Do**: Move nota through workflow stages as you process them.
+    /// **When**: inbox→next_action(ready) | →waiting_for(blocked) | →done(complete) | →trash(discard).
+    /// **Tip**: Use change_status to trash before empty_trash to permanently delete.
     #[tool]
     async fn change_status(
         &self,
         /// Nota ID
         id: String,
-        /// New status: inbox/next_action/waiting_for/later/calendar/someday/done/reference/project/context/trash
+        /// New status: inbox | next_action | waiting_for | later | calendar | someday | done | reference | project | context | trash
         new_status: String,
-        /// Start date YYYY-MM-DD (required for calendar)
+        /// Optional: Start date YYYY-MM-DD (required for calendar)
         start_date: Option<String>,
     ) -> McpResult<String> {
         let mut data = self.data.lock().unwrap();

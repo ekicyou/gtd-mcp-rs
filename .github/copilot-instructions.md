@@ -63,7 +63,15 @@ async fn add_task(&self, title: String, ...) -> McpResult<String> {
 ```
 
 ### MCPツールのdoc comment規約
-**重要**: `#[tool]`と`#[mcp_server]`のdoc commentはMCPクライアントに直接公開されるため、以下のルールに従ってください：
+**重要**: `#[tool]`と`#[mcp_server]`のdoc commentはMCPクライアント（Claude DesktopなどのLLM）に直接公開され、ツールの使い方を理解するための唯一の情報源となります。以下のルールに従ってください：
+
+#### doc commentの公開範囲
+- **`#[tool]`関数のdoc comment**: MCPクライアントにツールの説明として表示されます
+- **`#[mcp_server]`実装のdoc comment**: MCPサーバー全体の説明として表示されます
+- **関数引数のdoc comment**: 各パラメータの説明としてMCPクライアントに表示されます
+- これらのdoc commentはLLMがツールを使用する際の唯一の情報源であり、LLMのトークン消費量に直接影響します
+
+#### doc comment記述ルール
 
 1. **関数の説明は関数名に沿った動詞を使用**
    - 例：`delete_context`関数には「Delete a context」（"Remove"ではなく"Delete"を使用）
@@ -86,6 +94,11 @@ async fn add_task(&self, title: String, ...) -> McpResult<String> {
 5. **GTDワークフローのコンテキストを含める**
    - 単なる機能説明だけでなく、GTD手法の中でいつ、なぜこのツールを使うべきかを説明します
    - 例：「Use this as the first step in GTD workflow - quickly capture anything that needs attention.」
+
+6. **トークン消費を最小化**
+   - 簡潔で明確な表現を使用し、冗長な説明を避けます
+   - 重要な情報を優先し、自明な情報は省略します
+   - 箇条書きや記号（→、/）を活用して情報密度を高めます
 
 ### 日付の扱い
 - 日付には`chrono::NaiveDate`を使用（時刻コンポーネントなし）
