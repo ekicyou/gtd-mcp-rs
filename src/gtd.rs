@@ -1,5 +1,5 @@
 use chrono::{Local, NaiveDate};
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashMap;
 use std::str::FromStr;
 
@@ -111,8 +111,7 @@ impl FromStr for NotaStatus {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Project {
     /// Unique project identifier (e.g., "project-1", "project-2")
-    /// Not serialized to TOML (used as HashMap key)
-    #[serde(skip_serializing, default)]
+    #[serde(default)]
     pub id: String,
     /// Project title
     pub title: String,
@@ -138,12 +137,10 @@ pub struct Project {
 ///
 /// Contexts represent locations, tools, or situations where tasks can be performed
 /// (e.g., "@office", "@home", "@computer", "@phone", "@errands").
-/// The name field is maintained internally but not serialized to TOML
-/// to avoid redundancy with the HashMap key in GtdData.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Context {
-    /// Context name (e.g., "Office", "Home") - not serialized to TOML (serves as ID)
-    #[serde(skip_serializing, default)]
+    /// Context name (e.g., "Office", "Home") - serves as ID
+    #[serde(default)]
     pub name: String,
     /// Context title (same as name for contexts)
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -336,58 +333,47 @@ impl Nota {
 ///
 /// ## Format Versions
 ///
-/// - Version 1 (default for old files): Projects stored as `Vec<Project>` (TOML: `[[projects]]`)
-/// - Version 2 (current): Projects stored as `HashMap<String, Project>` (TOML: `[projects.id]`)
+/// - Version 1 (legacy): Projects stored as `Vec<Project>` (TOML: `[[projects]]`)
+/// - Version 2 (legacy): Projects stored as `HashMap<String, Project>` (TOML: `[projects.id]`), separate arrays for each status
+/// - Version 3 (current): Projects and contexts stored as Vec (TOML: `[[project]]`, `[[context]]`)
 ///
-/// The deserializer automatically migrates from version 1 to version 2 on load.
-#[derive(Debug, Serialize)]
+/// The deserializer automatically migrates from older versions to the current internal format.
+#[derive(Debug)]
 pub struct GtdData {
-    /// Format version for the TOML file (current: 2)
-    #[serde(default = "default_format_version")]
+    /// Format version for the TOML file (current: 3)
     pub format_version: u32,
     /// Tasks in the inbox (not yet processed)
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub inbox: Vec<Task>,
     /// Tasks marked as next actions (ready to do)
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub next_action: Vec<Task>,
     /// Tasks waiting for external input
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub waiting_for: Vec<Task>,
     /// Tasks to be done later
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub later: Vec<Task>,
     /// Tasks scheduled for specific dates
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub calendar: Vec<Task>,
     /// Tasks that might be done someday
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub someday: Vec<Task>,
     /// Completed tasks
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub done: Vec<Task>,
     /// Deleted tasks
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub trash: Vec<Task>,
     /// All projects (keyed by ID)
     pub projects: HashMap<String, Project>,
     /// All contexts (keyed by name)
     pub contexts: HashMap<String, Context>,
     /// Internal map of all tasks by ID for duplicate checking (not serialized)
-    #[serde(skip)]
     pub(crate) task_map: HashMap<String, NotaStatus>,
     /// Counter for generating unique task IDs
-    #[serde(default, skip_serializing_if = "is_zero")]
     pub task_counter: u32,
     /// Counter for generating unique project IDs
-    #[serde(default, skip_serializing_if = "is_zero")]
     pub project_counter: u32,
 }
 
 impl Default for GtdData {
     fn default() -> Self {
         Self {
-            format_version: 2,
+            format_version: 3,
             inbox: Vec::new(),
             next_action: Vec::new(),
             waiting_for: Vec::new(),
@@ -408,12 +394,7 @@ impl Default for GtdData {
 /// Default format version for new files
 #[allow(dead_code)] // Used by serde
 fn default_format_version() -> u32 {
-    2
-}
-
-/// Check if a counter value is zero (used for skipping serialization)
-fn is_zero(n: &u32) -> bool {
-    *n == 0
+    3
 }
 
 impl<'de> Deserialize<'de> for GtdData {
@@ -422,103 +403,201 @@ impl<'de> Deserialize<'de> for GtdData {
         D: Deserializer<'de>,
     {
         use crate::migration::{
-            GtdDataMigrationHelper, migrate_projects_to_latest, normalize_context_line_endings,
-            normalize_project_line_endings, normalize_task_line_endings, populate_context_names,
-            populate_project_ids,
+            GtdDataMigrationHelper, migrate_notas_v3_to_internal, migrate_projects_to_latest,
+            normalize_context_line_endings, normalize_project_line_endings,
+            normalize_task_line_endings, populate_context_names, populate_project_ids,
         };
 
-        let mut helper = GtdDataMigrationHelper::deserialize(deserializer)?;
+        let helper = GtdDataMigrationHelper::deserialize(deserializer)?;
 
-        // Migrate projects to latest format (HashMap)
+        // Initialize the collections
+        let mut inbox = helper.inbox;
+        let mut next_action = helper.next_action;
+        let mut waiting_for = helper.waiting_for;
+        let mut later = helper.later;
+        let mut calendar = helper.calendar;
+        let mut someday = helper.someday;
+        let mut done = helper.done;
+        let mut trash = helper.trash;
         let mut projects = migrate_projects_to_latest(helper.projects);
+        let mut contexts = helper.contexts;
+
+        // If this is Version 3 format with Vec arrays for projects/contexts, convert to HashMap
+        if !helper.project.is_empty() {
+            for project in helper.project {
+                projects.insert(project.id.clone(), project);
+            }
+        }
+        if !helper.context.is_empty() {
+            for context in helper.context {
+                contexts.insert(context.name.clone(), context);
+            }
+        }
+
+        // If this is Version 3 format (unified notas), migrate to internal format
+        if !helper.notas.is_empty() {
+            migrate_notas_v3_to_internal(
+                helper.notas,
+                &mut inbox,
+                &mut next_action,
+                &mut waiting_for,
+                &mut later,
+                &mut calendar,
+                &mut someday,
+                &mut done,
+                &mut trash,
+                &mut projects,
+                &mut contexts,
+            );
+        }
 
         // Populate the name field in each Context from the HashMap key
-        populate_context_names(&mut helper.contexts);
+        populate_context_names(&mut contexts);
 
         // Populate the id field in each Project from the HashMap key
         populate_project_ids(&mut projects);
 
         // Normalize line endings in all string fields
-        normalize_task_line_endings(&mut helper.inbox);
-        normalize_task_line_endings(&mut helper.next_action);
-        normalize_task_line_endings(&mut helper.waiting_for);
-        normalize_task_line_endings(&mut helper.later);
-        normalize_task_line_endings(&mut helper.calendar);
-        normalize_task_line_endings(&mut helper.someday);
-        normalize_task_line_endings(&mut helper.done);
-        normalize_task_line_endings(&mut helper.trash);
+        normalize_task_line_endings(&mut inbox);
+        normalize_task_line_endings(&mut next_action);
+        normalize_task_line_endings(&mut waiting_for);
+        normalize_task_line_endings(&mut later);
+        normalize_task_line_endings(&mut calendar);
+        normalize_task_line_endings(&mut someday);
+        normalize_task_line_endings(&mut done);
+        normalize_task_line_endings(&mut trash);
         normalize_project_line_endings(&mut projects);
-        normalize_context_line_endings(&mut helper.contexts);
+        normalize_context_line_endings(&mut contexts);
 
         // Set the status field for each task based on which collection it's in
-        for task in &mut helper.inbox {
+        for task in &mut inbox {
             task.status = NotaStatus::inbox;
         }
-        for task in &mut helper.next_action {
+        for task in &mut next_action {
             task.status = NotaStatus::next_action;
         }
-        for task in &mut helper.waiting_for {
+        for task in &mut waiting_for {
             task.status = NotaStatus::waiting_for;
         }
-        for task in &mut helper.later {
+        for task in &mut later {
             task.status = NotaStatus::later;
         }
-        for task in &mut helper.calendar {
+        for task in &mut calendar {
             task.status = NotaStatus::calendar;
         }
-        for task in &mut helper.someday {
+        for task in &mut someday {
             task.status = NotaStatus::someday;
         }
-        for task in &mut helper.done {
+        for task in &mut done {
             task.status = NotaStatus::done;
         }
-        for task in &mut helper.trash {
+        for task in &mut trash {
             task.status = NotaStatus::trash;
         }
 
         // Build task_map from all tasks for duplicate checking
         let mut task_map = HashMap::new();
-        for task in &helper.inbox {
+        for task in &inbox {
             task_map.insert(task.id.clone(), NotaStatus::inbox);
         }
-        for task in &helper.next_action {
+        for task in &next_action {
             task_map.insert(task.id.clone(), NotaStatus::next_action);
         }
-        for task in &helper.waiting_for {
+        for task in &waiting_for {
             task_map.insert(task.id.clone(), NotaStatus::waiting_for);
         }
-        for task in &helper.later {
+        for task in &later {
             task_map.insert(task.id.clone(), NotaStatus::later);
         }
-        for task in &helper.calendar {
+        for task in &calendar {
             task_map.insert(task.id.clone(), NotaStatus::calendar);
         }
-        for task in &helper.someday {
+        for task in &someday {
             task_map.insert(task.id.clone(), NotaStatus::someday);
         }
-        for task in &helper.done {
+        for task in &done {
             task_map.insert(task.id.clone(), NotaStatus::done);
         }
-        for task in &helper.trash {
+        for task in &trash {
             task_map.insert(task.id.clone(), NotaStatus::trash);
         }
 
         Ok(GtdData {
-            format_version: 2, // Always use version 2 for in-memory representation
-            inbox: helper.inbox,
-            next_action: helper.next_action,
-            waiting_for: helper.waiting_for,
-            later: helper.later,
-            calendar: helper.calendar,
-            someday: helper.someday,
-            done: helper.done,
-            trash: helper.trash,
+            format_version: 3, // Use version 3 for in-memory representation
+            inbox,
+            next_action,
+            waiting_for,
+            later,
+            calendar,
+            someday,
+            done,
+            trash,
             projects,
-            contexts: helper.contexts,
+            contexts,
             task_map,
             task_counter: helper.task_counter,
             project_counter: helper.project_counter,
         })
+    }
+}
+
+impl Serialize for GtdData {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        use serde::ser::SerializeStruct;
+
+        // Convert HashMap to Vec for projects and contexts (Version 3 format)
+        let projects_vec: Vec<&Project> = self.projects.values().collect();
+        let contexts_vec: Vec<&Context> = self.contexts.values().collect();
+
+        let mut state = serializer.serialize_struct("GtdData", 15)?;
+        state.serialize_field("format_version", &self.format_version)?;
+
+        if !self.inbox.is_empty() {
+            state.serialize_field("inbox", &self.inbox)?;
+        }
+        if !self.next_action.is_empty() {
+            state.serialize_field("next_action", &self.next_action)?;
+        }
+        if !self.waiting_for.is_empty() {
+            state.serialize_field("waiting_for", &self.waiting_for)?;
+        }
+        if !self.later.is_empty() {
+            state.serialize_field("later", &self.later)?;
+        }
+        if !self.calendar.is_empty() {
+            state.serialize_field("calendar", &self.calendar)?;
+        }
+        if !self.someday.is_empty() {
+            state.serialize_field("someday", &self.someday)?;
+        }
+        if !self.done.is_empty() {
+            state.serialize_field("done", &self.done)?;
+        }
+        if !self.trash.is_empty() {
+            state.serialize_field("trash", &self.trash)?;
+        }
+
+        // Serialize projects as Vec (Version 3 format: [[project]])
+        if !projects_vec.is_empty() {
+            state.serialize_field("project", &projects_vec)?;
+        }
+
+        // Serialize contexts as Vec (Version 3 format: [[context]])
+        if !contexts_vec.is_empty() {
+            state.serialize_field("context", &contexts_vec)?;
+        }
+
+        if self.task_counter != 0 {
+            state.serialize_field("task_counter", &self.task_counter)?;
+        }
+        if self.project_counter != 0 {
+            state.serialize_field("project_counter", &self.project_counter)?;
+        }
+
+        state.end()
     }
 }
 
@@ -1670,6 +1749,9 @@ mod tests {
     // コンテキストをTOML形式にシリアライズし、デシリアライズして元のデータと一致することを確認
     // Note: name フィールドは skip_serializing されるため、TOML には含まれない
     #[test]
+    // Context serialization test for Version 3
+    // In V3 format, contexts are stored in [[context]] arrays, so name must be serialized
+    #[test]
     fn test_context_serialization() {
         let context = Context {
             name: "Office".to_string(),
@@ -1684,15 +1766,14 @@ mod tests {
         };
 
         let serialized = toml::to_string(&context).unwrap();
-        // name フィールドは serialization でスキップされるため、TOML には含まれない
+        // In Version 3, name field is serialized as part of the [[context]] array
         assert!(
-            !serialized.contains("name"),
-            "name field should not be serialized"
+            serialized.contains("name"),
+            "name field should be serialized in Version 3"
         );
 
         let deserialized: Context = toml::from_str(&serialized).unwrap();
-        // standalone でデシリアライズすると name は空文字列になる（default）
-        assert_eq!(deserialized.name, "");
+        assert_eq!(deserialized.name, "Office");
         assert_eq!(deserialized.notes, None);
     }
 
@@ -2074,7 +2155,7 @@ mod tests {
         );
 
         // 期待されるTOML構造（テキスト完全一致）
-        let expected_toml = r#"format_version = 2
+        let expected_toml = r#"format_version = 3
 
 [[inbox]]
 id = "task-002"
@@ -2092,13 +2173,15 @@ start_date = "2024-03-15"
 created_at = "2024-01-01"
 updated_at = "2024-01-01"
 
-[projects.project-001]
+[[project]]
+id = "project-001"
 title = "Documentation Project"
 notes = "Comprehensive project documentation update"
 created_at = "2024-01-01"
 updated_at = "2024-01-01"
 
-[contexts.Office]
+[[context]]
+name = "Office"
 notes = "Work environment with desk and computer"
 "#;
 
@@ -2155,8 +2238,12 @@ notes = "Work environment with desk and computer"
 
     // 後方互換性テスト: 旧形式（nameフィールド付き）のTOMLも正しく読み込めることを確認
     #[test]
+    // Test backward compatibility with name field in contexts (Version 2 format)
+    // Version 2 used HashMap format where name was the key, so name field was redundant
+    // Version 3 uses Vec format where name must be included
+    #[test]
     fn test_backward_compatibility_with_name_field() {
-        // 旧形式のTOML（nameフィールドが含まれている）
+        // 旧形式のTOML（nameフィールドが含まれている）- Version 2 HashMap format
         let old_format_toml = r#"
 [[tasks]]
 id = "task-001"
@@ -2188,15 +2275,19 @@ name = "Home"
         assert_eq!(home.name, "Home");
         assert_eq!(home.notes, None);
 
-        // 再シリアライズすると新形式（nameフィールドなし）になることを確認
+        // 再シリアライズするとVersion 3形式（[[context]]配列でnameフィールドあり）になることを確認
         let reserialized = toml::to_string_pretty(&deserialized).unwrap();
         assert!(
-            !reserialized.contains("name = \"Office\""),
-            "Reserialized TOML should not contain redundant name field"
+            reserialized.contains("[[context]]"),
+            "Reserialized TOML should use [[context]] array format"
         );
         assert!(
-            !reserialized.contains("name = \"Home\""),
-            "Reserialized TOML should not contain redundant name field"
+            reserialized.contains("name = \"Office\""),
+            "Reserialized TOML should contain name field in Version 3 format"
+        );
+        assert!(
+            reserialized.contains("name = \"Home\""),
+            "Reserialized TOML should contain name field in Version 3 format"
         );
     }
 
@@ -2788,10 +2879,10 @@ notes = "Project without context field"
         assert_eq!(project.context, None);
     }
 
-    // フォーマットバージョン1からバージョン2への自動マイグレーションテスト
-    // 旧形式（Vec<Project>）のTOMLを読み込み、新形式（HashMap）に自動変換されることを確認
+    // フォーマットバージョン1からバージョン3への自動マイグレーションテスト
+    // 旧形式（Vec<Project>）のTOMLを読み込み、新形式（HashMap）に自動変換され、バージョン3で保存されることを確認
     #[test]
-    fn test_format_migration_v1_to_v2() {
+    fn test_format_migration_v1_to_v3() {
         // Format version 1: projects as array ([[projects]])
         let old_format_toml = r#"
 [[projects]]
@@ -2814,8 +2905,8 @@ updated_at = "2024-01-01"
         // Load old format
         let data: GtdData = toml::from_str(old_format_toml).unwrap();
 
-        // Verify it's automatically migrated to version 2
-        assert_eq!(data.format_version, 2);
+        // Verify it's automatically migrated to version 3
+        assert_eq!(data.format_version, 3);
         assert_eq!(data.projects.len(), 2);
 
         // Verify projects are in HashMap
@@ -2835,18 +2926,78 @@ updated_at = "2024-01-01"
         // Save to new format
         let new_format_toml = toml::to_string_pretty(&data).unwrap();
 
-        // Verify new format has HashMap syntax
-        assert!(new_format_toml.contains("format_version = 2"));
-        assert!(new_format_toml.contains("[projects.project-1]"));
-        assert!(new_format_toml.contains("[projects.project-2]"));
+        // Verify new format has Vec array syntax ([[project]]) and version 3
+        assert!(new_format_toml.contains("format_version = 3"));
+        assert!(new_format_toml.contains("[[project]]"));
         assert!(!new_format_toml.contains("[[projects]]"));
+        assert!(!new_format_toml.contains("[projects.project-1]"));
 
         // Verify round-trip works
         let reloaded: GtdData = toml::from_str(&new_format_toml).unwrap();
-        assert_eq!(reloaded.format_version, 2);
+        assert_eq!(reloaded.format_version, 3);
         assert_eq!(reloaded.projects.len(), 2);
         assert!(reloaded.projects.contains_key("project-1"));
         assert!(reloaded.projects.contains_key("project-2"));
+    }
+
+    // フォーマットバージョン2からバージョン3への自動マイグレーションテスト
+    // バージョン2形式のTOMLを読み込み、バージョン3で保存されることを確認
+    #[test]
+    fn test_format_migration_v2_to_v3() {
+        // Format version 2: projects as HashMap
+        let v2_format_toml = r##"
+format_version = 2
+
+[[inbox]]
+id = "#1"
+title = "Test task"
+created_at = "2024-01-01"
+updated_at = "2024-01-01"
+
+[projects.project-1]
+title = "Test Project"
+notes = "Version 2 format"
+created_at = "2024-01-01"
+updated_at = "2024-01-01"
+
+[contexts.Office]
+notes = "Office context"
+"##;
+
+        // Load version 2 format
+        let data: GtdData = toml::from_str(v2_format_toml).unwrap();
+
+        // Verify it's automatically migrated to version 3
+        assert_eq!(data.format_version, 3);
+        assert_eq!(data.inbox.len(), 1);
+        assert_eq!(data.projects.len(), 1);
+        assert_eq!(data.contexts.len(), 1);
+
+        // Verify data integrity
+        let task = &data.inbox[0];
+        assert_eq!(task.id, "#1");
+        assert_eq!(task.title, "Test task");
+
+        let project = data.projects.get("project-1").unwrap();
+        assert_eq!(project.title, "Test Project");
+        assert_eq!(project.notes, Some("Version 2 format".to_string()));
+
+        let context = data.contexts.get("Office").unwrap();
+        assert_eq!(context.name, "Office");
+        assert_eq!(context.notes, Some("Office context".to_string()));
+
+        // Save to new format
+        let new_format_toml = toml::to_string_pretty(&data).unwrap();
+
+        // Verify new format has version 3
+        assert!(new_format_toml.contains("format_version = 3"));
+
+        // Verify round-trip works
+        let reloaded: GtdData = toml::from_str(&new_format_toml).unwrap();
+        assert_eq!(reloaded.format_version, 3);
+        assert_eq!(reloaded.inbox.len(), 1);
+        assert_eq!(reloaded.projects.len(), 1);
+        assert_eq!(reloaded.contexts.len(), 1);
     }
 
     // NotaStatus::from_strのテスト - 有効なステータス
@@ -3103,7 +3254,7 @@ updated_at = "2024-01-01"
 
     #[test]
     fn test_task_map_rebuilt_from_toml() {
-        // Test that task_map is correctly rebuilt when loading from TOML
+        // Test that task_map is correctly rebuilt when loading from TOML (format version 2)
         let toml_str = r#"
 format_version = 2
 
