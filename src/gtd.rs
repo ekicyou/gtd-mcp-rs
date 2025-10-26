@@ -521,12 +521,6 @@ impl GtdData {
         format!("#{}", self.task_counter)
     }
 
-    /// Count total number of notas (all types: tasks, projects, contexts)
-    #[allow(dead_code)]
-    pub fn nota_count(&self) -> usize {
-        self.notas.len()
-    }
-
     /// Count total number of task notas across all task statuses
     #[allow(dead_code)]
     pub fn task_count(&self) -> usize {
@@ -648,20 +642,6 @@ impl GtdData {
             .find(|n| n.id == id && n.status == NotaStatus::project)
     }
 
-    /// Find a project by its ID and return a mutable reference (for compatibility)
-    ///
-    /// # Arguments
-    /// * `id` - The project ID to search for (e.g., "project-1")
-    ///
-    /// # Returns
-    /// An optional mutable reference to the nota if found and it's a project
-    #[allow(dead_code)]
-    pub fn find_project_by_id_mut(&mut self, id: &str) -> Option<&mut Nota> {
-        self.notas
-            .iter_mut()
-            .find(|n| n.id == id && n.status == NotaStatus::project)
-    }
-
     /// Find a context by its name (for compatibility)
     ///
     /// # Arguments
@@ -692,12 +672,6 @@ impl GtdData {
             None => true,
             Some(context_name) => self.find_context_by_name(context_name).is_some(),
         }
-    }
-
-    /// Validate that a nota's references (project and context) exist
-    /// Returns true if all references are valid or not specified
-    pub fn validate_nota_references(&self, nota: &Nota) -> bool {
-        self.validate_nota_project(nota) && self.validate_nota_context(nota)
     }
 
     /// Update project ID references in all notas
@@ -758,20 +732,6 @@ impl GtdData {
         } else {
             None
         }
-    }
-
-    /// Remove a nota by its ID
-    ///
-    /// Searches across all notas and removes if found.
-    ///
-    /// # Arguments
-    /// * `id` - The nota ID to remove
-    ///
-    /// # Returns
-    /// The removed Nota if found
-    #[allow(dead_code)]
-    pub fn remove(&mut self, id: &str) -> Option<Nota> {
-        self.remove_nota(id)
     }
 
     /// List all notas with optional status filter
@@ -954,11 +914,6 @@ impl GtdData {
             None => true,
             Some(context_name) => self.find_context_by_name(context_name).is_some(),
         }
-    }
-
-    /// Update project ID in tasks (for compatibility)
-    pub fn update_project_id_in_tasks(&mut self, old_id: &str, new_id: &str) {
-        self.update_project_id_in_notas(old_id, new_id);
     }
 }
 
@@ -3464,9 +3419,9 @@ updated_at = "2024-01-01"
         assert!(found.is_context());
     }
 
-    // Nota削除テスト
+    // Nota削除テスト (internal remove_nota function)
     #[test]
-    fn test_remove() {
+    fn test_remove_nota() {
         let mut data = GtdData::new();
         let nota = Nota {
             id: "task-1".to_string(),
@@ -3483,7 +3438,7 @@ updated_at = "2024-01-01"
         data.add(nota.clone());
         assert_eq!(data.task_count(), 1);
 
-        let removed = data.remove("task-1").unwrap();
+        let removed = data.remove_nota("task-1").unwrap();
         assert_eq!(removed.title, "Test Task");
         assert_eq!(data.task_count(), 0);
     }
