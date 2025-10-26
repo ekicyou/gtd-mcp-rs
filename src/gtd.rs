@@ -1836,7 +1836,7 @@ mod tests {
         let deserialized: GtdData = toml::from_str(&toml_str).unwrap();
 
         // Verify deserialized data maintains insertion order for tasks
-        assert_eq!(deserialized.inbox.len(), 3);
+        assert_eq!(deserialized.inbox().len(), 3);
         let deserialized_inbox = deserialized.inbox();
         for (i, task) in deserialized_inbox.iter().enumerate() {
             assert_eq!(task.id, format!("task-{}", i + 1));
@@ -1844,8 +1844,8 @@ mod tests {
 
         // Verify all projects are present (HashMap doesn't guarantee order)
         assert_eq!(deserialized.projects().len(), 2);
-        assert!(deserialized.projects.contains_key("project-1"));
-        assert!(deserialized.projects.contains_key("project-2"));
+        assert!(deserialized.projects().contains_key("project-1"));
+        assert!(deserialized.projects().contains_key("project-2"));
     }
 
     // 完全なTOML出力テスト（全フィールド設定）
@@ -1956,15 +1956,15 @@ notes = "Work environment with desk and computer"
         let deserialized: GtdData = toml::from_str(&toml_output).unwrap();
 
         // 全タスクフィールドを検証
-        assert_eq!(deserialized.inbox.len(), 1);
-        assert_eq!(deserialized.next_action.len(), 1);
+        assert_eq!(deserialized.inbox().len(), 1);
+        assert_eq!(deserialized.next_action().len(), 1);
 
-        let task_inbox = &deserialized.inbox[0];
+        let task_inbox = &deserialized.inbox()[0];
         assert_eq!(task_inbox.id, "task-002");
         assert_eq!(task_inbox.title, "Quick task");
         assert!(matches!(task_inbox.status, NotaStatus::inbox));
 
-        let task1 = &deserialized.next_action[0];
+        let task1 = &deserialized.next_action()[0];
         assert_eq!(task1.id, "task-001");
         assert_eq!(task1.title, "Complete project documentation");
         assert!(matches!(task1.status, NotaStatus::next_action));
@@ -2689,7 +2689,7 @@ updated_at = "2024-01-01"
 
         // Verify task references still work
         assert_eq!(data.inbox().len(), 1);
-        assert_eq!(data.inbox[0].project, Some("project-1".to_string()));
+        assert_eq!(data.inbox()[0].project, Some("project-1".to_string()));
 
         // Save to new format
         let new_format_toml = toml::to_string_pretty(&data).unwrap();
@@ -2703,9 +2703,9 @@ updated_at = "2024-01-01"
         // Verify round-trip works
         let reloaded: GtdData = toml::from_str(&new_format_toml).unwrap();
         assert_eq!(reloaded.format_version, 3);
-        assert_eq!(reloaded.projects.len(), 2);
-        assert!(reloaded.projects.contains_key("project-1"));
-        assert!(reloaded.projects.contains_key("project-2"));
+        assert_eq!(reloaded.projects().len(), 2);
+        assert!(reloaded.projects().contains_key("project-1"));
+        assert!(reloaded.projects().contains_key("project-2"));
     }
 
     // フォーマットバージョン2からバージョン3への自動マイグレーションテスト
@@ -2742,7 +2742,7 @@ notes = "Office context"
         assert_eq!(data.contexts().len(), 1);
 
         // Verify data integrity
-        let task = &data.inbox[0];
+        let task = &data.inbox()[0];
         assert_eq!(task.id, "#1");
         assert_eq!(task.title, "Test task");
 
@@ -2765,9 +2765,9 @@ notes = "Office context"
         // Verify round-trip works
         let reloaded: GtdData = toml::from_str(&new_format_toml).unwrap();
         assert_eq!(reloaded.format_version, 3);
-        assert_eq!(reloaded.inbox.len(), 1);
-        assert_eq!(reloaded.projects.len(), 1);
-        assert_eq!(reloaded.contexts.len(), 1);
+        assert_eq!(reloaded.inbox().len(), 1);
+        assert_eq!(reloaded.projects().len(), 1);
+        assert_eq!(reloaded.contexts().len(), 1);
     }
 
     // NotaStatus::from_strのテスト - 有効なステータス

@@ -2428,7 +2428,7 @@ mod tests {
         let data = handler.data.lock().unwrap();
         assert_eq!(data.contexts().len(), 1);
         let context = data.find_context_by_name("Office").unwrap();
-        assert_eq!(context.name, "Office");
+        assert_eq!(context.id, "Office");
         assert_eq!(context.notes, Some("Work environment".to_string()));
     }
 
@@ -2983,7 +2983,8 @@ mod tests {
 
         // Verify project has context
         let data = handler.data.lock().unwrap();
-        let project = data.projects().values().next().unwrap();
+        let projects = data.projects();
+        let project = projects.values().next().unwrap();
         assert_eq!(project.context, Some("Office".to_string()));
         assert_eq!(project.title, "Office Project");
     }

@@ -187,8 +187,8 @@ mod tests {
         assert!(result.is_ok());
         let data = result.unwrap();
         assert_eq!(data.task_count(), 0);
-        assert!(data.projects.is_empty());
-        assert!(data.contexts.is_empty());
+        assert!(data.projects().is_empty());
+        assert!(data.contexts().is_empty());
     }
 
     // 空データの保存と読み込みテスト
@@ -210,8 +210,8 @@ mod tests {
 
         let loaded_data = load_result.unwrap();
         assert_eq!(loaded_data.task_count(), 0);
-        assert!(loaded_data.projects.is_empty());
-        assert!(loaded_data.contexts.is_empty());
+        assert!(loaded_data.projects().is_empty());
+        assert!(loaded_data.contexts().is_empty());
 
         // Clean up
         let _ = fs::remove_file(&test_path);
@@ -294,7 +294,7 @@ mod tests {
         assert!(load_result.is_ok());
 
         let loaded_data = load_result.unwrap();
-        assert_eq!(loaded_data.projects.len(), 1);
+        assert_eq!(loaded_data.projects().len(), 1);
 
         let loaded_project = loaded_data.find_project_by_id("project-1").unwrap();
         assert_eq!(loaded_project.title, "Test Project");
@@ -335,10 +335,10 @@ mod tests {
         assert!(load_result.is_ok());
 
         let loaded_data = load_result.unwrap();
-        assert_eq!(loaded_data.contexts.len(), 1);
+        assert_eq!(loaded_data.contexts().len(), 1);
 
         let loaded_context = loaded_data.find_context_by_name("Office").unwrap();
-        assert_eq!(loaded_context.name, "Office");
+        assert_eq!(loaded_context.id, "Office");
 
         // Clean up
         let _ = fs::remove_file(&test_path);
@@ -414,8 +414,8 @@ mod tests {
 
         let loaded_data = load_result.unwrap();
         assert_eq!(loaded_data.task_count(), 3);
-        assert_eq!(loaded_data.projects.len(), 2);
-        assert_eq!(loaded_data.contexts.len(), 2);
+        assert_eq!(loaded_data.projects().len(), 2);
+        assert_eq!(loaded_data.contexts().len(), 2);
 
         // Clean up
         let _ = fs::remove_file(&test_path);
