@@ -36,6 +36,7 @@ pub enum ProjectsFormat {
 #[derive(Deserialize)]
 pub struct GtdDataMigrationHelper {
     #[serde(default)]
+    #[allow(dead_code)] // Used for format detection during deserialization
     pub(crate) format_version: u32,
     // Version 2 format fields (separate arrays)
     #[serde(default)]
@@ -212,6 +213,7 @@ pub fn normalize_context_line_endings(contexts: &mut HashMap<String, Context>) {
 /// * `trash` - Output vector for trash tasks
 /// * `projects` - Output HashMap for projects
 /// * `contexts` - Output HashMap for contexts
+#[allow(dead_code, clippy::too_many_arguments)]
 pub fn migrate_notas_v3_to_internal(
     notas: Vec<Nota>,
     inbox: &mut Vec<Task>,
