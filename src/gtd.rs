@@ -32,6 +32,8 @@ pub enum NotaStatus {
     someday,
     /// Completed tasks
     done,
+    /// Reference material (non-actionable information for future reference)
+    reference,
     /// Context nota (represents a location, tool, or situation)
     context,
     /// Project nota (represents a multi-step outcome)
@@ -52,11 +54,12 @@ impl FromStr for NotaStatus {
             "later" => Ok(NotaStatus::later),
             "calendar" => Ok(NotaStatus::calendar),
             "done" => Ok(NotaStatus::done),
+            "reference" => Ok(NotaStatus::reference),
             "trash" => Ok(NotaStatus::trash),
             "context" => Ok(NotaStatus::context),
             "project" => Ok(NotaStatus::project),
             _ => Err(format!(
-                "Invalid status '{}'. Valid options are: inbox, next_action, waiting_for, someday, later, calendar, done, trash, context, project",
+                "Invalid status '{}'. Valid options are: inbox, next_action, waiting_for, someday, later, calendar, done, reference, trash, context, project",
                 s
             )),
         }
@@ -339,6 +342,7 @@ impl<'de> Deserialize<'de> for GtdData {
             let mut calendar = helper.calendar;
             let mut someday = helper.someday;
             let mut done = helper.done;
+            let mut reference = helper.reference;
             let mut trash = helper.trash;
             let mut projects = migrate_projects_to_latest(helper.projects);
             let mut contexts = helper.contexts;
@@ -367,6 +371,7 @@ impl<'de> Deserialize<'de> for GtdData {
             normalize_task_line_endings(&mut calendar);
             normalize_task_line_endings(&mut someday);
             normalize_task_line_endings(&mut done);
+            normalize_task_line_endings(&mut reference);
             normalize_task_line_endings(&mut trash);
             normalize_project_line_endings(&mut projects);
             normalize_context_line_endings(&mut contexts);
@@ -393,6 +398,9 @@ impl<'de> Deserialize<'de> for GtdData {
             for task in &mut done {
                 task.status = NotaStatus::done;
             }
+            for task in &mut reference {
+                task.status = NotaStatus::reference;
+            }
             for task in &mut trash {
                 task.status = NotaStatus::trash;
             }
@@ -417,6 +425,9 @@ impl<'de> Deserialize<'de> for GtdData {
                 notas.push(Nota::from_task(task));
             }
             for task in done {
+                notas.push(Nota::from_task(task));
+            }
+            for task in reference {
                 notas.push(Nota::from_task(task));
             }
             for task in trash {
@@ -487,6 +498,9 @@ impl Serialize for GtdData {
         }
         if let Some(done) = status_map.get(&NotaStatus::done) {
             state.serialize_field("done", done)?;
+        }
+        if let Some(reference) = status_map.get(&NotaStatus::reference) {
+            state.serialize_field("reference", reference)?;
         }
         if let Some(context) = status_map.get(&NotaStatus::context) {
             state.serialize_field("context", context)?;
@@ -834,6 +848,15 @@ impl GtdData {
             .collect()
     }
 
+    /// Get reference notas (for compatibility)
+    #[allow(dead_code)]
+    pub fn reference(&self) -> Vec<&Nota> {
+        self.notas
+            .iter()
+            .filter(|n| n.status == NotaStatus::reference)
+            .collect()
+    }
+
     /// Get trash notas (for compatibility)
     #[allow(dead_code)]
     pub fn trash(&self) -> Vec<&Nota> {
@@ -933,6 +956,7 @@ mod tests {
         assert!(data.someday().is_empty());
         assert!(data.later().is_empty());
         assert!(data.done().is_empty());
+        assert!(data.reference().is_empty());
         assert!(data.trash().is_empty());
         assert!(data.projects().is_empty());
         assert!(data.contexts().is_empty());
@@ -1313,8 +1337,103 @@ mod tests {
         assert_eq!(task.start_date.unwrap(), date);
     }
 
+    // 参考資料ステータスのタスクテスト
+    // 参考資料ステータスのタスクが正しく作成されることを確認
+    #[test]
+    fn test_reference_task() {
+        let task = Task {
+            id: "ref-1".to_string(),
+            title: "Meeting Notes - Q4 2024".to_string(),
+            status: NotaStatus::reference,
+            project: Some("project-1".to_string()),
+            context: None,
+            notes: Some("Important reference material from Q4 meeting".to_string()),
+            start_date: None,
+            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+        };
+
+        assert!(matches!(task.status, NotaStatus::reference));
+        assert_eq!(task.title, "Meeting Notes - Q4 2024");
+        assert_eq!(
+            task.notes,
+            Some("Important reference material from Q4 meeting".to_string())
+        );
+    }
+
+    // 参考資料への移動テスト
+    // タスクをinboxからreferenceに移動できることを確認
+    #[test]
+    fn test_move_to_reference() {
+        let mut data = GtdData::new();
+        let task_id = "task-1".to_string();
+        let task = Task {
+            id: task_id.clone(),
+            title: "Documentation".to_string(),
+            status: NotaStatus::inbox,
+            project: None,
+            context: None,
+            notes: Some("Useful documentation for future reference".to_string()),
+            start_date: None,
+            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+        };
+
+        data.add_task(task);
+        assert_eq!(data.inbox().len(), 1);
+        assert_eq!(data.reference().len(), 0);
+
+        // Move to reference
+        let result = data.move_status(&task_id, NotaStatus::reference);
+        assert!(result.is_some());
+
+        // Verify task was moved
+        assert_eq!(data.inbox().len(), 0);
+        assert_eq!(data.reference().len(), 1);
+        assert_eq!(data.task_count(), 1);
+
+        // Verify task status was updated
+        let moved_task = data.find_task_by_id(&task_id).unwrap();
+        assert!(matches!(moved_task.status, NotaStatus::reference));
+        assert_eq!(
+            moved_task.notes,
+            Some("Useful documentation for future reference".to_string())
+        );
+    }
+
+    // 参考資料の一覧取得テスト
+    // 複数の参考資料が正しく取得できることを確認
+    #[test]
+    fn test_list_reference_items() {
+        let mut data = GtdData::new();
+
+        // Add multiple reference items
+        for i in 1..=3 {
+            let task = Task {
+                id: format!("ref-{}", i),
+                title: format!("Reference Material {}", i),
+                status: NotaStatus::reference,
+                project: None,
+                context: None,
+                notes: Some(format!("Reference notes {}", i)),
+                start_date: None,
+                created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+                updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            };
+            data.add_task(task);
+        }
+
+        let references = data.reference();
+        assert_eq!(references.len(), 3);
+
+        // Verify all are reference status
+        for ref_item in references {
+            assert!(matches!(ref_item.status, NotaStatus::reference));
+        }
+    }
+
     // タスクステータスの全バリアントテスト
-    // 8種類のタスクステータス（Inbox、NextAction、WaitingFor、Someday、Later、Done、Trash、Calendar）がすべて正しく動作することを確認
+    // 9種類のタスクステータス（Inbox、NextAction、WaitingFor、Someday、Later、Done、Reference、Trash、Calendar）がすべて正しく動作することを確認
     #[test]
     fn test_task_status_variants() {
         let statuses = vec![
@@ -1324,6 +1443,7 @@ mod tests {
             NotaStatus::someday,
             NotaStatus::later,
             NotaStatus::done,
+            NotaStatus::reference,
             NotaStatus::trash,
             NotaStatus::calendar,
         ];
@@ -1348,6 +1468,7 @@ mod tests {
                 NotaStatus::someday => assert!(matches!(task.status, NotaStatus::someday)),
                 NotaStatus::later => assert!(matches!(task.status, NotaStatus::later)),
                 NotaStatus::done => assert!(matches!(task.status, NotaStatus::done)),
+                NotaStatus::reference => assert!(matches!(task.status, NotaStatus::reference)),
                 NotaStatus::trash => assert!(matches!(task.status, NotaStatus::trash)),
                 NotaStatus::calendar => assert!(matches!(task.status, NotaStatus::calendar)),
                 NotaStatus::context | NotaStatus::project => {
@@ -2861,6 +2982,10 @@ notes = "Office context"
             NotaStatus::calendar
         );
         assert_eq!(NotaStatus::from_str("done").unwrap(), NotaStatus::done);
+        assert_eq!(
+            NotaStatus::from_str("reference").unwrap(),
+            NotaStatus::reference
+        );
         assert_eq!(NotaStatus::from_str("trash").unwrap(), NotaStatus::trash);
     }
 
@@ -2879,6 +3004,7 @@ notes = "Office context"
         assert!(err_msg.contains("later"));
         assert!(err_msg.contains("calendar"));
         assert!(err_msg.contains("done"));
+        assert!(err_msg.contains("reference"));
         assert!(err_msg.contains("trash"));
     }
 
@@ -2925,6 +3051,7 @@ notes = "Office context"
             NotaStatus::calendar,
             NotaStatus::someday,
             NotaStatus::done,
+            NotaStatus::reference,
             NotaStatus::trash,
         ];
 
