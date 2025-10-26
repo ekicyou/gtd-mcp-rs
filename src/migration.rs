@@ -15,9 +15,7 @@
 //!
 //! - **Version 1**: Projects stored as `Vec<Project>` (TOML: `[[projects]]`)
 //! - **Version 2**: Projects stored as `HashMap<String, Project>` (TOML: `[projects.id]`), separate arrays for each status
-//! - **Version 3**: Unified `[[notas]]` array with status field to determine type
-//! - **Version 4**: Internal storage uses `Vec<Nota>`, serializes as `[[notas]]`
-//! - **Version 5**: Internal storage uses `Vec<Nota>`, serializes as separate status arrays (`[[inbox]]`, `[[next_action]]`, etc.)
+//! - **Version 3**: Internal storage uses `Vec<Nota>`, serializes as separate status arrays (`[[inbox]]`, `[[next_action]]`, etc.)
 
 use crate::gtd::{Nota, NotaStatus};
 use chrono::{Local, NaiveDate};
@@ -110,7 +108,7 @@ pub struct Project {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Context {
     /// Context name (e.g., "Office", "Home") - serves as ID
-    /// Can also be deserialized from "id" field for V5 format compatibility
+    /// Can also be deserialized from "id" field for legacy format compatibility
     #[serde(default, alias = "id")]
     pub name: String,
     /// Context title (same as name for contexts)
@@ -157,8 +155,7 @@ pub struct GtdDataMigrationHelper {
     #[serde(default)]
     #[allow(dead_code)] // Used for format detection during deserialization
     pub(crate) format_version: u32,
-    // Version 2/5 format fields (separate arrays)
-    // For V2, these are Vec<Task>. For V5, we also support Vec<Nota>.
+    // Version 2/3 format fields (separate arrays by status)
     #[serde(default)]
     pub(crate) inbox: Vec<Task>,
     #[serde(default)]
@@ -179,12 +176,11 @@ pub struct GtdDataMigrationHelper {
     pub(crate) projects: Option<ProjectsFormat>,
     #[serde(default)]
     pub(crate) contexts: HashMap<String, Context>,
-    // Version 3 format fields (Vec arrays)
+    // Legacy intermediate format fields (for backward compatibility)
     #[serde(default)]
     pub(crate) project: Vec<Project>,
     #[serde(default)]
     pub(crate) context: Vec<Context>,
-    // Version 4 format field (unified notas array)
     #[serde(default)]
     pub(crate) notas: Vec<Nota>,
     #[serde(default)]
@@ -320,14 +316,14 @@ pub fn normalize_context_line_endings(contexts: &mut HashMap<String, Context>) {
     }
 }
 
-/// Convert unified notas from Version 3 format to separate arrays (Version 2 internal format)
+/// Convert unified notas from legacy format to separate arrays (internal format)
 ///
-/// Version 3 stores all items (tasks, projects, contexts) in a single `[[notas]]` array.
-/// This function separates them into the internal Version 2 format for easier processing.
+/// Some legacy files may have stored all items (tasks, projects, contexts) in a single `[[notas]]` array.
+/// This function separates them into the internal format for easier processing.
 ///
 /// # Arguments
 ///
-/// * `notas` - Vector of notas from Version 3 format
+/// * `notas` - Vector of notas from legacy format
 /// * `inbox` - Output vector for inbox tasks
 /// * `next_action` - Output vector for next_action tasks
 /// * `waiting_for` - Output vector for waiting_for tasks
