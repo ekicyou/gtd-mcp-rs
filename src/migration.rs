@@ -193,7 +193,6 @@ pub fn normalize_context_line_endings(contexts: &mut HashMap<String, Context>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::gtd::ProjectStatus;
 
     #[test]
     fn test_migrate_projects_v1_to_v2() {
@@ -202,7 +201,6 @@ mod tests {
                 id: "project-1".to_string(),
                 title: "First Project".to_string(),
                 notes: Some("Notes 1".to_string()),
-                status: ProjectStatus::active,
                 project: None,
                 start_date: None,
                 created_at: local_date_today(),
@@ -213,7 +211,6 @@ mod tests {
                 id: "project-2".to_string(),
                 title: "Second Project".to_string(),
                 notes: None,
-                status: ProjectStatus::on_hold,
                 project: None,
                 start_date: None,
                 created_at: local_date_today(),
@@ -262,7 +259,6 @@ mod tests {
                 id: String::new(), // ID is empty before population
                 title: "Test".to_string(),
                 notes: None,
-                status: ProjectStatus::active,
                 project: None,
                 start_date: None,
                 created_at: local_date_today(),

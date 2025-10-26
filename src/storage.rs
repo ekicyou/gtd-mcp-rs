@@ -154,7 +154,7 @@ impl Storage {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::gtd::{Context, NotaStatus, Project, ProjectStatus, Task};
+    use crate::gtd::{Context, NotaStatus, Project, Task};
     use chrono::NaiveDate;
     use std::env;
     use std::fs;
@@ -278,7 +278,6 @@ mod tests {
             id: "project-1".to_string(),
             title: "Test Project".to_string(),
             notes: Some("Test description".to_string()),
-            status: ProjectStatus::active,
             project: None,
             start_date: None,
             created_at: local_date_today(),
@@ -375,13 +374,8 @@ mod tests {
         for i in 1..=2 {
             let project = Project {
                 id: format!("project-{}", i),
-                title: format!(
-                    "Project {
-}",
-                    i
-                ),
+                title: format!("Project {}", i),
                 notes: None,
-                status: ProjectStatus::active,
                 project: None,
                 context: None,
                 start_date: None,

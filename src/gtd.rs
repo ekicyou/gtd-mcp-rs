@@ -106,7 +106,8 @@ impl FromStr for NotaStatus {
 /// A GTD project
 ///
 /// Projects represent multi-step outcomes that require more than one action.
-/// Each project has a unique ID, title, status, and optional notes and context.
+/// Each project has a unique ID, title, and optional notes and context.
+/// Projects use NotaStatus::project as their status.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Project {
     /// Unique project identifier (e.g., "project-1", "project-2")
@@ -117,8 +118,6 @@ pub struct Project {
     pub title: String,
     /// Optional project notes
     pub notes: Option<String>,
-    /// Current status of the project
-    pub status: ProjectStatus,
     /// Optional parent project (None for projects, as projects don't have parent projects)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub project: Option<String>,
@@ -133,37 +132,6 @@ pub struct Project {
     /// Last update date
     #[serde(default = "local_date_today")]
     pub updated_at: NaiveDate,
-}
-
-/// Project status
-///
-/// Represents the current state of a project.
-/// Uses snake_case naming to match TOML serialization format.
-#[allow(non_camel_case_types)]
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ProjectStatus {
-    /// Project is currently being worked on
-    active,
-    /// Project is paused or waiting
-    on_hold,
-    /// Project has been finished
-    completed,
-}
-
-impl FromStr for ProjectStatus {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "active" => Ok(ProjectStatus::active),
-            "on_hold" => Ok(ProjectStatus::on_hold),
-            "completed" => Ok(ProjectStatus::completed),
-            _ => Err(format!(
-                "Invalid project status '{}'. Valid options are: active, on_hold, completed",
-                s
-            )),
-        }
-    }
 }
 
 /// A GTD context
@@ -309,7 +277,6 @@ impl Nota {
                 id: self.id.clone(),
                 title: self.title.clone(),
                 notes: self.notes.clone(),
-                status: ProjectStatus::active, // Default to active
                 project: self.project.clone(),
                 context: self.context.clone(),
                 start_date: self.start_date,
@@ -1497,7 +1464,6 @@ mod tests {
             id: "project-1".to_string(),
             title: "Test Project".to_string(),
             notes: Some("Test description".to_string()),
-            status: ProjectStatus::active,
             project: None,
             start_date: None,
             created_at: local_date_today(),
@@ -1508,7 +1474,6 @@ mod tests {
         assert_eq!(project.id, "project-1");
         assert_eq!(project.title, "Test Project");
         assert_eq!(project.notes.as_ref().unwrap(), "Test description");
-        assert!(matches!(project.status, ProjectStatus::active));
     }
 
     // 説明なしプロジェクトのテスト
@@ -1519,7 +1484,6 @@ mod tests {
             id: "project-1".to_string(),
             title: "Test Project".to_string(),
             notes: None,
-            status: ProjectStatus::active,
             project: None,
             start_date: None,
             created_at: local_date_today(),
@@ -1532,37 +1496,6 @@ mod tests {
 
     // プロジェクトステータスの全バリアントテスト
     // 3種類のプロジェクトステータス（Active、OnHold、Completed）がすべて正しく動作することを確認
-    #[test]
-    fn test_project_status_variants() {
-        let statuses = vec![
-            ProjectStatus::active,
-            ProjectStatus::on_hold,
-            ProjectStatus::completed,
-        ];
-
-        for status in statuses {
-            let project = Project {
-                id: "project-1".to_string(),
-                title: "Test Project".to_string(),
-                notes: None,
-                status: status.clone(),
-                project: None,
-                start_date: None,
-                created_at: local_date_today(),
-                updated_at: local_date_today(),
-                context: None,
-            };
-
-            match status {
-                ProjectStatus::active => assert!(matches!(project.status, ProjectStatus::active)),
-                ProjectStatus::on_hold => assert!(matches!(project.status, ProjectStatus::on_hold)),
-                ProjectStatus::completed => {
-                    assert!(matches!(project.status, ProjectStatus::completed))
-                }
-            }
-        }
-    }
-
     // GtdDataへのプロジェクト挿入テスト
     // プロジェクトを1つ追加し、正しく格納・取得できることを確認
     #[test]
@@ -1572,7 +1505,6 @@ mod tests {
             id: "project-1".to_string(),
             title: "Test Project".to_string(),
             notes: None,
-            status: ProjectStatus::active,
             project: None,
             start_date: None,
             created_at: local_date_today(),
@@ -1589,36 +1521,6 @@ mod tests {
     }
 
     // プロジェクトステータスの更新テスト
-    // プロジェクトのステータスをActiveからCompletedに更新し、正しく反映されることを確認
-    #[test]
-    fn test_gtd_data_update_project_status() {
-        let mut data = GtdData::new();
-        let project_id = "project-1".to_string();
-        let project = Project {
-            id: project_id.clone(),
-            title: "Test Project".to_string(),
-            notes: None,
-            status: ProjectStatus::active,
-            project: None,
-            start_date: None,
-            created_at: local_date_today(),
-            updated_at: local_date_today(),
-            context: None,
-        };
-
-        data.add_project(project);
-
-        // Update status
-        if let Some(project) = data.find_project_by_id_mut(&project_id) {
-            project.status = ProjectStatus::completed;
-        }
-
-        assert!(matches!(
-            data.find_project_by_id(&project_id).unwrap().status,
-            ProjectStatus::completed
-        ));
-    }
-
     // コンテキストの作成テスト
     // コンテキストを作成し、IDと名前が正しく設定されることを確認
     #[test]
@@ -1746,7 +1648,6 @@ mod tests {
             id: "project-1".to_string(),
             title: "Test Project".to_string(),
             notes: Some("Test description".to_string()),
-            status: ProjectStatus::active,
             project: None,
             start_date: None,
             created_at: local_date_today(),
@@ -1763,7 +1664,6 @@ mod tests {
         assert_eq!(project.id, deserialized_project.id);
         assert_eq!(project.title, deserialized_project.title);
         assert_eq!(project.notes, deserialized_project.notes);
-        assert_eq!(project.status, deserialized_project.status);
     }
 
     // コンテキストのシリアライゼーションテスト
@@ -1819,7 +1719,6 @@ mod tests {
             id: "project-1".to_string(),
             title: "Test Project".to_string(),
             notes: None,
-            status: ProjectStatus::active,
             project: None,
             start_date: None,
             created_at: local_date_today(),
@@ -2026,24 +1925,6 @@ mod tests {
             serialized.contains("[[next_action]]"),
             "Expected '[[next_action]]' in TOML output"
         );
-
-        let project = Project {
-            id: "project-1".to_string(),
-            title: "Test Project".to_string(),
-            notes: None,
-            status: ProjectStatus::on_hold,
-            project: None,
-            start_date: None,
-            created_at: local_date_today(),
-            updated_at: local_date_today(),
-            context: None,
-        };
-
-        let serialized = toml::to_string(&project).unwrap();
-        assert!(
-            serialized.contains("on_hold"),
-            "Expected 'on_hold' in TOML output"
-        );
     }
 
     // Insertion order preservation test
@@ -2100,13 +1981,8 @@ mod tests {
         for i in 1..=2 {
             data.add_project(Project {
                 id: format!("project-{}", i),
-                title: format!(
-                    "Project {
-}",
-                    i
-                ),
+                title: format!("Project {}", i),
                 notes: None,
-                status: ProjectStatus::active,
                 project: None,
                 context: None,
                 start_date: None,
@@ -2168,11 +2044,10 @@ mod tests {
             id: "project-001".to_string(),
             title: "Documentation Project".to_string(),
             notes: Some("Comprehensive project documentation update".to_string()),
-            status: ProjectStatus::active,
             project: None,
             start_date: None,
-            created_at: local_date_today(),
-            updated_at: local_date_today(),
+            created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
             context: None,
         });
 
@@ -2220,9 +2095,8 @@ updated_at = "2024-01-01"
 [projects.project-001]
 title = "Documentation Project"
 notes = "Comprehensive project documentation update"
-status = "active"
-created_at = "2025-10-24"
-updated_at = "2025-10-24"
+created_at = "2024-01-01"
+updated_at = "2024-01-01"
 
 [contexts.Office]
 notes = "Work environment with desk and computer"
@@ -2267,7 +2141,6 @@ notes = "Work environment with desk and computer"
             project1.notes,
             Some("Comprehensive project documentation update".to_string())
         );
-        assert!(matches!(project1.status, ProjectStatus::active));
 
         // コンテキストフィールドを検証
         assert_eq!(deserialized.contexts.len(), 1);
@@ -2288,7 +2161,6 @@ notes = "Work environment with desk and computer"
 [[tasks]]
 id = "task-001"
 title = "Test task"
-status = "inbox"
 
 [contexts.Office]
 name = "Office"
@@ -2338,7 +2210,6 @@ name = "Home"
             id: "project-1".to_string(),
             title: "Test Project".to_string(),
             notes: None,
-            status: ProjectStatus::active,
             project: None,
             start_date: None,
             created_at: local_date_today(),
@@ -2488,7 +2359,6 @@ name = "Home"
             id: "project-1".to_string(),
             title: "Test Project".to_string(),
             notes: None,
-            status: ProjectStatus::active,
             project: None,
             start_date: None,
             created_at: local_date_today(),
@@ -2566,7 +2436,6 @@ name = "Home"
             id: "project-1".to_string(),
             title: "Test Project".to_string(),
             notes: None,
-            status: ProjectStatus::active,
             project: None,
             start_date: None,
             created_at: local_date_today(),
@@ -2801,7 +2670,6 @@ name = "Home"
             id: "project-1".to_string(),
             title: "Test Project".to_string(),
             notes: None,
-            status: ProjectStatus::active,
             project: None,
             start_date: None,
             created_at: local_date_today(),
@@ -2822,7 +2690,6 @@ name = "Home"
             id: "project-1".to_string(),
             title: "Test Project".to_string(),
             notes: None,
-            status: ProjectStatus::active,
             project: None,
             start_date: None,
             created_at: local_date_today(),
@@ -2843,7 +2710,6 @@ name = "Home"
             id: "project-1".to_string(),
             title: "Test Project".to_string(),
             notes: None,
-            status: ProjectStatus::active,
             project: None,
             start_date: None,
             created_at: local_date_today(),
@@ -2876,7 +2742,6 @@ name = "Home"
             id: "project-1".to_string(),
             title: "Office Project".to_string(),
             notes: None,
-            status: ProjectStatus::active,
             project: None,
             start_date: None,
             created_at: local_date_today(),
@@ -2912,7 +2777,6 @@ name = "Home"
 id = "project-1"
 title = "Old Project"
 notes = "Project without context field"
-status = "active"
 "#;
 
         let data: GtdData = toml::from_str(toml_str).unwrap();
@@ -2934,12 +2798,10 @@ status = "active"
 id = "project-1"
 title = "First Project"
 notes = "Original format"
-status = "active"
 
 [[projects]]
 id = "project-2"
 title = "Second Project"
-status = "on_hold"
 
 [[inbox]]
 id = "task-1"
@@ -3057,48 +2919,6 @@ updated_at = "2024-01-01"
         assert!(NotaStatus::from_str("pending").is_err());
         assert!(NotaStatus::from_str("todo").is_err());
         assert!(NotaStatus::from_str("in-progress").is_err());
-    }
-
-    // ProjectStatus::from_strのテスト - 有効なステータス
-    // 全ての有効なプロジェクトステータス文字列が正しくパースされることを確認
-    #[test]
-    fn test_project_status_from_str_valid() {
-        assert_eq!(
-            ProjectStatus::from_str("active").unwrap(),
-            ProjectStatus::active
-        );
-        assert_eq!(
-            ProjectStatus::from_str("on_hold").unwrap(),
-            ProjectStatus::on_hold
-        );
-        assert_eq!(
-            ProjectStatus::from_str("completed").unwrap(),
-            ProjectStatus::completed
-        );
-    }
-
-    // ProjectStatus::from_strのテスト - 無効なステータス
-    // 無効なプロジェクトステータス文字列が適切なエラーメッセージを返すことを確認
-    #[test]
-    fn test_project_status_from_str_invalid() {
-        let result = ProjectStatus::from_str("invalid_status");
-        assert!(result.is_err());
-        let err_msg = result.unwrap_err();
-        assert!(err_msg.contains("Invalid project status 'invalid_status'"));
-        assert!(err_msg.contains("active"));
-        assert!(err_msg.contains("on_hold"));
-        assert!(err_msg.contains("completed"));
-    }
-
-    // ProjectStatus::from_strのテスト - よくある誤り
-    // よくある誤りのプロジェクトステータス名がエラーになることを確認
-    #[test]
-    fn test_project_status_from_str_common_mistakes() {
-        assert!(ProjectStatus::from_str("pending").is_err());
-        assert!(ProjectStatus::from_str("in_progress").is_err());
-        assert!(ProjectStatus::from_str("done").is_err());
-        assert!(ProjectStatus::from_str("onhold").is_err());
-        assert!(ProjectStatus::from_str("on-hold").is_err());
     }
 
     // タスクステータスの順序がTOMLシリアライズに反映されることを確認
@@ -3427,7 +3247,6 @@ updated_at = "2024-01-01"
             id: "proj-1".to_string(),
             title: "Test Project".to_string(),
             notes: Some("Project notes".to_string()),
-            status: ProjectStatus::active,
             project: None,
             context: Some("Office".to_string()),
             start_date: None,

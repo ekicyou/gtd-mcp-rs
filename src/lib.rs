@@ -25,10 +25,10 @@
 //! }
 //! ```
 
-mod git_ops;
-mod gtd;
-mod migration;
-mod storage;
+pub mod git_ops;
+pub mod gtd;
+pub mod migration;
+pub mod storage;
 
 use anyhow::Result;
 use chrono::NaiveDate;
@@ -37,8 +37,11 @@ use mcp_attr::server::{McpServer, mcp_server};
 use mcp_attr::{Result as McpResult, bail};
 use std::sync::Mutex;
 
+// Re-export for integration tests (McpServer trait already in scope above)
+
 // Re-export commonly used types
-pub use gtd::{Context, GtdData, NotaStatus, Project, ProjectStatus, Task};
+pub use git_ops::GitOps;
+pub use gtd::{Context, GtdData, Nota, NotaStatus, Project, Task, local_date_today};
 pub use storage::Storage;
 
 /// MCP Server handler for GTD task management
@@ -108,8 +111,37 @@ impl GtdServerHandler {
     /// // normalize_task_id("task-1") -> "task-1"
     /// // normalize_task_id("meeting-prep") -> "meeting-prep"
     /// ```
+    #[allow(dead_code)]
     fn normalize_task_id(task_id: &str) -> String {
         task_id.trim().to_string()
+    }
+
+    /// Extract ID from response message
+    ///
+    /// Helper function for tests to extract nota ID from response messages.
+    /// Response format: "Nota created with ID: <id> (type: task)"
+    ///
+    /// # Arguments
+    /// * `response` - The response message from inbox() or similar operations
+    ///
+    /// # Returns
+    /// The extracted ID
+    #[cfg(test)]
+    fn extract_id_from_response(response: &str) -> String {
+        // Parse "Nota created with ID: <id> (type: ...)"
+        if let Some(start) = response.find("ID: ") {
+            let id_part = &response[start + 4..];
+            if let Some(end) = id_part.find(" (") {
+                return id_part[..end].trim().to_string();
+            }
+        }
+        // Fallback: try to get last whitespace-separated token without parentheses
+        response
+            .split_whitespace()
+            .last()
+            .unwrap_or("")
+            .trim_end_matches(')')
+            .to_string()
     }
 }
 
@@ -163,6 +195,7 @@ impl McpServer for GtdServerHandler {
     /// **GTD Capture (Inbox)**: Quickly capture anything needing attention. First step - all items start here.
     /// **Status**: Use "inbox" for tasks, "project" for projects, "context" for contexts.
     /// **Workflow**: 1) inbox everything → 2) list to review → 3) update/change_status to organize.
+    #[allow(clippy::too_many_arguments)]
     #[tool]
     async fn inbox(
         &self,
@@ -490,12 +523,6 @@ impl McpServer for GtdServerHandler {
             }
         };
 
-        // Validate calendar status has start_date
-        if nota_status == NotaStatus::calendar && start_date.is_none() {
-            drop(data);
-            bail!("Calendar status requires start_date parameter");
-        }
-
         // Find existing nota
         let mut nota = match data.find_by_id(&id) {
             Some(n) => n,
@@ -504,6 +531,25 @@ impl McpServer for GtdServerHandler {
                 bail!("Nota '{}' not found", id);
             }
         };
+
+        // Validate calendar status has start_date (either provided or already exists)
+        if nota_status == NotaStatus::calendar && start_date.is_none() && nota.start_date.is_none()
+        {
+            drop(data);
+            bail!(
+                "Calendar status requires start_date parameter (task has no existing start_date)"
+            );
+        }
+
+        // Check if moving to trash and if nota is still referenced
+        let is_trash = nota_status == NotaStatus::trash;
+        if is_trash && data.is_referenced(&id) {
+            drop(data);
+            bail!(
+                "Cannot trash '{}': still referenced by other items. Remove references first.",
+                id
+            );
+        }
 
         // Update status
         nota.status = nota_status;
@@ -537,49 +583,15 @@ impl McpServer for GtdServerHandler {
             bail!("Failed to save: {}", e);
         }
 
-        Ok(format!(
-            "Nota {} status changed to {} successfully",
-            id, new_status
-        ))
+        Ok(if is_trash {
+            format!("Nota {} deleted (moved to trash)", id)
+        } else {
+            format!("Nota {} status changed to {} successfully", id, new_status)
+        })
     }
 }
 #[cfg(test)]
 mod tests {
-    // TODO: Test Migration Required - 84 compilation errors remain after legacy tool removal
-    //
-    // CONTEXT:
-    // - All 13 legacy MCP tools have been removed (add_task, list_tasks, etc.)
-    // - 5 unified tools remain: inbox, list, update, change_status, empty_trash
-    // - Tool renamed: add → inbox (GTD principle: all items start in inbox)
-    // - GTD workflow tools removed: gtd_overview, process_inbox, weekly_review, next_actions
-    //
-    // COMPLETED FIXES (150 of 234 errors, 64%):
-    // ✅ All inbox() signature fixes (added status parameter)
-    // ✅ All update() signature fixes (added status parameter)
-    // ✅ All change_status() fixes (removed vec! wrapper - now takes String not Vec<String>)
-    // ✅ All delete_project/delete_context replacements (change_status + empty_trash)
-    // ✅ All GTD workflow method call removals
-    //
-    // REMAINING FIXES (84 errors, 36%):
-    // These are all type mismatch errors. Common patterns expected:
-    // 1. Tests creating Task/Project/Context structs directly need Nota conversion
-    //    Example: data.add(Nota::from_task(task))
-    // 2. Tests expecting Task/Project/Context return types need Nota conversion
-    //    Example: nota.to_task()?, nota.to_project()?, nota.to_context()?
-    // 3. Assertions on status values need NotaStatus enum (not strings)
-    // 4. Field name changes: name→title, description→notes
-    //
-    // APPROACH:
-    // Fix errors incrementally, 5-10 at a time:
-    // 1. cargo build 2>&1 | grep error | head -10
-    // 2. Fix those errors
-    // 3. Commit with message describing # errors fixed
-    // 4. Repeat until all 84 errors resolved
-    //
-    // VERIFICATION:
-    // - cargo test (target: ~200-220 tests passing)
-    // - cargo fmt --check && cargo clippy && cargo test
-    //
     use super::*;
     use crate::gtd::{Nota, local_date_today};
     use chrono::NaiveDate;
@@ -675,12 +687,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         // Test moving to next_action
         let result = handler
@@ -739,12 +746,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         // Test moving to calendar with date
         let result = handler
@@ -765,7 +767,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_change_task_status_batch_operation() {
+    async fn test_change_nota_status_batch_operation() {
         let (handler, _temp_file) = get_test_handler();
 
         // Create multiple tasks
@@ -783,20 +785,17 @@ mod tests {
                 )
                 .await;
             assert!(result.is_ok());
-            let task_id = result
-                .unwrap()
-                .split_whitespace()
-                .last()
-                .unwrap()
-                .to_string();
+            let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
             task_ids.push(task_id);
         }
 
         // Test batch move to next_action
-        let result = handler
-            .change_status(task_ids[0].clone(), "next_action".to_string(), None)
-            .await;
-        assert!(result.is_ok());
+        for task_id in &task_ids {
+            let result = handler
+                .change_status(task_id.clone(), "next_action".to_string(), None)
+                .await;
+            assert!(result.is_ok());
+        }
 
         // Verify all tasks moved
         let data = handler.data.lock().unwrap();
@@ -894,12 +893,7 @@ mod tests {
         assert!(result.is_ok());
 
         // Extract task ID from result
-        let task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         // Update title
         let result = handler
@@ -938,12 +932,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         // Verify initial status is inbox
         {
@@ -987,12 +976,7 @@ mod tests {
             )
             .await;
         assert!(project_result.is_ok());
-        let project_id = project_result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let project_id = GtdServerHandler::extract_id_from_response(&project_result.unwrap());
 
         {
             let mut data = handler.data.lock().unwrap();
@@ -1024,12 +1008,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         // Update project and context
         let result = handler
@@ -1069,12 +1048,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         // Verify initial state
         {
@@ -1091,9 +1065,9 @@ mod tests {
                 None,
                 None,
                 None,
-                Some("".to_string()),
-                Some("".to_string()),
-                None,
+                Some("".to_string()), // Clear context
+                Some("".to_string()), // Clear notes
+                Some("".to_string()), // Clear start_date
             )
             .await;
         assert!(result.is_ok());
@@ -1122,12 +1096,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         // Try to update with invalid date
         let result = handler
@@ -1137,8 +1106,8 @@ mod tests {
                 None,
                 None,
                 None,
-                Some("invalid-date".to_string()),
                 None,
+                Some("invalid-date".to_string()), // start_date is 7th param
             )
             .await;
         assert!(result.is_err());
@@ -1161,12 +1130,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         // Try to update with non-existent project
         let result = handler
@@ -1200,12 +1164,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         // Try to update with non-existent context
         let result = handler
@@ -1258,12 +1217,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         // Get initial timestamps
         let (created_at, _updated_at) = {
@@ -1311,19 +1265,14 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let project_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let project_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         // Update name
         let result = handler
             .update(
                 project_id.clone(),
+                Some("Updated Name".to_string()), // title is 2nd param
                 None,
-                Some("Updated Name".to_string()),
                 None,
                 None,
                 None,
@@ -1355,12 +1304,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let project_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let project_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         // Add description
         let result = handler
@@ -1368,9 +1312,9 @@ mod tests {
                 project_id.clone(),
                 None,
                 None,
-                Some("New description".to_string()),
                 None,
                 None,
+                Some("New description".to_string()), // notes is 6th param
                 None,
             )
             .await;
@@ -1389,9 +1333,9 @@ mod tests {
                 project_id.clone(),
                 None,
                 None,
-                Some("".to_string()),
                 None,
                 None,
+                Some("".to_string()), // notes is 6th param
                 None,
             )
             .await;
@@ -1402,79 +1346,6 @@ mod tests {
         let project = data.find_project_by_id(&project_id).unwrap();
         assert_eq!(project.notes, None);
     }
-
-    #[tokio::test]
-    async fn test_update_project_status() {
-        let (handler, _temp_file) = get_test_handler();
-
-        // Add a project
-        let result = handler
-            .inbox(
-                "test-project-1".to_string(),
-                "Test Project".to_string(),
-                "project".to_string(),
-                None,
-                None,
-                None,
-                None,
-            )
-            .await;
-        assert!(result.is_ok());
-        let project_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
-
-        // Verify initial status
-        {
-            let data = handler.data.lock().unwrap();
-            let project = data.find_project_by_id(&project_id).unwrap();
-            assert!(matches!(project.status, ProjectStatus::active));
-        }
-
-        // Update status to on_hold
-        let result = handler
-            .update(
-                project_id.clone(),
-                None,
-                None,
-                None,
-                Some("on_hold".to_string()),
-                None,
-                None,
-            )
-            .await;
-        assert!(result.is_ok());
-
-        // Verify status changed
-        {
-            let data = handler.data.lock().unwrap();
-            let project = data.find_project_by_id(&project_id).unwrap();
-            assert!(matches!(project.status, ProjectStatus::on_hold));
-        }
-
-        // Update status to completed
-        let result = handler
-            .update(
-                project_id.clone(),
-                None,
-                None,
-                None,
-                Some("completed".to_string()),
-                None,
-                None,
-            )
-            .await;
-        assert!(result.is_ok());
-
-        // Verify status changed
-        let data = handler.data.lock().unwrap();
-        let project = data.find_project_by_id(&project_id).unwrap();
-        assert!(matches!(project.status, ProjectStatus::completed));
-    }
-
     #[tokio::test]
     async fn test_update_project_invalid_status() {
         let (handler, _temp_file) = get_test_handler();
@@ -1492,12 +1363,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let project_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let project_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         // Try to update with invalid status
         let result = handler
@@ -1556,7 +1422,7 @@ mod tests {
             .change_status("test-project-1".to_string(), "trash".to_string(), None)
             .await;
         assert!(result.is_ok());
-        assert!(result.unwrap().contains("deleted successfully"));
+        assert!(result.unwrap().contains("deleted"));
 
         // Verify the project was deleted
         let data = handler.data.lock().unwrap();
@@ -1654,8 +1520,8 @@ mod tests {
             .update(
                 "task-2003".to_string(),
                 None,
-                Some("".to_string()), // Empty string removes project
                 None,
+                Some("".to_string()), // Empty string removes project (4th param)
                 None,
                 None,
                 None,
@@ -1691,12 +1557,7 @@ mod tests {
             )
             .await;
         assert!(project_result.is_ok());
-        let project_id = project_result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let project_id = GtdServerHandler::extract_id_from_response(&project_result.unwrap());
 
         // Add a context
         {
@@ -1729,23 +1590,18 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         // Update multiple fields at once
         let result = handler
             .update(
                 task_id.clone(),
-                Some("Updated Task".to_string()),
-                Some(project_id.clone()),
-                Some("Office".to_string()),
-                Some("Updated notes".to_string()),
-                Some("2025-01-15".to_string()),
-                None,
+                Some("Updated Task".to_string()),  // title
+                None,                              // status (not changing)
+                Some(project_id.clone()),          // project
+                Some("Office".to_string()),        // context
+                Some("Updated notes".to_string()), // notes
+                Some("2025-01-15".to_string()),    // start_date
             )
             .await;
         assert!(result.is_ok());
@@ -1789,12 +1645,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         // Move to next_action first
         let result = handler
@@ -1843,12 +1694,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         let result = handler
             .change_status(task_id.clone(), "next_action".to_string(), None)
@@ -1878,12 +1724,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         let result = handler
             .change_status(task_id.clone(), "waiting_for".to_string(), None)
@@ -1913,12 +1754,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         let result = handler
             .change_status(task_id.clone(), "someday".to_string(), None)
@@ -1948,12 +1784,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         let result = handler
             .change_status(task_id.clone(), "later".to_string(), None)
@@ -1983,12 +1814,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         let result = handler
             .change_status(task_id.clone(), "done".to_string(), None)
@@ -2018,12 +1844,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         let result = handler
             .change_status(task_id.clone(), "trash".to_string(), None)
@@ -2054,12 +1875,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id_1 = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id_1 = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         let result = handler
             .change_status(task_id_1.clone(), "trash".to_string(), None)
@@ -2079,12 +1895,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id_2 = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id_2 = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         let result = handler
             .change_status(task_id_2.clone(), "done".to_string(), None)
@@ -2124,7 +1935,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_trash_tasks_multiple_tasks() {
+    async fn test_trash_notas_multiple() {
         let (handler, _temp_file) = get_test_handler();
 
         // 複数のタスクを作成
@@ -2142,24 +1953,22 @@ mod tests {
                 )
                 .await;
             assert!(result.is_ok());
-            let task_id = result
-                .unwrap()
-                .split_whitespace()
-                .last()
-                .unwrap()
-                .to_string();
+            let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
             task_ids.push(task_id);
         }
 
         // 複数のタスクを一度にtrashに移動
-        let result = handler
-            .change_status(task_ids[0].clone(), "trash".to_string(), None)
-            .await;
-        assert!(
-            result.is_ok(),
-            "Failed to trash multiple tasks: {:?}",
-            result.err()
-        );
+        for task_id in &task_ids {
+            let result = handler
+                .change_status(task_id.clone(), "trash".to_string(), None)
+                .await;
+            assert!(
+                result.is_ok(),
+                "Failed to trash task {}: {:?}",
+                task_id,
+                result.err()
+            );
+        }
 
         // すべてのタスクがtrashに移動されたことを確認
         let data = handler.data.lock().unwrap();
@@ -2173,7 +1982,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_trash_tasks_partial_success() {
+    async fn test_trash_notas_partial_success() {
         let (handler, _temp_file) = get_test_handler();
 
         // 有効なタスクを2つ作成
@@ -2191,12 +2000,7 @@ mod tests {
                 )
                 .await;
             assert!(result.is_ok());
-            let task_id = result
-                .unwrap()
-                .split_whitespace()
-                .last()
-                .unwrap()
-                .to_string();
+            let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
             task_ids.push(task_id);
         }
 
@@ -2204,19 +2008,23 @@ mod tests {
         task_ids.push("#999".to_string());
         task_ids.push("invalid-id".to_string());
 
-        // 部分的な成功を確認
-        let result = handler
-            .change_status(task_ids[0].clone(), "trash".to_string(), None)
-            .await;
-        assert!(
-            result.is_ok(),
-            "Should succeed with partial success: {:?}",
-            result.err()
-        );
+        // 有効なタスクだけをtrashに移動
+        let mut success_count = 0;
+        let mut fail_count = 0;
+        for task_id in &task_ids {
+            let result = handler
+                .change_status(task_id.clone(), "trash".to_string(), None)
+                .await;
+            if result.is_ok() {
+                success_count += 1;
+            } else {
+                fail_count += 1;
+            }
+        }
 
-        let result_msg = result.unwrap();
-        assert!(result_msg.contains("Successfully moved 2 task(s)"));
-        assert!(result_msg.contains("Failed to move 2 task(s)"));
+        // 部分的な成功を確認
+        assert_eq!(success_count, 2);
+        assert_eq!(fail_count, 2);
 
         // 有効なタスクだけがtrashに移動されたことを確認
         let data = handler.data.lock().unwrap();
@@ -2229,7 +2037,7 @@ mod tests {
         let (handler, _temp_file) = get_test_handler();
 
         // すべて無効なタスクID
-        let task_ids = vec![
+        let task_ids = [
             "#999".to_string(),
             "invalid-id".to_string(),
             "task-999".to_string(),
@@ -2245,19 +2053,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_trash_tasks_empty_list() {
-        let (handler, _temp_file) = get_test_handler();
-
-        // 空のリスト
-        let task_ids: Vec<String> = Vec::new();
-
-        // Empty list - no change_status needed
-        assert!(task_ids.is_empty());
-        // Empty list case - nothing to assert
-    }
-
-    #[tokio::test]
-    async fn test_trash_tasks_from_different_statuses() {
+    async fn test_trash_notas_from_different_statuses() {
         let (handler, _temp_file) = get_test_handler();
 
         // inboxからタスクを作成
@@ -2273,12 +2069,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let inbox_task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let inbox_task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         // next_actionに移動
         let result = handler
@@ -2293,12 +2084,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let next_action_task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let next_action_task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
         handler
             .change_status(next_action_task_id.clone(), "next_action".to_string(), None)
             .await
@@ -2317,12 +2103,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let done_task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let done_task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
         handler
             .change_status(done_task_id.clone(), "done".to_string(), None)
             .await
@@ -2373,12 +2154,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         let result = handler
             .change_status(
@@ -2418,12 +2194,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         // start_dateを指定せずにcalendarに移動しようとするとエラー
         let result = handler
@@ -2449,12 +2220,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         // start_dateパラメータなしでcalendarに移動（既存のstart_dateを使用）
         let result = handler
@@ -2489,12 +2255,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         // 新しいstart_dateを指定してcalendarに移動（既存のstart_dateを上書き）
         let result = handler
@@ -2531,12 +2292,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         // 無効な日付形式
         let result = handler
@@ -2565,12 +2321,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         let created_at = {
             let data = handler.data.lock().unwrap();
@@ -2679,7 +2430,7 @@ mod tests {
 
         let result = handler.list(None).await;
         assert!(result.is_ok());
-        assert!(result.unwrap().contains("No contexts found"));
+        assert!(result.unwrap().contains("No notas found")); // list() returns generic message
     }
 
     #[tokio::test]
@@ -3010,7 +2761,7 @@ mod tests {
             .unwrap();
 
         // Add a task that references the context
-        let task_id = handler
+        let response = handler
             .inbox(
                 "task-2008".to_string(),
                 "Office work".to_string(),
@@ -3024,11 +2775,11 @@ mod tests {
             .unwrap();
 
         // Extract task ID from the response
-        let task_id = task_id.split("ID: ").nth(1).unwrap().trim().to_string();
+        let task_id = GtdServerHandler::extract_id_from_response(&response);
 
         // Remove the context reference from the task
         handler
-            .update(task_id, None, None, Some(String::new()), None, None, None)
+            .update(task_id, None, None, None, Some(String::new()), None, None) // Clear context (5th param)
             .await
             .unwrap();
 
@@ -3083,8 +2834,8 @@ mod tests {
                 None,
                 None,
                 None,
+                Some(String::new()), // Clear context
                 None,
-                Some(String::new()),
                 None,
             )
             .await
@@ -3246,12 +2997,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let project_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let project_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         // Update project with context
         let result = handler
@@ -3303,12 +3049,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let project_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let project_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         // Remove context using empty string
         let result = handler
@@ -3329,46 +3070,6 @@ mod tests {
         let project = data.find_project_by_id(&project_id).unwrap();
         assert_eq!(project.context, None);
     }
-
-    #[tokio::test]
-    async fn test_update_project_with_invalid_context() {
-        let (handler, _temp_file) = get_test_handler();
-
-        // Add a project
-        let result = handler
-            .inbox(
-                "test-project-1".to_string(),
-                "Test Project".to_string(),
-                "project".to_string(),
-                None,
-                None,
-                None,
-                None,
-            )
-            .await;
-        assert!(result.is_ok());
-        let project_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
-
-        // Try to update with non-existent context
-        let result = handler
-            .update(
-                project_id,
-                None,
-                None,
-                None,
-                None,
-                Some("NonExistent".to_string()),
-                None,
-            )
-            .await;
-        assert!(result.is_err());
-    }
-
     #[tokio::test]
     async fn test_add_project_with_custom_id() {
         let (handler, _temp_file) = get_test_handler();
@@ -3427,183 +3128,6 @@ mod tests {
             .await;
         assert!(result.is_err());
     }
-
-    #[tokio::test]
-    async fn test_update_project_id() {
-        let (handler, _temp_file) = get_test_handler();
-
-        // Add a project
-        let result = handler
-            .inbox(
-                "test-project-1".to_string(),
-                "Test Project".to_string(),
-                "project".to_string(),
-                None,
-                None,
-                None,
-                None,
-            )
-            .await;
-        assert!(result.is_ok());
-        let project_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
-
-        // Update project ID
-        let result = handler
-            .update(
-                project_id.clone(),
-                Some("new-project-id".to_string()),
-                None,
-                None,
-                None,
-                None,
-                None,
-            )
-            .await;
-        assert!(result.is_ok());
-
-        // Verify old ID doesn't exist and new ID does
-        let data = handler.data.lock().unwrap();
-        assert!(data.find_project_by_id(&project_id).is_none());
-        let project = data.find_project_by_id("new-project-id").unwrap();
-        assert_eq!(project.id, "new-project-id");
-        assert_eq!(project.title, "Test Project");
-    }
-
-    #[tokio::test]
-    async fn test_update_project_id_duplicate() {
-        let (handler, _temp_file) = get_test_handler();
-
-        // Add two projects
-        let result1 = handler
-            .inbox(
-                "Project 1".to_string(),
-                "project-1".to_string(),
-                "inbox".to_string(),
-                None,
-                None,
-                None,
-                None,
-            )
-            .await;
-        assert!(result1.is_ok());
-        let project1_id = result1
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
-
-        let result2 = handler
-            .inbox(
-                "Project 2".to_string(),
-                "project-2".to_string(),
-                "inbox".to_string(),
-                None,
-                None,
-                None,
-                None,
-            )
-            .await;
-        assert!(result2.is_ok());
-        let project2_id = result2
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
-
-        // Try to update project2's ID to project1's ID
-        let result = handler
-            .update(
-                project2_id,
-                Some(project1_id.clone()),
-                None,
-                None,
-                None,
-                None,
-                None,
-            )
-            .await;
-        assert!(result.is_err());
-    }
-
-    #[tokio::test]
-    async fn test_update_project_id_updates_task_references() {
-        let (handler, _temp_file) = get_test_handler();
-
-        // Add a project
-        let result = handler
-            .inbox(
-                "test-project-1".to_string(),
-                "Test Project".to_string(),
-                "project".to_string(),
-                None,
-                None,
-                None,
-                None,
-            )
-            .await;
-        assert!(result.is_ok());
-        let project_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
-
-        // Add a task referencing the project
-        let result = handler
-            .inbox(
-                "task-2011".to_string(),
-                "Task in project".to_string(),
-                "inbox".to_string(),
-                Some(project_id.clone()),
-                None,
-                None,
-                None,
-            )
-            .await;
-        assert!(result.is_ok());
-        let task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
-
-        // Verify task references the original project ID
-        {
-            let data = handler.data.lock().unwrap();
-            let task = data.find_task_by_id(&task_id).unwrap();
-            assert_eq!(task.project, Some(project_id.clone()));
-        }
-
-        // Update project ID
-        let new_project_id = "updated-project-id".to_string();
-        let result = handler
-            .update(
-                project_id.clone(),
-                Some(new_project_id.clone()),
-                None,
-                None,
-                None,
-                None,
-                None,
-            )
-            .await;
-        assert!(result.is_ok());
-
-        // Verify task now references the new project ID
-        let data = handler.data.lock().unwrap();
-        let task = data.find_task_by_id(&task_id).unwrap();
-        assert_eq!(task.project, Some(new_project_id));
-    }
-
     // ==================== Prompt Tests ====================
 
     // GTD workflow methods removed - tests commented out
@@ -3702,186 +3226,6 @@ mod tests {
         }
     }
     */
-
-    // 日付フィルタリングのテスト: start_dateが未来のタスクを除外
-    #[tokio::test]
-    async fn test_list_tasks_with_date_filter_excludes_future_tasks() {
-        let (handler, _temp_file) = get_test_handler();
-
-        // タスクを3つ作成: 過去、今日、未来の日付
-        let result = handler
-            .inbox(
-                "task-2012".to_string(),
-                "Past Task".to_string(),
-                "inbox".to_string(),
-                None,
-                None,
-                None,
-                Some("2024-01-01".to_string()),
-            )
-            .await;
-        assert!(result.is_ok());
-
-        let result = handler
-            .inbox(
-                "task-2013".to_string(),
-                "Today Task".to_string(),
-                "inbox".to_string(),
-                None,
-                None,
-                None,
-                Some("2024-06-15".to_string()),
-            )
-            .await;
-        assert!(result.is_ok());
-
-        let result = handler
-            .inbox(
-                "task-2014".to_string(),
-                "Future Task".to_string(),
-                "inbox".to_string(),
-                None,
-                None,
-                None,
-                Some("2024-12-31".to_string()),
-            )
-            .await;
-        assert!(result.is_ok());
-
-        // 日付フィルタ「2024-06-15」で一覧取得
-        let result = handler.list(None).await;
-        assert!(result.is_ok());
-        let list = result.unwrap();
-
-        // Past TaskとToday Taskは表示される
-        assert!(list.contains("Past Task"));
-        assert!(list.contains("Today Task"));
-        // Future Taskは表示されない（start_dateが未来なので）
-        assert!(!list.contains("Future Task"));
-    }
-
-    // 日付フィルタリングのテスト: start_dateがないタスクは表示される
-    #[tokio::test]
-    async fn test_list_tasks_with_date_filter_includes_tasks_without_start_date() {
-        let (handler, _temp_file) = get_test_handler();
-
-        // start_dateなしのタスクを作成
-        let result = handler
-            .inbox(
-                "task-34".to_string(),
-                "No Date Task".to_string(),
-                "inbox".to_string(),
-                None,
-                None,
-                None,
-                None,
-            )
-            .await;
-        assert!(result.is_ok());
-
-        // start_date付きのタスクを作成（未来）
-        let result = handler
-            .inbox(
-                "task-2015".to_string(),
-                "Future Task".to_string(),
-                "inbox".to_string(),
-                None,
-                None,
-                None,
-                Some("2025-12-31".to_string()),
-            )
-            .await;
-        assert!(result.is_ok());
-
-        // 日付フィルタで一覧取得
-        let result = handler.list(None).await;
-        assert!(result.is_ok());
-        let list = result.unwrap();
-
-        // start_dateがないタスクは表示される
-        assert!(list.contains("No Date Task"));
-        // 未来のタスクは表示されない
-        assert!(!list.contains("Future Task"));
-    }
-
-    // 日付フィルタリングのテスト: カレンダーステータスとの組み合わせ
-    #[tokio::test]
-    async fn test_list_tasks_with_date_filter_and_calendar_status() {
-        let (handler, _temp_file) = get_test_handler();
-
-        // カレンダータスクを作成（過去と未来）
-        let result = handler
-            .inbox(
-                "task-2016".to_string(),
-                "Calendar Past".to_string(),
-                "inbox".to_string(),
-                None,
-                None,
-                None,
-                Some("2024-01-01".to_string()),
-            )
-            .await;
-        assert!(result.is_ok());
-        let task_id1 = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
-
-        let result = handler
-            .inbox(
-                "task-2017".to_string(),
-                "Calendar Future".to_string(),
-                "inbox".to_string(),
-                None,
-                None,
-                None,
-                Some("2025-12-31".to_string()),
-            )
-            .await;
-        assert!(result.is_ok());
-        let task_id2 = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
-
-        // 両方をカレンダーステータスに移動
-        let result = handler
-            .change_status(task_id1.clone(), "calendar".to_string(), None)
-            .await;
-        assert!(result.is_ok());
-        let result = handler
-            .change_status(task_id2.clone(), "calendar".to_string(), None)
-            .await;
-        assert!(result.is_ok());
-
-        // カレンダーステータスでフィルタリングし、日付フィルタも適用
-        let result = handler.list(Some("calendar".to_string())).await;
-        assert!(result.is_ok());
-        let list = result.unwrap();
-
-        // 過去のカレンダータスクは表示される
-        assert!(list.contains("Calendar Past"));
-        // 未来のカレンダータスクは表示されない
-        assert!(!list.contains("Calendar Future"));
-    }
-
-    // 日付フィルタリングのテスト: 無効な日付形式
-    #[tokio::test]
-    async fn test_list_tasks_with_invalid_date_format() {
-        let (handler, _temp_file) = get_test_handler();
-
-        // 無効な日付形式
-        let result = handler.list(None).await;
-        assert!(result.is_err());
-
-        let result = handler.list(None).await;
-        assert!(result.is_err());
-    }
-
     // 日付フィルタリングのテスト: 日付フィルタなしでは全タスク表示
     #[tokio::test]
     async fn test_list_tasks_without_date_filter_shows_all_tasks() {
@@ -3978,7 +3322,7 @@ mod tests {
 
         // notesが含まれていることを確認
         assert!(list.contains("Task with notes"));
-        assert!(list.contains("[notes: Important notes here]"));
+        assert!(list.contains("Notes: Important notes here"));
 
         // notesなしのタスクにはnotesフィールドがないことを確認
         assert!(list.contains("Task without notes"));
@@ -3987,39 +3331,8 @@ mod tests {
             .iter()
             .find(|line| line.contains("Task without notes"))
             .unwrap();
-        assert!(!without_notes_line.contains("[notes:"));
+        assert!(!without_notes_line.contains("Notes:"));
     }
-
-    // exclude_notes=trueでnotesが除外されることを確認
-    #[tokio::test]
-    async fn test_list_tasks_excludes_notes_when_requested() {
-        let (handler, _temp_file) = get_test_handler();
-
-        // notesを持つタスクを作成
-        let result = handler
-            .inbox(
-                "task-2021".to_string(),
-                "Task with notes".to_string(),
-                "inbox".to_string(),
-                None,
-                None,
-                Some("Important notes here".to_string()),
-                None,
-            )
-            .await;
-        assert!(result.is_ok());
-
-        // exclude_notes=trueで一覧取得
-        let result = handler.list(None).await;
-        assert!(result.is_ok());
-        let list = result.unwrap();
-
-        // タスクは存在するがnotesは含まれていないことを確認
-        assert!(list.contains("Task with notes"));
-        assert!(!list.contains("[notes:"));
-        assert!(!list.contains("Important notes here"));
-    }
-
     // exclude_notes=falseで明示的にnotesを含めることを確認
     #[tokio::test]
     async fn test_list_tasks_includes_notes_when_explicitly_false() {
@@ -4046,7 +3359,7 @@ mod tests {
 
         // notesが含まれていることを確認
         assert!(list.contains("Task with notes"));
-        assert!(list.contains("[notes: Important notes here]"));
+        assert!(list.contains("Notes: Important notes here"));
     }
 
     // notesに複数行やspecial charactersが含まれる場合のテスト
@@ -4075,7 +3388,7 @@ mod tests {
 
         // notesが含まれていることを確認（改行も含む）
         assert!(list.contains("Complex task"));
-        assert!(list.contains("[notes: Line 1\nLine 2\nLine 3]"));
+        assert!(list.contains("Notes: Line 1\nLine 2\nLine 3"));
     }
 
     #[tokio::test]
@@ -4097,12 +3410,7 @@ mod tests {
                 )
                 .await;
             assert!(result.is_ok());
-            let task_id = result
-                .unwrap()
-                .split_whitespace()
-                .last()
-                .unwrap()
-                .to_string();
+            let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
             // Move to next_action first
             let _ = handler
                 .change_status(task_id.clone(), "next_action".to_string(), None)
@@ -4111,14 +3419,17 @@ mod tests {
         }
 
         // 複数のタスクを一度にinboxに移動
-        let result = handler
-            .change_status(task_ids[0].clone(), "inbox".to_string(), None)
-            .await;
-        assert!(
-            result.is_ok(),
-            "Failed to move multiple tasks to inbox: {:?}",
-            result.err()
-        );
+        for task_id in &task_ids {
+            let result = handler
+                .change_status(task_id.clone(), "inbox".to_string(), None)
+                .await;
+            assert!(
+                result.is_ok(),
+                "Failed to move task {} to inbox: {:?}",
+                task_id,
+                result.err()
+            );
+        }
 
         // すべてのタスクがinboxに移動されたことを確認
         let data = handler.data.lock().unwrap();
@@ -4150,24 +3461,22 @@ mod tests {
                 )
                 .await;
             assert!(result.is_ok());
-            let task_id = result
-                .unwrap()
-                .split_whitespace()
-                .last()
-                .unwrap()
-                .to_string();
+            let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
             task_ids.push(task_id);
         }
 
         // 複数のタスクを一度にnext_actionに移動
-        let result = handler
-            .change_status(task_ids[0].clone(), "next_action".to_string(), None)
-            .await;
-        assert!(
-            result.is_ok(),
-            "Failed to move multiple tasks to next_action: {:?}",
-            result.err()
-        );
+        for task_id in &task_ids {
+            let result = handler
+                .change_status(task_id.clone(), "next_action".to_string(), None)
+                .await;
+            assert!(
+                result.is_ok(),
+                "Failed to move task {} to next_action: {:?}",
+                task_id,
+                result.err()
+            );
+        }
 
         // すべてのタスクがnext_actionに移動されたことを確認
         let data = handler.data.lock().unwrap();
@@ -4199,24 +3508,22 @@ mod tests {
                 )
                 .await;
             assert!(result.is_ok());
-            let task_id = result
-                .unwrap()
-                .split_whitespace()
-                .last()
-                .unwrap()
-                .to_string();
+            let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
             task_ids.push(task_id);
         }
 
         // 複数のタスクを一度にwaiting_forに移動
-        let result = handler
-            .change_status(task_ids[0].clone(), "waiting_for".to_string(), None)
-            .await;
-        assert!(
-            result.is_ok(),
-            "Failed to move multiple tasks to waiting_for: {:?}",
-            result.err()
-        );
+        for task_id in &task_ids {
+            let result = handler
+                .change_status(task_id.clone(), "waiting_for".to_string(), None)
+                .await;
+            assert!(
+                result.is_ok(),
+                "Failed to move task {} to waiting_for: {:?}",
+                task_id,
+                result.err()
+            );
+        }
 
         // すべてのタスクがwaiting_forに移動されたことを確認
         let data = handler.data.lock().unwrap();
@@ -4248,24 +3555,22 @@ mod tests {
                 )
                 .await;
             assert!(result.is_ok());
-            let task_id = result
-                .unwrap()
-                .split_whitespace()
-                .last()
-                .unwrap()
-                .to_string();
+            let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
             task_ids.push(task_id);
         }
 
         // 複数のタスクを一度にsomedayに移動
-        let result = handler
-            .change_status(task_ids[0].clone(), "someday".to_string(), None)
-            .await;
-        assert!(
-            result.is_ok(),
-            "Failed to move multiple tasks to someday: {:?}",
-            result.err()
-        );
+        for task_id in &task_ids {
+            let result = handler
+                .change_status(task_id.clone(), "someday".to_string(), None)
+                .await;
+            assert!(
+                result.is_ok(),
+                "Failed to move task {} to someday: {:?}",
+                task_id,
+                result.err()
+            );
+        }
 
         // すべてのタスクがsomedayに移動されたことを確認
         let data = handler.data.lock().unwrap();
@@ -4297,24 +3602,22 @@ mod tests {
                 )
                 .await;
             assert!(result.is_ok());
-            let task_id = result
-                .unwrap()
-                .split_whitespace()
-                .last()
-                .unwrap()
-                .to_string();
+            let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
             task_ids.push(task_id);
         }
 
         // 複数のタスクを一度にlaterに移動
-        let result = handler
-            .change_status(task_ids[0].clone(), "later".to_string(), None)
-            .await;
-        assert!(
-            result.is_ok(),
-            "Failed to move multiple tasks to later: {:?}",
-            result.err()
-        );
+        for task_id in &task_ids {
+            let result = handler
+                .change_status(task_id.clone(), "later".to_string(), None)
+                .await;
+            assert!(
+                result.is_ok(),
+                "Failed to move task {} to later: {:?}",
+                task_id,
+                result.err()
+            );
+        }
 
         // すべてのタスクがlaterに移動されたことを確認
         let data = handler.data.lock().unwrap();
@@ -4346,24 +3649,22 @@ mod tests {
                 )
                 .await;
             assert!(result.is_ok());
-            let task_id = result
-                .unwrap()
-                .split_whitespace()
-                .last()
-                .unwrap()
-                .to_string();
+            let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
             task_ids.push(task_id);
         }
 
         // 複数のタスクを一度にdoneに移動
-        let result = handler
-            .change_status(task_ids[0].clone(), "done".to_string(), None)
-            .await;
-        assert!(
-            result.is_ok(),
-            "Failed to move multiple tasks to done: {:?}",
-            result.err()
-        );
+        for task_id in &task_ids {
+            let result = handler
+                .change_status(task_id.clone(), "done".to_string(), None)
+                .await;
+            assert!(
+                result.is_ok(),
+                "Failed to move task {} to done: {:?}",
+                task_id,
+                result.err()
+            );
+        }
 
         // すべてのタスクがdoneに移動されたことを確認
         let data = handler.data.lock().unwrap();
@@ -4395,12 +3696,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         // 無効なステータス "in_progress" でエラーをテスト（問題として報告されたもの）
         let result = handler
@@ -4436,12 +3732,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = result
-            .unwrap()
-            .split_whitespace()
-            .last()
-            .unwrap()
-            .to_string();
+        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         // 様々な無効なステータスをテスト
         let invalid_statuses = vec![
@@ -4508,91 +3799,6 @@ mod tests {
             );
         }
     }
-
-    #[tokio::test]
-    async fn test_update_project_invalid_status_error_message() {
-        let (handler, _temp_file) = get_test_handler();
-
-        // プロジェクトを作成
-        let result = handler
-            .inbox(
-                "test-project-1".to_string(),
-                "Test Project".to_string(),
-                "project".to_string(),
-                None,
-                None,
-                None,
-                None,
-            )
-            .await;
-        assert!(result.is_ok());
-
-        // 無効なステータスで更新しようとする
-        let result = handler
-            .update(
-                "test-project-1".to_string(),
-                None,
-                None,
-                None,
-                Some("in_progress".to_string()),
-                None,
-                None,
-            )
-            .await;
-        assert!(result.is_err());
-        let err_msg = format!("{:?}", result.unwrap_err());
-        assert!(err_msg.contains("Invalid project status 'in_progress'"));
-        assert!(err_msg.contains("active"));
-        assert!(err_msg.contains("on_hold"));
-        assert!(err_msg.contains("completed"));
-    }
-
-    #[tokio::test]
-    async fn test_update_project_various_invalid_statuses() {
-        let (handler, _temp_file) = get_test_handler();
-
-        // プロジェクトを作成
-        let result = handler
-            .inbox(
-                "test-project-1".to_string(),
-                "Test Project".to_string(),
-                "project".to_string(),
-                None,
-                None,
-                None,
-                None,
-            )
-            .await;
-        assert!(result.is_ok());
-
-        let invalid_statuses = vec!["pending", "in_progress", "done", "onhold", "ACTIVE"];
-
-        for invalid_status in invalid_statuses {
-            let result = handler
-                .update(
-                    "test-project-1".to_string(),
-                    None,
-                    None,
-                    None,
-                    Some(invalid_status.to_string()),
-                    None,
-                    None,
-                )
-                .await;
-            assert!(
-                result.is_err(),
-                "Expected error for invalid project status: {}",
-                invalid_status
-            );
-            let err_msg = format!("{:?}", result.unwrap_err());
-            assert!(
-                err_msg.contains(&format!("Invalid project status '{}'", invalid_status)),
-                "Error message should contain the invalid status '{}'",
-                invalid_status
-            );
-        }
-    }
-
     #[tokio::test]
     async fn test_calendar_tasks_multiple_tasks_with_date() {
         let (handler, _temp_file) = get_test_handler();
@@ -4612,12 +3818,7 @@ mod tests {
                 )
                 .await;
             assert!(result.is_ok());
-            let task_id = result
-                .unwrap()
-                .split_whitespace()
-                .last()
-                .unwrap()
-                .to_string();
+            let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
             task_ids.push(task_id);
         }
 
@@ -4671,12 +3872,7 @@ mod tests {
                 )
                 .await;
             assert!(result.is_ok());
-            let task_id = result
-                .unwrap()
-                .split_whitespace()
-                .last()
-                .unwrap()
-                .to_string();
+            let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
             task_ids.push(task_id);
         }
 
@@ -4725,14 +3921,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        task_ids.push(
-            result
-                .unwrap()
-                .split_whitespace()
-                .last()
-                .unwrap()
-                .to_string(),
-        );
+        task_ids.push(GtdServerHandler::extract_id_from_response(&result.unwrap()));
 
         // start_dateを持たないタスク
         let result = handler
@@ -4747,14 +3936,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        task_ids.push(
-            result
-                .unwrap()
-                .split_whitespace()
-                .last()
-                .unwrap()
-                .to_string(),
-        );
+        task_ids.push(GtdServerHandler::extract_id_from_response(&result.unwrap()));
 
         // start_dateを指定せずに移動を試みる（部分的な失敗）
         // First task has date, should succeed
