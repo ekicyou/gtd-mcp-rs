@@ -316,6 +316,10 @@ impl McpServer for GtdServerHandler {
         &self,
         /// Status filter: inbox/next_action/waiting_for/later/calendar/someday/done/project/context/trash. Empty=all.
         status: Option<String>,
+        /// Optional date filter (YYYY-MM-DD) - For calendar status, only shows tasks with start_date <= this date
+        date: Option<String>,
+        /// Optional exclude_notes (boolean) - Reduce token usage by excluding notes from output
+        exclude_notes: Option<bool>,
     ) -> McpResult<String> {
         let data = self.data.lock().unwrap();
 
@@ -335,8 +339,42 @@ impl McpServer for GtdServerHandler {
             None
         };
 
-        let notas = data.list_all(status_filter);
+        // Parse date filter if provided
+        let date_filter = if let Some(ref date_str) = date {
+            match NaiveDate::parse_from_str(date_str, "%Y-%m-%d") {
+                Ok(d) => Some(d),
+                Err(_) => {
+                    drop(data);
+                    bail!(
+                        "Invalid date format '{}'. Use YYYY-MM-DD (e.g., '2025-03-15')",
+                        date_str
+                    );
+                }
+            }
+        } else {
+            None
+        };
+
+        let exclude_notes_flag = exclude_notes.unwrap_or(false);
+
+        let mut notas = data.list_all(status_filter);
         drop(data);
+
+        // Apply date filtering for calendar tasks
+        if let Some(filter_date) = date_filter {
+            notas.retain(|nota| {
+                // Only apply date filtering to calendar status tasks
+                if nota.status == NotaStatus::calendar {
+                    // Keep tasks where start_date is not set OR start_date <= filter_date
+                    // This hides tasks scheduled for future dates
+                    nota.start_date
+                        .is_none_or(|task_date| task_date <= filter_date)
+                } else {
+                    // For non-calendar tasks, keep all
+                    true
+                }
+            });
+        }
 
         if notas.is_empty() {
             return Ok("No notas found".to_string());
@@ -363,7 +401,9 @@ impl McpServer for GtdServerHandler {
             if let Some(ref ctx) = nota.context {
                 result.push_str(&format!("  Context: {}\n", ctx));
             }
-            if let Some(ref n) = nota.notes {
+            if !exclude_notes_flag
+                && let Some(ref n) = nota.notes
+            {
                 result.push_str(&format!("  Notes: {}\n", n));
             }
             if let Some(ref date) = nota.start_date {
@@ -2428,7 +2468,7 @@ mod tests {
     async fn test_list_contexts_empty() {
         let (handler, _temp_file) = get_test_handler();
 
-        let result = handler.list(None).await;
+        let result = handler.list(None, None, None).await;
         assert!(result.is_ok());
         assert!(result.unwrap().contains("No notas found")); // list() returns generic message
     }
@@ -2462,7 +2502,7 @@ mod tests {
             .await
             .unwrap();
 
-        let result = handler.list(None).await;
+        let result = handler.list(None, None, None).await;
         assert!(result.is_ok());
         let output = result.unwrap();
         assert!(output.contains("Office"));
@@ -3246,7 +3286,7 @@ mod tests {
         assert!(result.is_ok());
 
         // 日付フィルタなしで一覧取得
-        let result = handler.list(None).await;
+        let result = handler.list(None, None, None).await;
         assert!(result.is_ok());
         let list = result.unwrap();
 
@@ -3274,7 +3314,7 @@ mod tests {
         assert!(result.is_ok());
 
         // 同じ日付でフィルタリング
-        let result = handler.list(None).await;
+        let result = handler.list(None, None, None).await;
         assert!(result.is_ok());
         let list = result.unwrap();
 
@@ -3316,7 +3356,7 @@ mod tests {
         assert!(result.is_ok());
 
         // デフォルト（exclude_notes=None）で一覧取得
-        let result = handler.list(None).await;
+        let result = handler.list(None, None, None).await;
         assert!(result.is_ok());
         let list = result.unwrap();
 
@@ -3353,7 +3393,7 @@ mod tests {
         assert!(result.is_ok());
 
         // exclude_notes=falseで明示的に一覧取得
-        let result = handler.list(None).await;
+        let result = handler.list(None, None, None).await;
         assert!(result.is_ok());
         let list = result.unwrap();
 
@@ -3382,7 +3422,7 @@ mod tests {
         assert!(result.is_ok());
 
         // デフォルトで一覧取得
-        let result = handler.list(None).await;
+        let result = handler.list(None, None, None).await;
         assert!(result.is_ok());
         let list = result.unwrap();
 
@@ -3770,7 +3810,9 @@ mod tests {
         let (handler, _temp_file) = get_test_handler();
 
         // 無効なステータスでリストを取得しようとする
-        let result = handler.list(Some("in_progress".to_string())).await;
+        let result = handler
+            .list(Some("in_progress".to_string()), None, None)
+            .await;
         assert!(result.is_err());
         let err_msg = format!("{:?}", result.unwrap_err());
         assert!(err_msg.contains("Invalid status 'in_progress'"));
@@ -3785,7 +3827,9 @@ mod tests {
         let invalid_statuses = vec!["invalid", "complete", "pending", "INBOX"];
 
         for invalid_status in invalid_statuses {
-            let result = handler.list(Some(invalid_status.to_string())).await;
+            let result = handler
+                .list(Some(invalid_status.to_string()), None, None)
+                .await;
             assert!(
                 result.is_err(),
                 "Expected error for invalid status: {}",
@@ -3955,5 +3999,338 @@ mod tests {
         let data = handler.data.lock().unwrap();
         assert_eq!(data.calendar.len(), 1);
         assert_eq!(data.inbox.len(), 1);
+    }
+
+    // テスト: date フィルタリングの基本機能
+    #[tokio::test]
+    async fn test_list_with_date_filter_basic() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // calendar ステータスの複数のタスクを作成
+        // 過去のタスク
+        handler
+            .inbox(
+                "task-past".to_string(),
+                "Past task".to_string(),
+                "calendar".to_string(),
+                None,
+                None,
+                None,
+                Some("2024-01-01".to_string()),
+            )
+            .await
+            .unwrap();
+
+        // 今日のタスク
+        handler
+            .inbox(
+                "task-today".to_string(),
+                "Today task".to_string(),
+                "calendar".to_string(),
+                None,
+                None,
+                None,
+                Some("2024-06-15".to_string()),
+            )
+            .await
+            .unwrap();
+
+        // 未来のタスク
+        handler
+            .inbox(
+                "task-future".to_string(),
+                "Future task".to_string(),
+                "calendar".to_string(),
+                None,
+                None,
+                None,
+                Some("2025-12-31".to_string()),
+            )
+            .await
+            .unwrap();
+
+        // フィルタ日: 2024-06-15 として、それ以前のタスクのみ表示
+        let result = handler
+            .list(
+                Some("calendar".to_string()),
+                Some("2024-06-15".to_string()),
+                None,
+            )
+            .await
+            .unwrap();
+
+        // 過去と今日のタスクのみ表示される
+        assert!(result.contains("task-past"));
+        assert!(result.contains("task-today"));
+        assert!(!result.contains("task-future"));
+        assert!(result.contains("Found 2 nota(s)"));
+    }
+
+    // テスト: date フィルタは calendar ステータスのみに適用される
+    #[tokio::test]
+    async fn test_list_with_date_filter_only_applies_to_calendar() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // calendar 以外のステータスで未来の start_date を持つタスク
+        handler
+            .inbox(
+                "task-inbox-future".to_string(),
+                "Inbox with future date".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
+                None,
+                Some("2025-12-31".to_string()),
+            )
+            .await
+            .unwrap();
+
+        handler
+            .inbox(
+                "task-next-future".to_string(),
+                "Next action with future date".to_string(),
+                "next_action".to_string(),
+                None,
+                None,
+                None,
+                Some("2025-12-31".to_string()),
+            )
+            .await
+            .unwrap();
+
+        // calendar ステータスで未来の start_date を持つタスク
+        handler
+            .inbox(
+                "task-calendar-future".to_string(),
+                "Calendar future task".to_string(),
+                "calendar".to_string(),
+                None,
+                None,
+                None,
+                Some("2025-12-31".to_string()),
+            )
+            .await
+            .unwrap();
+
+        // 現在の日付でフィルタリング（2024-06-15）
+        let result = handler
+            .list(None, Some("2024-06-15".to_string()), None)
+            .await
+            .unwrap();
+
+        // inbox と next_action のタスクは date に関係なく表示される
+        assert!(result.contains("task-inbox-future"));
+        assert!(result.contains("task-next-future"));
+        // calendar の未来タスクは非表示
+        assert!(!result.contains("task-calendar-future"));
+    }
+
+    // テスト: start_date が None の calendar タスクは常に表示される
+    #[tokio::test]
+    async fn test_list_with_date_filter_calendar_without_start_date() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // start_date なしの calendar タスク（本来は calendar には start_date が必要だが、
+        // データが古い場合や何らかの理由で start_date がない場合を考慮）
+        // 注: inbox で作成後に change_status で calendar に移動する方法は使えないため、
+        // 直接データを操作する必要があるが、テストのためここでは inbox で作成
+
+        handler
+            .inbox(
+                "task-no-date".to_string(),
+                "Task without date".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        // inbox から calendar に手動で移動（start_date なし）
+        // change_status は calendar に start_date を要求するため、直接データを操作
+        {
+            let mut data = handler.data.lock().unwrap();
+            data.move_status("task-no-date", NotaStatus::calendar);
+        }
+
+        // 未来の日付でフィルタリング
+        let result = handler
+            .list(
+                Some("calendar".to_string()),
+                Some("2024-06-15".to_string()),
+                None,
+            )
+            .await
+            .unwrap();
+
+        // start_date なしのタスクは常に表示される
+        assert!(result.contains("task-no-date"));
+    }
+
+    // テスト: 無効な date フォーマット
+    #[tokio::test]
+    async fn test_list_with_invalid_date_format() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // 無効な日付フォーマット
+        let result = handler
+            .list(None, Some("2024/06/15".to_string()), None)
+            .await;
+        assert!(result.is_err());
+        let err_msg = format!("{:?}", result.unwrap_err());
+        assert!(err_msg.contains("Invalid date format"));
+        assert!(err_msg.contains("YYYY-MM-DD"));
+
+        // もう一つの無効なフォーマット
+        let result = handler
+            .list(None, Some("15-06-2024".to_string()), None)
+            .await;
+        assert!(result.is_err());
+    }
+
+    // テスト: exclude_notes パラメータ
+    #[tokio::test]
+    async fn test_list_with_exclude_notes() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // ノート付きのタスクを作成
+        handler
+            .inbox(
+                "task-with-notes".to_string(),
+                "Task with notes".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
+                Some("These are detailed notes".to_string()),
+                None,
+            )
+            .await
+            .unwrap();
+
+        // ノートを含めてリスト（デフォルト）
+        let result_with_notes = handler.list(None, None, None).await.unwrap();
+        assert!(result_with_notes.contains("These are detailed notes"));
+
+        // ノートを除外してリスト
+        let result_without_notes = handler.list(None, None, Some(true)).await.unwrap();
+        assert!(!result_without_notes.contains("These are detailed notes"));
+        assert!(result_without_notes.contains("task-with-notes"));
+
+        // 明示的に false を指定してノートを含める
+        let result_with_notes_explicit = handler.list(None, None, Some(false)).await.unwrap();
+        assert!(result_with_notes_explicit.contains("These are detailed notes"));
+    }
+
+    // テスト: date フィルタと status フィルタの併用
+    #[tokio::test]
+    async fn test_list_with_date_and_status_filter_combined() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // 複数のステータスでタスクを作成
+        handler
+            .inbox(
+                "cal-past".to_string(),
+                "Calendar past".to_string(),
+                "calendar".to_string(),
+                None,
+                None,
+                None,
+                Some("2024-01-01".to_string()),
+            )
+            .await
+            .unwrap();
+
+        handler
+            .inbox(
+                "cal-future".to_string(),
+                "Calendar future".to_string(),
+                "calendar".to_string(),
+                None,
+                None,
+                None,
+                Some("2025-12-31".to_string()),
+            )
+            .await
+            .unwrap();
+
+        handler
+            .inbox(
+                "inbox-task".to_string(),
+                "Inbox task".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        // calendar ステータスで日付フィルタ
+        let result = handler
+            .list(
+                Some("calendar".to_string()),
+                Some("2024-06-15".to_string()),
+                None,
+            )
+            .await
+            .unwrap();
+
+        assert!(result.contains("cal-past"));
+        assert!(!result.contains("cal-future"));
+        assert!(!result.contains("inbox-task"));
+        assert!(result.contains("Found 1 nota(s)"));
+    }
+
+    // テスト: date フィルタと exclude_notes の併用
+    #[tokio::test]
+    async fn test_list_with_date_filter_and_exclude_notes() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // ノート付きの calendar タスクを作成
+        handler
+            .inbox(
+                "cal-with-notes".to_string(),
+                "Calendar with notes".to_string(),
+                "calendar".to_string(),
+                None,
+                None,
+                Some("Important calendar notes".to_string()),
+                Some("2024-01-01".to_string()),
+            )
+            .await
+            .unwrap();
+
+        handler
+            .inbox(
+                "cal-future-notes".to_string(),
+                "Future calendar with notes".to_string(),
+                "calendar".to_string(),
+                None,
+                None,
+                Some("Future notes".to_string()),
+                Some("2025-12-31".to_string()),
+            )
+            .await
+            .unwrap();
+
+        // date フィルタと exclude_notes を同時に使用
+        let result = handler
+            .list(
+                Some("calendar".to_string()),
+                Some("2024-06-15".to_string()),
+                Some(true),
+            )
+            .await
+            .unwrap();
+
+        // 過去のタスクは表示されるが、ノートは表示されない
+        assert!(result.contains("cal-with-notes"));
+        assert!(!result.contains("Important calendar notes"));
+        // 未来のタスクは非表示
+        assert!(!result.contains("cal-future-notes"));
+        assert!(!result.contains("Future notes"));
     }
 }
