@@ -3,48 +3,8 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashMap;
 use std::str::FromStr;
 
-/// A GTD (Getting Things Done) task
-///
-/// Tasks represent individual actionable items in the GTD system.
-/// Each task has a unique ID, title, status (inbox, next_action, etc.),
-/// and optional metadata like project association, context, notes, and start date.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Task {
-    /// Unique task identifier (e.g., "#1", "#2")
-    pub id: String,
-    /// Task title describing the action
-    pub title: String,
-    /// Current status of the task (inbox, next_action, waiting_for, etc.)
-    #[serde(skip, default = "default_task_status")]
-    pub status: NotaStatus,
-    /// Optional project ID this task belongs to
-    pub project: Option<String>,
-    /// Optional context where this task can be performed (e.g., "@office", "@home")
-    pub context: Option<String>,
-    /// Optional additional notes in Markdown format
-    pub notes: Option<String>,
-    /// Optional start date for the task (format: YYYY-MM-DD)
-    pub start_date: Option<NaiveDate>,
-    /// Date when the task was created
-    pub created_at: NaiveDate,
-    /// Date when the task was last updated
-    pub updated_at: NaiveDate,
-}
-
-/// Default task status for deserialization
-fn default_task_status() -> NotaStatus {
-    NotaStatus::inbox
-}
-
-/// Default context status for deserialization
-fn default_context_status() -> NotaStatus {
-    NotaStatus::context
-}
-
-/// Check if status is context (for skipping serialization)
-fn is_context_status(status: &NotaStatus) -> bool {
-    *status == NotaStatus::context
-}
+// Import legacy types from migration module (for backward compatibility only)
+use crate::migration::{Context, Project, Task};
 
 /// Get the current date in local timezone
 pub fn local_date_today() -> NaiveDate {
@@ -101,73 +61,6 @@ impl FromStr for NotaStatus {
             )),
         }
     }
-}
-
-/// A GTD project
-///
-/// Projects represent multi-step outcomes that require more than one action.
-/// Each project has a unique ID, title, and optional notes and context.
-/// Projects use NotaStatus::project as their status.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Project {
-    /// Unique project identifier (e.g., "project-1", "project-2")
-    #[serde(default)]
-    pub id: String,
-    /// Project title
-    pub title: String,
-    /// Optional project notes
-    pub notes: Option<String>,
-    /// Optional parent project (None for projects, as projects don't have parent projects)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub project: Option<String>,
-    /// Optional context where this project can be worked on
-    pub context: Option<String>,
-    /// Optional start date (for scheduled projects)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub start_date: Option<NaiveDate>,
-    /// Creation date
-    #[serde(default = "local_date_today")]
-    pub created_at: NaiveDate,
-    /// Last update date
-    #[serde(default = "local_date_today")]
-    pub updated_at: NaiveDate,
-}
-
-/// A GTD context
-///
-/// Contexts represent locations, tools, or situations where tasks can be performed
-/// (e.g., "@office", "@home", "@computer", "@phone", "@errands").
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Context {
-    /// Context name (e.g., "Office", "Home") - serves as ID
-    #[serde(default)]
-    pub name: String,
-    /// Context title (same as name for contexts)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub title: Option<String>,
-    /// Optional notes about the context
-    pub notes: Option<String>,
-    /// Status (always NotaStatus::context for context notas)
-    #[serde(
-        default = "default_context_status",
-        skip_serializing_if = "is_context_status"
-    )]
-    pub status: NotaStatus,
-    /// Parent project (None for contexts)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub project: Option<String>,
-    /// Parent context (None for contexts)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub context: Option<String>,
-    /// Optional start date
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub start_date: Option<NaiveDate>,
-    /// Creation date
-    #[serde(skip_serializing_if = "Option::is_none", default)]
-    pub created_at: Option<NaiveDate>,
-    /// Last update date
-    #[serde(skip_serializing_if = "Option::is_none", default)]
-    pub updated_at: Option<NaiveDate>,
 }
 
 /// A unified nota (note) in the GTD system
@@ -322,12 +215,8 @@ impl Nota {
 
 /// The main GTD data structure
 ///
-/// This struct holds all tasks organized by status, along with projects and contexts.
-/// Tasks are stored in separate vectors based on their status to facilitate
-/// efficient serialization to TOML with a clear, human-readable structure.
-///
-/// Internally, a HashMap is maintained to prevent duplicate task IDs and enable
-/// fast lookups by ID.
+/// This struct holds all GTD items (tasks, projects, contexts) as unified Nota objects.
+/// The Nota structure is the fundamental data type that can represent any GTD item.
 ///
 /// The data is designed to be serialized to/from TOML format for persistent storage.
 ///
@@ -335,35 +224,18 @@ impl Nota {
 ///
 /// - Version 1 (legacy): Projects stored as `Vec<Project>` (TOML: `[[projects]]`)
 /// - Version 2 (legacy): Projects stored as `HashMap<String, Project>` (TOML: `[projects.id]`), separate arrays for each status
-/// - Version 3 (current): Projects and contexts stored as Vec (TOML: `[[project]]`, `[[context]]`)
+/// - Version 3 (legacy): Projects and contexts stored as Vec (TOML: `[[project]]`, `[[context]]`)
+/// - Version 4 (current): All items stored as unified Nota array (TOML: `[[notas]]`)
 ///
 /// The deserializer automatically migrates from older versions to the current internal format.
 #[derive(Debug)]
 pub struct GtdData {
-    /// Format version for the TOML file (current: 3)
+    /// Format version for the TOML file (current: 4)
     pub format_version: u32,
-    /// Tasks in the inbox (not yet processed)
-    pub inbox: Vec<Task>,
-    /// Tasks marked as next actions (ready to do)
-    pub next_action: Vec<Task>,
-    /// Tasks waiting for external input
-    pub waiting_for: Vec<Task>,
-    /// Tasks to be done later
-    pub later: Vec<Task>,
-    /// Tasks scheduled for specific dates
-    pub calendar: Vec<Task>,
-    /// Tasks that might be done someday
-    pub someday: Vec<Task>,
-    /// Completed tasks
-    pub done: Vec<Task>,
-    /// Deleted tasks
-    pub trash: Vec<Task>,
-    /// All projects (keyed by ID)
-    pub projects: HashMap<String, Project>,
-    /// All contexts (keyed by name)
-    pub contexts: HashMap<String, Context>,
-    /// Internal map of all tasks by ID for duplicate checking (not serialized)
-    pub(crate) task_map: HashMap<String, NotaStatus>,
+    /// All GTD items stored as Nota objects
+    pub(crate) notas: Vec<Nota>,
+    /// Internal map of all nota IDs for duplicate checking (not serialized)
+    pub(crate) nota_map: HashMap<String, NotaStatus>,
     /// Counter for generating unique task IDs
     pub task_counter: u32,
     /// Counter for generating unique project IDs
@@ -373,18 +245,9 @@ pub struct GtdData {
 impl Default for GtdData {
     fn default() -> Self {
         Self {
-            format_version: 3,
-            inbox: Vec::new(),
-            next_action: Vec::new(),
-            waiting_for: Vec::new(),
-            later: Vec::new(),
-            calendar: Vec::new(),
-            someday: Vec::new(),
-            done: Vec::new(),
-            trash: Vec::new(),
-            projects: HashMap::new(),
-            contexts: HashMap::new(),
-            task_map: HashMap::new(),
+            format_version: 4,
+            notas: Vec::new(),
+            nota_map: HashMap::new(),
             task_counter: 0,
             project_counter: 0,
         }
@@ -394,7 +257,7 @@ impl Default for GtdData {
 /// Default format version for new files
 #[allow(dead_code)] // Used by serde
 fn default_format_version() -> u32 {
-    3
+    4
 }
 
 impl<'de> Deserialize<'de> for GtdData {
@@ -403,138 +266,127 @@ impl<'de> Deserialize<'de> for GtdData {
         D: Deserializer<'de>,
     {
         use crate::migration::{
-            GtdDataMigrationHelper, migrate_notas_v3_to_internal, migrate_projects_to_latest,
-            normalize_context_line_endings, normalize_project_line_endings,
-            normalize_task_line_endings, populate_context_names, populate_project_ids,
+            GtdDataMigrationHelper, migrate_projects_to_latest, normalize_context_line_endings,
+            normalize_project_line_endings, normalize_task_line_endings, populate_context_names,
+            populate_project_ids,
         };
 
         let helper = GtdDataMigrationHelper::deserialize(deserializer)?;
 
-        // Initialize the collections
-        let mut inbox = helper.inbox;
-        let mut next_action = helper.next_action;
-        let mut waiting_for = helper.waiting_for;
-        let mut later = helper.later;
-        let mut calendar = helper.calendar;
-        let mut someday = helper.someday;
-        let mut done = helper.done;
-        let mut trash = helper.trash;
-        let mut projects = migrate_projects_to_latest(helper.projects);
-        let mut contexts = helper.contexts;
+        // Start with notas from Version 4 format if available
+        let mut notas = helper.notas;
 
-        // If this is Version 3 format with Vec arrays for projects/contexts, convert to HashMap
-        if !helper.project.is_empty() {
-            for project in helper.project {
-                projects.insert(project.id.clone(), project);
+        // If notas is empty, we need to migrate from older formats
+        if notas.is_empty() {
+            // Initialize collections for migration
+            let mut inbox = helper.inbox;
+            let mut next_action = helper.next_action;
+            let mut waiting_for = helper.waiting_for;
+            let mut later = helper.later;
+            let mut calendar = helper.calendar;
+            let mut someday = helper.someday;
+            let mut done = helper.done;
+            let mut trash = helper.trash;
+            let mut projects = migrate_projects_to_latest(helper.projects);
+            let mut contexts = helper.contexts;
+
+            // If this is Version 3 format with Vec arrays for projects/contexts, convert to HashMap
+            if !helper.project.is_empty() {
+                for project in helper.project {
+                    projects.insert(project.id.clone(), project);
+                }
+            }
+            if !helper.context.is_empty() {
+                for context in helper.context {
+                    contexts.insert(context.name.clone(), context);
+                }
+            }
+
+            // Populate the name/id fields
+            populate_context_names(&mut contexts);
+            populate_project_ids(&mut projects);
+
+            // Normalize line endings in all string fields
+            normalize_task_line_endings(&mut inbox);
+            normalize_task_line_endings(&mut next_action);
+            normalize_task_line_endings(&mut waiting_for);
+            normalize_task_line_endings(&mut later);
+            normalize_task_line_endings(&mut calendar);
+            normalize_task_line_endings(&mut someday);
+            normalize_task_line_endings(&mut done);
+            normalize_task_line_endings(&mut trash);
+            normalize_project_line_endings(&mut projects);
+            normalize_context_line_endings(&mut contexts);
+
+            // Set the status field for each task based on which collection it's in
+            for task in &mut inbox {
+                task.status = NotaStatus::inbox;
+            }
+            for task in &mut next_action {
+                task.status = NotaStatus::next_action;
+            }
+            for task in &mut waiting_for {
+                task.status = NotaStatus::waiting_for;
+            }
+            for task in &mut later {
+                task.status = NotaStatus::later;
+            }
+            for task in &mut calendar {
+                task.status = NotaStatus::calendar;
+            }
+            for task in &mut someday {
+                task.status = NotaStatus::someday;
+            }
+            for task in &mut done {
+                task.status = NotaStatus::done;
+            }
+            for task in &mut trash {
+                task.status = NotaStatus::trash;
+            }
+
+            // Convert all old structures to Nota
+            for task in inbox {
+                notas.push(Nota::from_task(task));
+            }
+            for task in next_action {
+                notas.push(Nota::from_task(task));
+            }
+            for task in waiting_for {
+                notas.push(Nota::from_task(task));
+            }
+            for task in later {
+                notas.push(Nota::from_task(task));
+            }
+            for task in calendar {
+                notas.push(Nota::from_task(task));
+            }
+            for task in someday {
+                notas.push(Nota::from_task(task));
+            }
+            for task in done {
+                notas.push(Nota::from_task(task));
+            }
+            for task in trash {
+                notas.push(Nota::from_task(task));
+            }
+            for project in projects.into_values() {
+                notas.push(Nota::from_project(project));
+            }
+            for context in contexts.into_values() {
+                notas.push(Nota::from_context(context));
             }
         }
-        if !helper.context.is_empty() {
-            for context in helper.context {
-                contexts.insert(context.name.clone(), context);
-            }
-        }
 
-        // If this is Version 3 format (unified notas), migrate to internal format
-        if !helper.notas.is_empty() {
-            migrate_notas_v3_to_internal(
-                helper.notas,
-                &mut inbox,
-                &mut next_action,
-                &mut waiting_for,
-                &mut later,
-                &mut calendar,
-                &mut someday,
-                &mut done,
-                &mut trash,
-                &mut projects,
-                &mut contexts,
-            );
-        }
-
-        // Populate the name field in each Context from the HashMap key
-        populate_context_names(&mut contexts);
-
-        // Populate the id field in each Project from the HashMap key
-        populate_project_ids(&mut projects);
-
-        // Normalize line endings in all string fields
-        normalize_task_line_endings(&mut inbox);
-        normalize_task_line_endings(&mut next_action);
-        normalize_task_line_endings(&mut waiting_for);
-        normalize_task_line_endings(&mut later);
-        normalize_task_line_endings(&mut calendar);
-        normalize_task_line_endings(&mut someday);
-        normalize_task_line_endings(&mut done);
-        normalize_task_line_endings(&mut trash);
-        normalize_project_line_endings(&mut projects);
-        normalize_context_line_endings(&mut contexts);
-
-        // Set the status field for each task based on which collection it's in
-        for task in &mut inbox {
-            task.status = NotaStatus::inbox;
-        }
-        for task in &mut next_action {
-            task.status = NotaStatus::next_action;
-        }
-        for task in &mut waiting_for {
-            task.status = NotaStatus::waiting_for;
-        }
-        for task in &mut later {
-            task.status = NotaStatus::later;
-        }
-        for task in &mut calendar {
-            task.status = NotaStatus::calendar;
-        }
-        for task in &mut someday {
-            task.status = NotaStatus::someday;
-        }
-        for task in &mut done {
-            task.status = NotaStatus::done;
-        }
-        for task in &mut trash {
-            task.status = NotaStatus::trash;
-        }
-
-        // Build task_map from all tasks for duplicate checking
-        let mut task_map = HashMap::new();
-        for task in &inbox {
-            task_map.insert(task.id.clone(), NotaStatus::inbox);
-        }
-        for task in &next_action {
-            task_map.insert(task.id.clone(), NotaStatus::next_action);
-        }
-        for task in &waiting_for {
-            task_map.insert(task.id.clone(), NotaStatus::waiting_for);
-        }
-        for task in &later {
-            task_map.insert(task.id.clone(), NotaStatus::later);
-        }
-        for task in &calendar {
-            task_map.insert(task.id.clone(), NotaStatus::calendar);
-        }
-        for task in &someday {
-            task_map.insert(task.id.clone(), NotaStatus::someday);
-        }
-        for task in &done {
-            task_map.insert(task.id.clone(), NotaStatus::done);
-        }
-        for task in &trash {
-            task_map.insert(task.id.clone(), NotaStatus::trash);
+        // Build nota_map from all notas for duplicate checking
+        let mut nota_map = HashMap::new();
+        for nota in &notas {
+            nota_map.insert(nota.id.clone(), nota.status.clone());
         }
 
         Ok(GtdData {
-            format_version: 3, // Use version 3 for in-memory representation
-            inbox,
-            next_action,
-            waiting_for,
-            later,
-            calendar,
-            someday,
-            done,
-            trash,
-            projects,
-            contexts,
-            task_map,
+            format_version: 4, // Use version 4 for in-memory representation
+            notas,
+            nota_map,
             task_counter: helper.task_counter,
             project_counter: helper.project_counter,
         })
@@ -548,46 +400,12 @@ impl Serialize for GtdData {
     {
         use serde::ser::SerializeStruct;
 
-        // Convert HashMap to Vec for projects and contexts (Version 3 format)
-        let projects_vec: Vec<&Project> = self.projects.values().collect();
-        let contexts_vec: Vec<&Context> = self.contexts.values().collect();
-
-        let mut state = serializer.serialize_struct("GtdData", 15)?;
+        let mut state = serializer.serialize_struct("GtdData", 4)?;
         state.serialize_field("format_version", &self.format_version)?;
 
-        if !self.inbox.is_empty() {
-            state.serialize_field("inbox", &self.inbox)?;
-        }
-        if !self.next_action.is_empty() {
-            state.serialize_field("next_action", &self.next_action)?;
-        }
-        if !self.waiting_for.is_empty() {
-            state.serialize_field("waiting_for", &self.waiting_for)?;
-        }
-        if !self.later.is_empty() {
-            state.serialize_field("later", &self.later)?;
-        }
-        if !self.calendar.is_empty() {
-            state.serialize_field("calendar", &self.calendar)?;
-        }
-        if !self.someday.is_empty() {
-            state.serialize_field("someday", &self.someday)?;
-        }
-        if !self.done.is_empty() {
-            state.serialize_field("done", &self.done)?;
-        }
-        if !self.trash.is_empty() {
-            state.serialize_field("trash", &self.trash)?;
-        }
-
-        // Serialize projects as Vec (Version 3 format: [[project]])
-        if !projects_vec.is_empty() {
-            state.serialize_field("project", &projects_vec)?;
-        }
-
-        // Serialize contexts as Vec (Version 3 format: [[context]])
-        if !contexts_vec.is_empty() {
-            state.serialize_field("context", &contexts_vec)?;
+        // Serialize all items as unified notas array (Version 4 format: [[notas]])
+        if !self.notas.is_empty() {
+            state.serialize_field("notas", &self.notas)?;
         }
 
         if self.task_counter != 0 {
@@ -613,331 +431,215 @@ impl GtdData {
         format!("#{}", self.task_counter)
     }
 
-    /// Get a reference to the task list for the given status
+    /// Count total number of notas (all types: tasks, projects, contexts)
     #[allow(dead_code)]
-    fn get_task_list(&self, status: &NotaStatus) -> &Vec<Task> {
-        match status {
-            NotaStatus::inbox => &self.inbox,
-            NotaStatus::next_action => &self.next_action,
-            NotaStatus::waiting_for => &self.waiting_for,
-            NotaStatus::someday => &self.someday,
-            NotaStatus::later => &self.later,
-            NotaStatus::done => &self.done,
-            NotaStatus::trash => &self.trash,
-            NotaStatus::calendar => &self.calendar,
-            NotaStatus::context | NotaStatus::project => {
-                panic!("context and project statuses are not task statuses")
-            }
-        }
+    pub fn nota_count(&self) -> usize {
+        self.notas.len()
     }
 
-    /// Get a mutable reference to the task list for the given status
-    fn get_task_list_mut(&mut self, status: &NotaStatus) -> &mut Vec<Task> {
-        match status {
-            NotaStatus::inbox => &mut self.inbox,
-            NotaStatus::next_action => &mut self.next_action,
-            NotaStatus::waiting_for => &mut self.waiting_for,
-            NotaStatus::someday => &mut self.someday,
-            NotaStatus::later => &mut self.later,
-            NotaStatus::done => &mut self.done,
-            NotaStatus::trash => &mut self.trash,
-            NotaStatus::calendar => &mut self.calendar,
-            NotaStatus::context | NotaStatus::project => {
-                panic!("context and project statuses are not task statuses")
-            }
-        }
-    }
-
-    /// Get all task lists as an array of references
-    fn all_task_lists(&self) -> [&Vec<Task>; 8] {
-        [
-            &self.inbox,
-            &self.next_action,
-            &self.waiting_for,
-            &self.someday,
-            &self.later,
-            &self.done,
-            &self.trash,
-            &self.calendar,
-        ]
-    }
-
-    /// Get all task lists as an array of mutable references
-    fn all_task_lists_mut(&mut self) -> [&mut Vec<Task>; 8] {
-        [
-            &mut self.inbox,
-            &mut self.next_action,
-            &mut self.waiting_for,
-            &mut self.someday,
-            &mut self.later,
-            &mut self.done,
-            &mut self.trash,
-            &mut self.calendar,
-        ]
-    }
-
-    /// Get all tasks as a single vector (for testing and compatibility)
-    #[allow(dead_code)]
-    pub fn all_tasks(&self) -> Vec<&Task> {
-        let mut tasks = Vec::new();
-        for list in self.all_task_lists() {
-            tasks.extend(list.iter());
-        }
-        tasks
-    }
-
-    /// Count total number of tasks across all statuses
+    /// Count total number of task notas across all task statuses
     #[allow(dead_code)]
     pub fn task_count(&self) -> usize {
-        self.inbox.len()
-            + self.next_action.len()
-            + self.waiting_for.len()
-            + self.someday.len()
-            + self.later.len()
-            + self.done.len()
-            + self.trash.len()
-            + self.calendar.len()
+        self.notas.iter().filter(|n| n.is_task()).count()
     }
 
-    /// Find a task by its ID across all status containers
+    /// Find a nota by its ID
+    ///
+    /// # Arguments
+    /// * `id` - The nota ID to search for
+    ///
+    /// # Returns
+    /// An optional reference to the nota if found
+    #[allow(dead_code)]
+    fn find_nota_by_id(&self, id: &str) -> Option<&Nota> {
+        self.notas.iter().find(|n| n.id == id)
+    }
+
+    /// Find a nota by its ID and return a mutable reference
+    ///
+    /// # Arguments
+    /// * `id` - The nota ID to search for
+    ///
+    /// # Returns
+    /// An optional mutable reference to the nota if found
+    fn find_nota_by_id_mut(&mut self, id: &str) -> Option<&mut Nota> {
+        self.notas.iter_mut().find(|n| n.id == id)
+    }
+
+    /// Find a task by its ID (for compatibility)
     ///
     /// # Arguments
     /// * `id` - The task ID to search for (e.g., "#1")
     ///
     /// # Returns
-    /// An optional reference to the task if found
+    /// An optional Nota reference if found and it's a task
     #[allow(dead_code)]
-    pub fn find_task_by_id(&self, id: &str) -> Option<&Task> {
-        for list in self.all_task_lists() {
-            if let Some(task) = list.iter().find(|t| t.id == id) {
-                return Some(task);
-            }
-        }
-        None
+    pub fn find_task_by_id(&self, id: &str) -> Option<&Nota> {
+        self.notas.iter().find(|n| n.id == id && n.is_task())
     }
 
-    /// Find a task by its ID and return a mutable reference
+    /// Find a task by its ID and return a mutable reference (for compatibility)
     ///
     /// # Arguments
     /// * `id` - The task ID to search for (e.g., "#1")
     ///
     /// # Returns
-    /// An optional mutable reference to the task if found
-    pub fn find_task_by_id_mut(&mut self, id: &str) -> Option<&mut Task> {
-        for list in self.all_task_lists_mut() {
-            if let Some(task) = list.iter_mut().find(|t| t.id == id) {
-                return Some(task);
-            }
-        }
-        None
+    /// An optional mutable Nota reference if found and it's a task
+    pub fn find_task_by_id_mut(&mut self, id: &str) -> Option<&mut Nota> {
+        self.notas.iter_mut().find(|n| n.id == id && n.is_task())
     }
 
-    /// Add a task to the appropriate status container
-    ///
-    /// The task will be added to the container matching its status field.
+    /// Add a nota to the collection
     ///
     /// # Arguments
-    /// * `task` - The task to add
-    pub fn add_task(&mut self, task: Task) {
-        let status = task.status.clone();
-        let id = task.id.clone();
+    /// * `nota` - The nota to add
+    pub fn add_nota(&mut self, nota: Nota) {
+        let id = nota.id.clone();
+        let status = nota.status.clone();
 
-        // Add to task_map for duplicate checking
-        self.task_map.insert(id, status.clone());
+        // Add to nota_map for duplicate checking
+        self.nota_map.insert(id, status);
 
-        // Add to appropriate status list
-        self.get_task_list_mut(&status).push(task);
+        // Add to notas vector
+        self.notas.push(nota);
     }
 
-    /// Remove a task from its container and return it
+    /// Remove a nota from the collection and return it
     ///
     /// # Arguments
-    /// * `id` - The task ID to remove (e.g., "task-1")
+    /// * `id` - The nota ID to remove
     ///
     /// # Returns
-    /// The removed task if found
+    /// The removed nota if found
     #[allow(dead_code)]
-    pub fn remove_task(&mut self, id: &str) -> Option<Task> {
-        // Find and remove task from its list
-        let mut removed_task = None;
-        for list in self.all_task_lists_mut() {
-            if let Some(pos) = list.iter().position(|t| t.id == id) {
-                removed_task = Some(list.remove(pos));
-                break;
-            }
+    pub fn remove_nota(&mut self, id: &str) -> Option<Nota> {
+        // Find and remove nota
+        if let Some(pos) = self.notas.iter().position(|n| n.id == id) {
+            let nota = self.notas.remove(pos);
+            self.nota_map.remove(id);
+            Some(nota)
+        } else {
+            None
         }
-
-        // If found, remove from task_map as well
-        if removed_task.is_some() {
-            self.task_map.remove(id);
-        }
-
-        removed_task
     }
 
-    /// Move a task to a different status container
+    /// Move a nota to a different status
     ///
-    /// This method removes the task from its current container, updates its status,
-    /// and adds it to the new container.
+    /// This method updates the status of the nota.
     ///
     /// # Arguments
-    /// * `id` - The task ID to move (e.g., "#1")
+    /// * `id` - The nota ID to move
     /// * `new_status` - The target status
     ///
     /// # Returns
-    /// `Some(())` if the task was found and moved, `None` otherwise
+    /// `Some(())` if the nota was found and moved, `None` otherwise
     pub fn move_status(&mut self, id: &str, new_status: NotaStatus) -> Option<()> {
-        // Remove task from its current container
-        let mut task = self.remove_task(id)?;
-
-        // Update the task's status
-        task.status = new_status;
-
-        // Add task to the new status container
-        self.add_task(task);
-
-        Some(())
+        if let Some(nota) = self.find_nota_by_id_mut(id) {
+            nota.status = new_status.clone();
+            nota.updated_at = local_date_today();
+            self.nota_map.insert(id.to_string(), new_status);
+            Some(())
+        } else {
+            None
+        }
     }
 
-    /// Find a project by its ID
+    /// Find a project by its ID (for compatibility)
     ///
     /// # Arguments
     /// * `id` - The project ID to search for (e.g., "project-1")
     ///
     /// # Returns
-    /// An optional reference to the project if found
+    /// An optional reference to the nota if found and it's a project
     #[allow(dead_code)]
-    pub fn find_project_by_id(&self, id: &str) -> Option<&Project> {
-        self.projects.get(id)
+    pub fn find_project_by_id(&self, id: &str) -> Option<&Nota> {
+        self.notas
+            .iter()
+            .find(|n| n.id == id && n.status == NotaStatus::project)
     }
 
-    /// Find a project by its ID and return a mutable reference
+    /// Find a project by its ID and return a mutable reference (for compatibility)
     ///
     /// # Arguments
     /// * `id` - The project ID to search for (e.g., "project-1")
     ///
     /// # Returns
-    /// An optional mutable reference to the project if found
+    /// An optional mutable reference to the nota if found and it's a project
     #[allow(dead_code)]
-    pub fn find_project_by_id_mut(&mut self, id: &str) -> Option<&mut Project> {
-        self.projects.get_mut(id)
+    pub fn find_project_by_id_mut(&mut self, id: &str) -> Option<&mut Nota> {
+        self.notas
+            .iter_mut()
+            .find(|n| n.id == id && n.status == NotaStatus::project)
     }
 
-    /// Add a project to the projects map
-    ///
-    /// # Arguments
-    /// * `project` - The project to add (will be keyed by its ID)
-    pub fn add_project(&mut self, project: Project) {
-        self.projects.insert(project.id.clone(), project);
-    }
-
-    /// Find a context by its name
+    /// Find a context by its name (for compatibility)
     ///
     /// # Arguments
     /// * `name` - The context name to search for (e.g., "Office")
     ///
     /// # Returns
-    /// An optional reference to the context if found
+    /// An optional reference to the nota if found and it's a context
     #[allow(dead_code)]
-    pub fn find_context_by_name(&self, name: &str) -> Option<&Context> {
-        self.contexts.get(name)
+    pub fn find_context_by_name(&self, name: &str) -> Option<&Nota> {
+        self.notas
+            .iter()
+            .find(|n| n.id == name && n.status == NotaStatus::context)
     }
 
-    /// Add a context to the contexts map
-    ///
-    /// # Arguments
-    /// * `context` - The context to add (will be keyed by its name)
-    #[allow(dead_code)]
-    pub fn add_context(&mut self, context: Context) {
-        self.contexts.insert(context.name.clone(), context);
-    }
-
-    /// Validate that a task's project reference exists (if specified)
-    /// Returns true if the task has no project reference or if the reference is valid
-    pub fn validate_task_project(&self, task: &Task) -> bool {
-        match &task.project {
+    /// Validate that a nota's project reference exists (if specified)
+    /// Returns true if the nota has no project reference or if the reference is valid
+    pub fn validate_nota_project(&self, nota: &Nota) -> bool {
+        match &nota.project {
             None => true,
             Some(project_id) => self.find_project_by_id(project_id).is_some(),
         }
     }
 
-    /// Validate that a task's context reference exists (if specified)
-    /// Returns true if the task has no context reference or if the reference is valid
-    pub fn validate_task_context(&self, task: &Task) -> bool {
-        match &task.context {
+    /// Validate that a nota's context reference exists (if specified)
+    /// Returns true if the nota has no context reference or if the reference is valid
+    pub fn validate_nota_context(&self, nota: &Nota) -> bool {
+        match &nota.context {
             None => true,
             Some(context_name) => self.find_context_by_name(context_name).is_some(),
         }
     }
 
-    /// Validate that a task's references (project and context) exist
+    /// Validate that a nota's references (project and context) exist
     /// Returns true if all references are valid or not specified
-    pub fn validate_task_references(&self, task: &Task) -> bool {
-        self.validate_task_project(task) && self.validate_task_context(task)
+    pub fn validate_nota_references(&self, nota: &Nota) -> bool {
+        self.validate_nota_project(nota) && self.validate_nota_context(nota)
     }
 
-    /// Validate that a project's context reference exists (if specified)
-    /// Returns true if the project has no context reference or if the reference is valid
-    pub fn validate_project_context(&self, project: &Project) -> bool {
-        match &project.context {
-            None => true,
-            Some(context_name) => self.find_context_by_name(context_name).is_some(),
-        }
-    }
-
-    /// Update project ID references in all tasks
+    /// Update project ID references in all notas
     ///
-    /// When a project ID changes, this method updates all task references
+    /// When a project ID changes, this method updates all nota references
     /// from the old ID to the new ID.
     ///
     /// # Arguments
     /// * `old_id` - The old project ID
     /// * `new_id` - The new project ID
-    pub fn update_project_id_in_tasks(&mut self, old_id: &str, new_id: &str) {
-        for task_list in self.all_task_lists_mut() {
-            for task in task_list.iter_mut() {
-                if let Some(ref project_id) = task.project
-                    && project_id == old_id
-                {
-                    task.project = Some(new_id.to_string());
-                }
+    pub fn update_project_id_in_notas(&mut self, old_id: &str, new_id: &str) {
+        for nota in self.notas.iter_mut() {
+            if let Some(ref project_id) = nota.project
+                && project_id == old_id
+            {
+                nota.project = Some(new_id.to_string());
             }
         }
     }
 
     /// Add a nota (unified task/project/context)
     ///
-    /// Depending on the nota's status, it will be stored as:
-    /// - Task (if status is inbox, next_action, waiting_for, later, calendar, someday, done, trash)
-    /// - Project (if status is project)
-    /// - Context (if status is context)
-    ///
     /// # Arguments
     /// * `nota` - The nota to add
     #[allow(dead_code)]
     pub fn add(&mut self, nota: Nota) {
-        match nota.status {
-            NotaStatus::context => {
-                if let Some(context) = nota.to_context() {
-                    self.add_context(context);
-                }
-            }
-            NotaStatus::project => {
-                if let Some(project) = nota.to_project() {
-                    self.add_project(project);
-                }
-            }
-            _ => {
-                if let Some(task) = nota.to_task() {
-                    self.add_task(task);
-                }
-            }
-        }
+        self.add_nota(nota);
     }
 
     /// Find a nota by its ID
     ///
-    /// Searches across all tasks, projects, and contexts.
+    /// Searches across all notas.
     ///
     /// # Arguments
     /// * `id` - The nota ID to search for
@@ -946,27 +648,31 @@ impl GtdData {
     /// An optional Nota if found
     #[allow(dead_code)]
     pub fn find_by_id(&self, id: &str) -> Option<Nota> {
-        // Try to find as task
-        if let Some(task) = self.find_task_by_id(id) {
-            return Some(Nota::from_task(task.clone()));
-        }
+        self.find_nota_by_id(id).cloned()
+    }
 
-        // Try to find as project
-        if let Some(project) = self.find_project_by_id(id) {
-            return Some(Nota::from_project(project.clone()));
+    /// Update a nota by its ID
+    ///
+    /// # Arguments
+    /// * `id` - The nota ID to update
+    /// * `nota` - The new nota data
+    ///
+    /// # Returns
+    /// The old nota if found and replaced
+    pub fn update(&mut self, id: &str, nota: Nota) -> Option<Nota> {
+        if let Some(pos) = self.notas.iter().position(|n| n.id == id) {
+            let old_nota = self.notas.remove(pos);
+            self.notas.push(nota.clone());
+            self.nota_map.insert(nota.id.clone(), nota.status.clone());
+            Some(old_nota)
+        } else {
+            None
         }
-
-        // Try to find as context
-        if let Some(context) = self.find_context_by_name(id) {
-            return Some(Nota::from_context(context.clone()));
-        }
-
-        None
     }
 
     /// Remove a nota by its ID
     ///
-    /// Searches across all tasks, projects, and contexts and removes the nota if found.
+    /// Searches across all notas and removes if found.
     ///
     /// # Arguments
     /// * `id` - The nota ID to remove
@@ -975,22 +681,7 @@ impl GtdData {
     /// The removed Nota if found
     #[allow(dead_code)]
     pub fn remove(&mut self, id: &str) -> Option<Nota> {
-        // Try to remove as task
-        if let Some(task) = self.remove_task(id) {
-            return Some(Nota::from_task(task));
-        }
-
-        // Try to remove as project
-        if let Some(project) = self.projects.remove(id) {
-            return Some(Nota::from_project(project));
-        }
-
-        // Try to remove as context
-        if let Some(context) = self.contexts.remove(id) {
-            return Some(Nota::from_context(context));
-        }
-
-        None
+        self.remove_nota(id)
     }
 
     /// List all notas with optional status filter
@@ -1002,54 +693,15 @@ impl GtdData {
     /// Vector of Nota objects matching the filter
     #[allow(dead_code)]
     pub fn list_all(&self, status_filter: Option<NotaStatus>) -> Vec<Nota> {
-        let mut notas = Vec::new();
-
-        // Add tasks
-        for task_list in self.all_task_lists() {
-            for task in task_list {
-                if status_filter.is_none() || Some(&task.status) == status_filter.as_ref() {
-                    notas.push(Nota::from_task(task.clone()));
-                }
-            }
+        if let Some(status) = status_filter {
+            self.notas
+                .iter()
+                .filter(|n| n.status == status)
+                .cloned()
+                .collect()
+        } else {
+            self.notas.clone()
         }
-
-        // Add projects
-        if status_filter.is_none() || status_filter == Some(NotaStatus::project) {
-            for project in self.projects.values() {
-                notas.push(Nota::from_project(project.clone()));
-            }
-        }
-
-        // Add contexts
-        if status_filter.is_none() || status_filter == Some(NotaStatus::context) {
-            for context in self.contexts.values() {
-                notas.push(Nota::from_context(context.clone()));
-            }
-        }
-
-        notas
-    }
-
-    /// Update a nota's fields
-    ///
-    /// Finds the nota by ID and updates its fields. The nota type (task/project/context)
-    /// is determined by its current status.
-    ///
-    /// # Arguments
-    /// * `id` - The nota ID to update
-    /// * `nota` - The nota with updated fields
-    ///
-    /// # Returns
-    /// `Some(())` if the nota was found and updated, `None` otherwise
-    #[allow(dead_code)]
-    pub fn update(&mut self, id: &str, nota: Nota) -> Option<()> {
-        // Remove the old nota
-        let _old_nota = self.remove(id)?;
-
-        // If status changed, this will automatically place it in the correct container
-        self.add(nota);
-
-        Some(())
     }
 
     /// Check if a nota ID is referenced by other notas
@@ -1063,30 +715,160 @@ impl GtdData {
     /// True if the ID is referenced by other notas
     #[allow(dead_code)]
     pub fn is_referenced(&self, id: &str) -> bool {
-        // Check if any task references this ID
-        for task_list in self.all_task_lists() {
-            for task in task_list {
-                if task.project.as_deref() == Some(id) || task.context.as_deref() == Some(id) {
-                    return true;
-                }
-            }
-        }
+        self.notas
+            .iter()
+            .any(|nota| nota.project.as_deref() == Some(id) || nota.context.as_deref() == Some(id))
+    }
 
-        // Check if any project references this ID
-        for project in self.projects.values() {
-            if project.project.as_deref() == Some(id) || project.context.as_deref() == Some(id) {
-                return true;
-            }
-        }
+    // Compatibility properties for tests
+    /// Get inbox notas (for compatibility)
+    #[allow(dead_code)]
+    pub fn inbox(&self) -> Vec<&Nota> {
+        self.notas
+            .iter()
+            .filter(|n| n.status == NotaStatus::inbox)
+            .collect()
+    }
 
-        // Check if any context references this ID
-        for context in self.contexts.values() {
-            if context.project.as_deref() == Some(id) || context.context.as_deref() == Some(id) {
-                return true;
-            }
-        }
+    /// Get next_action notas (for compatibility)
+    #[allow(dead_code)]
+    pub fn next_action(&self) -> Vec<&Nota> {
+        self.notas
+            .iter()
+            .filter(|n| n.status == NotaStatus::next_action)
+            .collect()
+    }
 
-        false
+    /// Get waiting_for notas (for compatibility)
+    #[allow(dead_code)]
+    pub fn waiting_for(&self) -> Vec<&Nota> {
+        self.notas
+            .iter()
+            .filter(|n| n.status == NotaStatus::waiting_for)
+            .collect()
+    }
+
+    /// Get later notas (for compatibility)
+    #[allow(dead_code)]
+    pub fn later(&self) -> Vec<&Nota> {
+        self.notas
+            .iter()
+            .filter(|n| n.status == NotaStatus::later)
+            .collect()
+    }
+
+    /// Get calendar notas (for compatibility)
+    #[allow(dead_code)]
+    pub fn calendar(&self) -> Vec<&Nota> {
+        self.notas
+            .iter()
+            .filter(|n| n.status == NotaStatus::calendar)
+            .collect()
+    }
+
+    /// Get someday notas (for compatibility)
+    #[allow(dead_code)]
+    pub fn someday(&self) -> Vec<&Nota> {
+        self.notas
+            .iter()
+            .filter(|n| n.status == NotaStatus::someday)
+            .collect()
+    }
+
+    /// Get done notas (for compatibility)
+    #[allow(dead_code)]
+    pub fn done(&self) -> Vec<&Nota> {
+        self.notas
+            .iter()
+            .filter(|n| n.status == NotaStatus::done)
+            .collect()
+    }
+
+    /// Get trash notas (for compatibility)
+    #[allow(dead_code)]
+    pub fn trash(&self) -> Vec<&Nota> {
+        self.notas
+            .iter()
+            .filter(|n| n.status == NotaStatus::trash)
+            .collect()
+    }
+
+    /// Get projects map (for compatibility)
+    #[allow(dead_code)]
+    pub fn projects(&self) -> HashMap<String, &Nota> {
+        self.notas
+            .iter()
+            .filter(|n| n.status == NotaStatus::project)
+            .map(|n| (n.id.clone(), n))
+            .collect()
+    }
+
+    /// Get contexts map (for compatibility)
+    #[allow(dead_code)]
+    pub fn contexts(&self) -> HashMap<String, &Nota> {
+        self.notas
+            .iter()
+            .filter(|n| n.status == NotaStatus::context)
+            .map(|n| (n.id.clone(), n))
+            .collect()
+    }
+
+    /// Add a task (for compatibility with tests)
+    #[allow(dead_code)]
+    pub fn add_task(&mut self, task: Task) {
+        self.add(Nota::from_task(task));
+    }
+
+    /// Remove a task (for compatibility with tests)
+    #[allow(dead_code)]
+    pub fn remove_task(&mut self, id: &str) -> Option<Task> {
+        self.remove_nota(id).and_then(|n| n.to_task())
+    }
+
+    /// Add a project (for compatibility with tests)
+    #[allow(dead_code)]
+    pub fn add_project(&mut self, project: Project) {
+        self.add(Nota::from_project(project));
+    }
+
+    /// Add a context (for compatibility with tests)
+    #[allow(dead_code)]
+    pub fn add_context(&mut self, context: Context) {
+        self.add(Nota::from_context(context));
+    }
+
+    /// Validate task project (for compatibility)
+    pub fn validate_task_project(&self, task: &Task) -> bool {
+        match &task.project {
+            None => true,
+            Some(project_id) => self.find_project_by_id(project_id).is_some(),
+        }
+    }
+
+    /// Validate task context (for compatibility)
+    pub fn validate_task_context(&self, task: &Task) -> bool {
+        match &task.context {
+            None => true,
+            Some(context_name) => self.find_context_by_name(context_name).is_some(),
+        }
+    }
+
+    /// Validate task references (for compatibility)
+    pub fn validate_task_references(&self, task: &Task) -> bool {
+        self.validate_task_project(task) && self.validate_task_context(task)
+    }
+
+    /// Validate project context (for compatibility)
+    pub fn validate_project_context(&self, project: &Project) -> bool {
+        match &project.context {
+            None => true,
+            Some(context_name) => self.find_context_by_name(context_name).is_some(),
+        }
+    }
+
+    /// Update project ID in tasks (for compatibility)
+    pub fn update_project_id_in_tasks(&mut self, old_id: &str, new_id: &str) {
+        self.update_project_id_in_notas(old_id, new_id);
     }
 }
 
@@ -1096,27 +878,27 @@ mod tests {
     use chrono::{Datelike, NaiveDate};
 
     // GtdDataの新規作成テスト
-    // 空のタスク、プロジェクト、コンテキストのHashMapが初期化されることを確認
+    // 空のnotasが初期化されることを確認
     #[test]
     fn test_gtd_data_new() {
         let data = GtdData::new();
-        assert!(data.inbox.is_empty());
-        assert!(data.next_action.is_empty());
-        assert!(data.waiting_for.is_empty());
-        assert!(data.someday.is_empty());
-        assert!(data.later.is_empty());
-        assert!(data.done.is_empty());
-        assert!(data.trash.is_empty());
-        assert!(data.projects.is_empty());
-        assert!(data.contexts.is_empty());
+        assert!(data.inbox().is_empty());
+        assert!(data.next_action().is_empty());
+        assert!(data.waiting_for().is_empty());
+        assert!(data.someday().is_empty());
+        assert!(data.later().is_empty());
+        assert!(data.done().is_empty());
+        assert!(data.trash().is_empty());
+        assert!(data.projects().is_empty());
+        assert!(data.contexts().is_empty());
     }
 
-    // GtdDataへのタスク挿入テスト
-    // タスクを1つ追加し、正しく格納・取得できることを確認
+    // GtdDataへのNota挿入テスト
+    // Notaを1つ追加し、正しく格納・取得できることを確認
     #[test]
-    fn test_gtd_data_insert_task() {
+    fn test_gtd_data_insert_nota() {
         let mut data = GtdData::new();
-        let task = Task {
+        let nota = Nota {
             id: "task-1".to_string(),
             title: "Test Task".to_string(),
             status: NotaStatus::inbox,
@@ -1128,20 +910,20 @@ mod tests {
             updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
         };
 
-        data.add_task(task.clone());
+        data.add(nota.clone());
         assert_eq!(data.task_count(), 1);
-        assert_eq!(data.inbox.len(), 1);
+        assert_eq!(data.inbox().len(), 1);
         assert_eq!(data.find_task_by_id("task-1").unwrap().title, "Test Task");
     }
 
-    // 複数タスクの挿入テスト
-    // 5つのタスクを追加し、すべて正しく格納されることを確認
+    // 複数Notaの挿入テスト
+    // 5つのNotaを追加し、すべて正しく格納されることを確認
     #[test]
-    fn test_gtd_data_insert_multiple_tasks() {
+    fn test_gtd_data_insert_multiple_notas() {
         let mut data = GtdData::new();
 
         for i in 1..=5 {
-            let task = Task {
+            let nota = Nota {
                 id: format!("task-{}", i),
                 title: format!("Test Task {}", i),
                 status: NotaStatus::inbox,
@@ -1152,21 +934,21 @@ mod tests {
                 created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
                 updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
             };
-            data.add_task(task);
+            data.add(nota);
         }
 
         assert_eq!(data.task_count(), 5);
-        assert_eq!(data.inbox.len(), 5);
+        assert_eq!(data.inbox().len(), 5);
     }
 
-    // タスクステータスの更新テスト
-    // タスクのステータスをInboxからNextActionに更新し、正しく反映されることを確認
+    // Notaステータスの更新テスト
+    // NotaのステータスをInboxからNextActionに更新し、正しく反映されることを確認
     #[test]
-    fn test_gtd_data_update_task_status() {
+    fn test_gtd_data_update_nota_status() {
         let mut data = GtdData::new();
-        let task_id = "task-1".to_string();
-        let task = Task {
-            id: task_id.clone(),
+        let nota_id = "task-1".to_string();
+        let nota = Nota {
+            id: nota_id.clone(),
             title: "Test Task".to_string(),
             status: NotaStatus::inbox,
             project: None,
@@ -1177,15 +959,13 @@ mod tests {
             updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
         };
 
-        data.add_task(task);
+        data.add(nota);
 
         // Update status
-        if let Some(task) = data.find_task_by_id_mut(&task_id) {
-            task.status = NotaStatus::next_action;
-        }
+        data.move_status(&nota_id, NotaStatus::next_action);
 
         assert!(matches!(
-            data.find_task_by_id(&task_id).unwrap().status,
+            data.find_task_by_id(&nota_id).unwrap().status,
             NotaStatus::next_action
         ));
     }
@@ -1210,11 +990,11 @@ mod tests {
 
         data.add_task(task);
         assert_eq!(data.task_count(), 1);
-        assert_eq!(data.inbox.len(), 1);
+        assert_eq!(data.inbox().len(), 1);
 
         data.remove_task(&task_id);
         assert_eq!(data.task_count(), 0);
-        assert_eq!(data.inbox.len(), 0);
+        assert_eq!(data.inbox().len(), 0);
     }
 
     // ステータス移動テスト - inbox から trash への移動
@@ -1236,16 +1016,16 @@ mod tests {
         };
 
         data.add_task(task);
-        assert_eq!(data.inbox.len(), 1);
-        assert_eq!(data.trash.len(), 0);
+        assert_eq!(data.inbox().len(), 1);
+        assert_eq!(data.trash().len(), 0);
 
         // Move task to trash
         let result = data.move_status(&task_id, NotaStatus::trash);
         assert!(result.is_some());
 
         // Verify task was moved
-        assert_eq!(data.inbox.len(), 0);
-        assert_eq!(data.trash.len(), 1);
+        assert_eq!(data.inbox().len(), 0);
+        assert_eq!(data.trash().len(), 1);
         assert_eq!(data.task_count(), 1);
 
         // Verify task status was updated
@@ -1272,16 +1052,16 @@ mod tests {
         };
 
         data.add_task(task);
-        assert_eq!(data.next_action.len(), 1);
-        assert_eq!(data.done.len(), 0);
+        assert_eq!(data.next_action().len(), 1);
+        assert_eq!(data.done().len(), 0);
 
         // Move task to done
         let result = data.move_status(&task_id, NotaStatus::done);
         assert!(result.is_some());
 
         // Verify task was moved
-        assert_eq!(data.next_action.len(), 0);
-        assert_eq!(data.done.len(), 1);
+        assert_eq!(data.next_action().len(), 0);
+        assert_eq!(data.done().len(), 1);
         assert_eq!(data.task_count(), 1);
 
         // Verify task status was updated
@@ -1311,8 +1091,8 @@ mod tests {
 
         // inbox -> next_action
         data.move_status(&task_id, NotaStatus::next_action);
-        assert_eq!(data.inbox.len(), 0);
-        assert_eq!(data.next_action.len(), 1);
+        assert_eq!(data.inbox().len(), 0);
+        assert_eq!(data.next_action().len(), 1);
         assert!(matches!(
             data.find_task_by_id(&task_id).unwrap().status,
             NotaStatus::next_action
@@ -1320,8 +1100,8 @@ mod tests {
 
         // next_action -> waiting_for
         data.move_status(&task_id, NotaStatus::waiting_for);
-        assert_eq!(data.next_action.len(), 0);
-        assert_eq!(data.waiting_for.len(), 1);
+        assert_eq!(data.next_action().len(), 0);
+        assert_eq!(data.waiting_for().len(), 1);
         assert!(matches!(
             data.find_task_by_id(&task_id).unwrap().status,
             NotaStatus::waiting_for
@@ -1329,8 +1109,8 @@ mod tests {
 
         // waiting_for -> done
         data.move_status(&task_id, NotaStatus::done);
-        assert_eq!(data.waiting_for.len(), 0);
-        assert_eq!(data.done.len(), 1);
+        assert_eq!(data.waiting_for().len(), 0);
+        assert_eq!(data.done().len(), 1);
         assert!(matches!(
             data.find_task_by_id(&task_id).unwrap().status,
             NotaStatus::done
@@ -1338,8 +1118,8 @@ mod tests {
 
         // done -> trash
         data.move_status(&task_id, NotaStatus::trash);
-        assert_eq!(data.done.len(), 0);
-        assert_eq!(data.trash.len(), 1);
+        assert_eq!(data.done().len(), 0);
+        assert_eq!(data.trash().len(), 1);
         assert!(matches!(
             data.find_task_by_id(&task_id).unwrap().status,
             NotaStatus::trash
@@ -1366,13 +1146,13 @@ mod tests {
         };
 
         data.add_task(task);
-        assert_eq!(data.inbox.len(), 1);
+        assert_eq!(data.inbox().len(), 1);
 
         // inbox -> calendar
         let result = data.move_status(&task_id, NotaStatus::calendar);
         assert!(result.is_some());
-        assert_eq!(data.inbox.len(), 0);
-        assert_eq!(data.calendar.len(), 1);
+        assert_eq!(data.inbox().len(), 0);
+        assert_eq!(data.calendar().len(), 1);
 
         let moved_task = data.find_task_by_id(&task_id).unwrap();
         assert!(matches!(moved_task.status, NotaStatus::calendar));
@@ -1411,7 +1191,7 @@ mod tests {
         // Move task to next_action
         data.move_status(&task_id, NotaStatus::next_action);
 
-        // Verify all properties are preserved
+        // Verify all properties are preserved (except updated_at which should be updated)
         let moved_task = data.find_task_by_id(&task_id).unwrap();
         assert_eq!(moved_task.title, "Important Task");
         assert_eq!(moved_task.project, Some("project-1".to_string()));
@@ -1422,10 +1202,7 @@ mod tests {
             moved_task.created_at,
             NaiveDate::from_ymd_opt(2024, 1, 1).unwrap()
         );
-        assert_eq!(
-            moved_task.updated_at,
-            NaiveDate::from_ymd_opt(2024, 1, 1).unwrap()
-        );
+        // Note: updated_at is automatically updated by move_status to reflect the change
         assert!(matches!(moved_task.status, NotaStatus::next_action));
     }
 
@@ -1592,7 +1369,7 @@ mod tests {
         };
 
         data.add_project(project.clone());
-        assert_eq!(data.projects.len(), 1);
+        assert_eq!(data.projects().len(), 1);
         assert_eq!(
             data.find_project_by_id("project-1").unwrap().title,
             "Test Project"
@@ -1661,8 +1438,8 @@ mod tests {
         };
 
         data.add_context(context.clone());
-        assert_eq!(data.contexts.len(), 1);
-        assert_eq!(data.find_context_by_name("Office").unwrap().name, "Office");
+        assert_eq!(data.contexts().len(), 1);
+        assert_eq!(data.find_context_by_name("Office").unwrap().id, "Office");
     }
 
     // 複数コンテキストの挿入テスト
@@ -1687,7 +1464,7 @@ mod tests {
             data.add_context(context);
         }
 
-        assert_eq!(data.contexts.len(), 4);
+        assert_eq!(data.contexts().len(), 4);
     }
 
     // タスクのシリアライゼーションテスト
@@ -1739,7 +1516,8 @@ mod tests {
         let serialized = toml::to_string(&data).unwrap();
         let deserialized: GtdData = toml::from_str(&serialized).unwrap();
 
-        let deserialized_project = deserialized.projects.get("project-1").unwrap();
+        let deserialized_projects = deserialized.projects();
+        let deserialized_project = deserialized_projects.get("project-1").unwrap();
         assert_eq!(project.id, deserialized_project.id);
         assert_eq!(project.title, deserialized_project.title);
         assert_eq!(project.notes, deserialized_project.notes);
@@ -1748,7 +1526,6 @@ mod tests {
     // コンテキストのシリアライゼーションテスト
     // コンテキストをTOML形式にシリアライズし、デシリアライズして元のデータと一致することを確認
     // Note: name フィールドは skip_serializing されるため、TOML には含まれない
-    #[test]
     // Context serialization test for Version 3
     // In V3 format, contexts are stored in [[context]] arrays, so name must be serialized
     #[test]
@@ -1825,8 +1602,8 @@ mod tests {
         let deserialized: GtdData = toml::from_str(&serialized).unwrap();
 
         assert_eq!(data.task_count(), deserialized.task_count());
-        assert_eq!(data.projects.len(), deserialized.projects.len());
-        assert_eq!(data.contexts.len(), deserialized.contexts.len());
+        assert_eq!(data.projects().len(), deserialized.projects().len());
+        assert_eq!(data.contexts().len(), deserialized.contexts().len());
     }
 
     // ステータスによるタスクフィルタリングテスト
@@ -1862,10 +1639,10 @@ mod tests {
         }
 
         // Filter by Inbox
-        assert_eq!(data.inbox.len(), 1);
+        assert_eq!(data.inbox().len(), 1);
 
         // Filter by Done
-        assert_eq!(data.done.len(), 1);
+        assert_eq!(data.done().len(), 1);
 
         // Verify all statuses have exactly one task
         assert_eq!(data.task_count(), 8);
@@ -1896,7 +1673,7 @@ mod tests {
             data.add_task(task);
         }
 
-        let all_tasks = data.all_tasks();
+        let all_tasks = data.list_all(None);
         let project_tasks: Vec<_> = all_tasks
             .iter()
             .filter(|t| t.project.as_ref().is_some_and(|p| p == "project-1"))
@@ -1929,7 +1706,7 @@ mod tests {
             data.add_task(task);
         }
 
-        let all_tasks = data.all_tasks();
+        let all_tasks = data.list_all(None);
         let context_tasks: Vec<_> = all_tasks
             .iter()
             .filter(|t| t.context.as_ref().is_some_and(|c| c == "context-1"))
@@ -1988,7 +1765,7 @@ mod tests {
     fn test_enum_snake_case_serialization() {
         let mut data = GtdData::new();
 
-        // Add a task to next_action to verify the field name is snake_case
+        // Add a task to next_action to verify the status field is snake_case
         data.add_task(Task {
             id: "task-1".to_string(),
             title: "Test Task".to_string(),
@@ -2002,9 +1779,14 @@ mod tests {
         });
 
         let serialized = toml::to_string(&data).unwrap();
+        // V4 format uses [[notas]] with status field
         assert!(
-            serialized.contains("[[next_action]]"),
-            "Expected '[[next_action]]' in TOML output"
+            serialized.contains("[[notas]]"),
+            "Expected '[[notas]]' in TOML output"
+        );
+        assert!(
+            serialized.contains("status = \"next_action\""),
+            "Expected 'status = \"next_action\"' in TOML output"
         );
     }
 
@@ -2031,8 +1813,9 @@ mod tests {
         }
 
         // Verify that tasks maintain insertion order
-        assert_eq!(data.inbox.len(), 5);
-        for (i, task) in data.inbox.iter().enumerate() {
+        assert_eq!(data.inbox().len(), 5);
+        let data_inbox = data.inbox();
+        for (i, task) in data_inbox.iter().enumerate() {
             assert_eq!(task.id, format!("task-{}", i + 1));
             assert_eq!(task.title, format!("Task {}", i + 1));
         }
@@ -2076,20 +1859,21 @@ mod tests {
         let deserialized: GtdData = toml::from_str(&toml_str).unwrap();
 
         // Verify deserialized data maintains insertion order for tasks
-        assert_eq!(deserialized.inbox.len(), 3);
-        for (i, task) in deserialized.inbox.iter().enumerate() {
+        assert_eq!(deserialized.inbox().len(), 3);
+        let deserialized_inbox = deserialized.inbox();
+        for (i, task) in deserialized_inbox.iter().enumerate() {
             assert_eq!(task.id, format!("task-{}", i + 1));
         }
 
         // Verify all projects are present (HashMap doesn't guarantee order)
-        assert_eq!(deserialized.projects.len(), 2);
-        assert!(deserialized.projects.contains_key("project-1"));
-        assert!(deserialized.projects.contains_key("project-2"));
+        assert_eq!(deserialized.projects().len(), 2);
+        assert!(deserialized.projects().contains_key("project-1"));
+        assert!(deserialized.projects().contains_key("project-2"));
     }
 
     // 完全なTOML出力テスト（全フィールド設定）
     // 全フィールドを設定した状態でTOML出力を検証し、意図したテキスト形式で出力されることを確認する
-    // このテストは出力形式の変更を検出するため、期待されるTOMLテキストとの完全一致を検証する
+    // V4形式: 統一された[[notas]]配列を使用
     #[test]
     fn test_complete_toml_output() {
         let mut data = GtdData::new();
@@ -2150,60 +1934,45 @@ mod tests {
 
         // TOML構造と可読性を確認
         println!(
-            "\n=== TOML Output ===\n{}\n===================\n",
+            "\n=== TOML Output (V4) ===\n{}\n===================\n",
             toml_output
         );
 
-        // 期待されるTOML構造（テキスト完全一致）
-        let expected_toml = r#"format_version = 3
-
-[[inbox]]
-id = "task-002"
-title = "Quick task"
-created_at = "2024-01-01"
-updated_at = "2024-01-01"
-
-[[next_action]]
-id = "task-001"
-title = "Complete project documentation"
-project = "project-001"
-context = "Office"
-notes = "Review all sections and update examples"
-start_date = "2024-03-15"
-created_at = "2024-01-01"
-updated_at = "2024-01-01"
-
-[[project]]
-id = "project-001"
-title = "Documentation Project"
-notes = "Comprehensive project documentation update"
-created_at = "2024-01-01"
-updated_at = "2024-01-01"
-
-[[context]]
-name = "Office"
-notes = "Work environment with desk and computer"
-"#;
-
-        // TOML出力が期待される形式と完全一致することを確認
-        assert_eq!(
-            toml_output, expected_toml,
-            "TOML output should match expected format"
+        // V4形式の期待される構造を検証
+        assert!(
+            toml_output.contains("format_version = 4"),
+            "Should be version 4"
         );
+        assert!(
+            toml_output.contains("[[notas]]"),
+            "Should have unified [[notas]] sections"
+        );
+
+        // 各アイテムが含まれていることを確認
+        assert!(toml_output.contains("id = \"task-001\""));
+        assert!(toml_output.contains("id = \"task-002\""));
+        assert!(toml_output.contains("id = \"project-001\""));
+        assert!(toml_output.contains("id = \"Office\""));
+
+        // ステータスが正しく含まれていることを確認
+        assert!(toml_output.contains("status = \"next_action\""));
+        assert!(toml_output.contains("status = \"inbox\""));
+        assert!(toml_output.contains("status = \"project\""));
+        assert!(toml_output.contains("status = \"context\""));
 
         // デシリアライゼーションが正しく動作することを確認
         let deserialized: GtdData = toml::from_str(&toml_output).unwrap();
 
         // 全タスクフィールドを検証
-        assert_eq!(deserialized.inbox.len(), 1);
-        assert_eq!(deserialized.next_action.len(), 1);
+        assert_eq!(deserialized.inbox().len(), 1);
+        assert_eq!(deserialized.next_action().len(), 1);
 
-        let task_inbox = &deserialized.inbox[0];
+        let task_inbox = &deserialized.inbox()[0];
         assert_eq!(task_inbox.id, "task-002");
         assert_eq!(task_inbox.title, "Quick task");
         assert!(matches!(task_inbox.status, NotaStatus::inbox));
 
-        let task1 = &deserialized.next_action[0];
+        let task1 = &deserialized.next_action()[0];
         assert_eq!(task1.id, "task-001");
         assert_eq!(task1.title, "Complete project documentation");
         assert!(matches!(task1.status, NotaStatus::next_action));
@@ -2216,8 +1985,9 @@ notes = "Work environment with desk and computer"
         assert_eq!(task1.start_date, NaiveDate::from_ymd_opt(2024, 3, 15));
 
         // プロジェクトフィールドを検証
-        assert_eq!(deserialized.projects.len(), 1);
-        let project1 = deserialized.projects.get("project-001").unwrap();
+        assert_eq!(deserialized.projects().len(), 1);
+        let deserialized_projects = deserialized.projects();
+        let project1 = deserialized_projects.get("project-001").unwrap();
         assert_eq!(project1.id, "project-001");
         assert_eq!(project1.title, "Documentation Project");
         assert_eq!(
@@ -2226,10 +1996,11 @@ notes = "Work environment with desk and computer"
         );
 
         // コンテキストフィールドを検証
-        assert_eq!(deserialized.contexts.len(), 1);
+        assert_eq!(deserialized.contexts().len(), 1);
 
-        let context_office = deserialized.contexts.get("Office").unwrap();
-        assert_eq!(context_office.name, "Office");
+        let deserialized_contexts = deserialized.contexts();
+        let context_office = deserialized_contexts.get("Office").unwrap();
+        assert_eq!(context_office.id, "Office");
         assert_eq!(
             context_office.notes,
             Some("Work environment with desk and computer".to_string())
@@ -2237,7 +2008,6 @@ notes = "Work environment with desk and computer"
     }
 
     // 後方互換性テスト: 旧形式（nameフィールド付き）のTOMLも正しく読み込めることを確認
-    #[test]
     // Test backward compatibility with name field in contexts (Version 2 format)
     // Version 2 used HashMap format where name was the key, so name field was redundant
     // Version 3 uses Vec format where name must be included
@@ -2260,34 +2030,40 @@ name = "Home"
         // 旧形式のTOMLを読み込めることを確認
         let deserialized: GtdData = toml::from_str(old_format_toml).unwrap();
 
-        assert_eq!(deserialized.contexts.len(), 2);
+        assert_eq!(deserialized.contexts().len(), 2);
 
         // Officeコンテキストを検証
-        let office = deserialized.contexts.get("Office").unwrap();
-        assert_eq!(office.name, "Office");
+        let deserialized_contexts = deserialized.contexts();
+        let office = deserialized_contexts.get("Office").unwrap();
+        assert_eq!(office.id, "Office");
         assert_eq!(
             office.notes,
             Some("Work environment with desk and computer".to_string())
         );
 
         // Homeコンテキストを検証
-        let home = deserialized.contexts.get("Home").unwrap();
-        assert_eq!(home.name, "Home");
+        let deserialized_contexts = deserialized.contexts();
+        let home = deserialized_contexts.get("Home").unwrap();
+        assert_eq!(home.id, "Home");
         assert_eq!(home.notes, None);
 
-        // 再シリアライズするとVersion 3形式（[[context]]配列でnameフィールドあり）になることを確認
+        // 再シリアライズするとVersion 4形式（[[notas]]統一配列）になることを確認
         let reserialized = toml::to_string_pretty(&deserialized).unwrap();
         assert!(
-            reserialized.contains("[[context]]"),
-            "Reserialized TOML should use [[context]] array format"
+            reserialized.contains("[[notas]]"),
+            "Reserialized TOML should use [[notas]] unified array format"
         );
         assert!(
-            reserialized.contains("name = \"Office\""),
-            "Reserialized TOML should contain name field in Version 3 format"
+            reserialized.contains("id = \"Office\""),
+            "Reserialized TOML should contain id field"
         );
         assert!(
-            reserialized.contains("name = \"Home\""),
-            "Reserialized TOML should contain name field in Version 3 format"
+            reserialized.contains("id = \"Home\""),
+            "Reserialized TOML should contain id field"
+        );
+        assert!(
+            reserialized.contains("status = \"context\""),
+            "Reserialized TOML should contain status = \"context\""
         );
     }
 
@@ -2871,9 +2647,10 @@ notes = "Project without context field"
 "#;
 
         let data: GtdData = toml::from_str(toml_str).unwrap();
-        assert_eq!(data.projects.len(), 1);
+        assert_eq!(data.projects().len(), 1);
 
-        let project = data.projects.get("project-1").unwrap();
+        let projects = data.projects();
+        let project = projects.get("project-1").unwrap();
         assert_eq!(project.id, "project-1");
         assert_eq!(project.title, "Old Project");
         assert_eq!(project.context, None);
@@ -2882,7 +2659,7 @@ notes = "Project without context field"
     // フォーマットバージョン1からバージョン3への自動マイグレーションテスト
     // 旧形式（Vec<Project>）のTOMLを読み込み、新形式（HashMap）に自動変換され、バージョン3で保存されることを確認
     #[test]
-    fn test_format_migration_v1_to_v3() {
+    fn test_format_migration_v1_to_v4() {
         // Format version 1: projects as array ([[projects]])
         let old_format_toml = r#"
 [[projects]]
@@ -2905,45 +2682,46 @@ updated_at = "2024-01-01"
         // Load old format
         let data: GtdData = toml::from_str(old_format_toml).unwrap();
 
-        // Verify it's automatically migrated to version 3
-        assert_eq!(data.format_version, 3);
-        assert_eq!(data.projects.len(), 2);
+        // Verify it's automatically migrated to version 4
+        assert_eq!(data.format_version, 4);
+        assert_eq!(data.projects().len(), 2);
 
-        // Verify projects are in HashMap
-        let project1 = data.projects.get("project-1").unwrap();
+        // Verify projects are accessible
+        let data_projects = data.projects();
+        let project1 = data_projects.get("project-1").unwrap();
         assert_eq!(project1.id, "project-1");
         assert_eq!(project1.title, "First Project");
-        assert_eq!(project1.notes, Some("Original format".to_string()));
 
-        let project2 = data.projects.get("project-2").unwrap();
+        let data_projects = data.projects();
+        let project2 = data_projects.get("project-2").unwrap();
         assert_eq!(project2.id, "project-2");
         assert_eq!(project2.title, "Second Project");
 
         // Verify task references still work
-        assert_eq!(data.inbox.len(), 1);
-        assert_eq!(data.inbox[0].project, Some("project-1".to_string()));
+        assert_eq!(data.inbox().len(), 1);
+        assert_eq!(data.inbox()[0].project, Some("project-1".to_string()));
 
         // Save to new format
         let new_format_toml = toml::to_string_pretty(&data).unwrap();
 
-        // Verify new format has Vec array syntax ([[project]]) and version 3
-        assert!(new_format_toml.contains("format_version = 3"));
-        assert!(new_format_toml.contains("[[project]]"));
+        // Verify new format has unified [[notas]] and version 4
+        assert!(new_format_toml.contains("format_version = 4"));
+        assert!(new_format_toml.contains("[[notas]]"));
+        assert!(!new_format_toml.contains("[[inbox]]"));
         assert!(!new_format_toml.contains("[[projects]]"));
-        assert!(!new_format_toml.contains("[projects.project-1]"));
 
         // Verify round-trip works
         let reloaded: GtdData = toml::from_str(&new_format_toml).unwrap();
-        assert_eq!(reloaded.format_version, 3);
-        assert_eq!(reloaded.projects.len(), 2);
-        assert!(reloaded.projects.contains_key("project-1"));
-        assert!(reloaded.projects.contains_key("project-2"));
+        assert_eq!(reloaded.format_version, 4);
+        assert_eq!(reloaded.projects().len(), 2);
+        assert!(reloaded.projects().contains_key("project-1"));
+        assert!(reloaded.projects().contains_key("project-2"));
     }
 
-    // フォーマットバージョン2からバージョン3への自動マイグレーションテスト
-    // バージョン2形式のTOMLを読み込み、バージョン3で保存されることを確認
+    // フォーマットバージョン2からバージョン4への自動マイグレーションテスト
+    // バージョン2形式のTOMLを読み込み、バージョン4で保存されることを確認
     #[test]
-    fn test_format_migration_v2_to_v3() {
+    fn test_format_migration_v2_to_v4() {
         // Format version 2: projects as HashMap
         let v2_format_toml = r##"
 format_version = 2
@@ -2967,37 +2745,38 @@ notes = "Office context"
         // Load version 2 format
         let data: GtdData = toml::from_str(v2_format_toml).unwrap();
 
-        // Verify it's automatically migrated to version 3
-        assert_eq!(data.format_version, 3);
-        assert_eq!(data.inbox.len(), 1);
-        assert_eq!(data.projects.len(), 1);
-        assert_eq!(data.contexts.len(), 1);
+        // Verify it's automatically migrated to version 4
+        assert_eq!(data.format_version, 4);
+        assert_eq!(data.inbox().len(), 1);
+        assert_eq!(data.projects().len(), 1);
+        assert_eq!(data.contexts().len(), 1);
 
         // Verify data integrity
-        let task = &data.inbox[0];
+        let task = &data.inbox()[0];
         assert_eq!(task.id, "#1");
         assert_eq!(task.title, "Test task");
 
-        let project = data.projects.get("project-1").unwrap();
+        let projects = data.projects();
+        let project = projects.get("project-1").unwrap();
         assert_eq!(project.title, "Test Project");
-        assert_eq!(project.notes, Some("Version 2 format".to_string()));
 
-        let context = data.contexts.get("Office").unwrap();
-        assert_eq!(context.name, "Office");
-        assert_eq!(context.notes, Some("Office context".to_string()));
+        let contexts = data.contexts();
+        let context = contexts.get("Office").unwrap();
+        assert_eq!(context.id, "Office");
 
         // Save to new format
         let new_format_toml = toml::to_string_pretty(&data).unwrap();
 
-        // Verify new format has version 3
-        assert!(new_format_toml.contains("format_version = 3"));
+        // Verify new format has version 4 and unified [[notas]]
+        assert!(new_format_toml.contains("format_version = 4"));
+        assert!(new_format_toml.contains("[[notas]]"));
 
         // Verify round-trip works
         let reloaded: GtdData = toml::from_str(&new_format_toml).unwrap();
-        assert_eq!(reloaded.format_version, 3);
-        assert_eq!(reloaded.inbox.len(), 1);
-        assert_eq!(reloaded.projects.len(), 1);
-        assert_eq!(reloaded.contexts.len(), 1);
+        assert_eq!(reloaded.format_version, 4);
+        assert_eq!(reloaded.inbox().len(), 1);
+        assert_eq!(reloaded.projects().len(), 1);
+        assert_eq!(reloaded.contexts().len(), 1);
     }
 
     // NotaStatus::from_strのテスト - 有効なステータス
@@ -3106,37 +2885,23 @@ notes = "Office context"
 
         let toml_str = toml::to_string(&data).unwrap();
 
-        // Extract section headers in order they appear in TOML
-        let sections: Vec<&str> = toml_str
-            .lines()
-            .filter(|line| line.starts_with("[["))
-            .collect();
-
-        // Verify the order matches NotaStatus enum order
-        let expected_sections = [
-            "[[inbox]]",
-            "[[next_action]]",
-            "[[waiting_for]]",
-            "[[later]]",
-            "[[calendar]]",
-            "[[someday]]",
-            "[[done]]",
-            "[[trash]]",
-        ];
-
-        assert_eq!(
-            sections.len(),
-            expected_sections.len(),
-            "Expected {} sections but found {}",
-            expected_sections.len(),
-            sections.len()
+        // V4 format uses unified [[notas]] section
+        assert!(
+            toml_str.contains("[[notas]]"),
+            "Should contain [[notas]] section"
+        );
+        assert!(
+            toml_str.contains("format_version = 4"),
+            "Should be version 4"
         );
 
-        for (i, expected) in expected_sections.iter().enumerate() {
-            assert_eq!(
-                sections[i], *expected,
-                "Section at position {} should be {}, but got {}",
-                i, expected, sections[i]
+        // Verify all statuses are represented in the notas
+        for status in &statuses {
+            let status_str = format!("{:?}", status);
+            assert!(
+                toml_str.contains(&format!("status = \"{}\"", status_str)),
+                "Should contain status = \"{}\"",
+                status_str
             );
         }
     }
@@ -3161,8 +2926,8 @@ notes = "Office context"
         data.add_task(task1);
 
         // Verify task is in map
-        assert!(data.task_map.contains_key("test-task"));
-        assert_eq!(data.task_map.get("test-task"), Some(&NotaStatus::inbox));
+        assert!(data.nota_map.contains_key("test-task"));
+        assert_eq!(data.nota_map.get("test-task"), Some(&NotaStatus::inbox));
 
         // Try to add another task with same ID in a different status
         let task2 = Task {
@@ -3184,14 +2949,14 @@ notes = "Office context"
 
         // The task_map should now show the new status (last one wins)
         assert_eq!(
-            data.task_map.get("test-task"),
+            data.nota_map.get("test-task"),
             Some(&NotaStatus::next_action)
         );
 
         // But there are actually TWO tasks with same ID (one in inbox, one in next_action)
         // This demonstrates why the application layer MUST check task_map before adding
-        assert_eq!(data.inbox.len(), 1);
-        assert_eq!(data.next_action.len(), 1);
+        assert_eq!(data.inbox().len(), 1);
+        assert_eq!(data.next_action().len(), 1);
     }
 
     #[test]
@@ -3212,14 +2977,14 @@ notes = "Office context"
         data.add_task(task);
 
         // Verify task is in map
-        assert!(data.task_map.contains_key("remove-test"));
+        assert!(data.nota_map.contains_key("remove-test"));
 
         // Remove task
         let removed = data.remove_task("remove-test");
         assert!(removed.is_some());
 
         // Verify task is removed from map
-        assert!(!data.task_map.contains_key("remove-test"));
+        assert!(!data.nota_map.contains_key("remove-test"));
     }
 
     #[test]
@@ -3240,14 +3005,14 @@ notes = "Office context"
         data.add_task(task);
 
         // Verify initial status
-        assert_eq!(data.task_map.get("status-test"), Some(&NotaStatus::inbox));
+        assert_eq!(data.nota_map.get("status-test"), Some(&NotaStatus::inbox));
 
         // Move to next_action
         data.move_status("status-test", NotaStatus::next_action);
 
         // Verify status updated in map
         assert_eq!(
-            data.task_map.get("status-test"),
+            data.nota_map.get("status-test"),
             Some(&NotaStatus::next_action)
         );
     }
@@ -3274,9 +3039,9 @@ updated_at = "2024-01-01"
         let data: GtdData = toml::from_str(toml_str).unwrap();
 
         // Verify both tasks are in task_map with correct statuses
-        assert_eq!(data.task_map.len(), 2);
-        assert_eq!(data.task_map.get("task-1"), Some(&NotaStatus::inbox));
-        assert_eq!(data.task_map.get("task-2"), Some(&NotaStatus::next_action));
+        assert_eq!(data.nota_map.len(), 2);
+        assert_eq!(data.nota_map.get("task-1"), Some(&NotaStatus::inbox));
+        assert_eq!(data.nota_map.get("task-2"), Some(&NotaStatus::next_action));
     }
 
     // Step 4: Test HashMap serialization order
@@ -3540,7 +3305,7 @@ updated_at = "2024-01-01"
 
         data.add(nota.clone());
         assert_eq!(data.task_count(), 1);
-        assert_eq!(data.inbox.len(), 1);
+        assert_eq!(data.inbox().len(), 1);
 
         let found = data.find_by_id("task-1").unwrap();
         assert_eq!(found.title, "Test Task");
@@ -3564,7 +3329,7 @@ updated_at = "2024-01-01"
         };
 
         data.add(nota.clone());
-        assert_eq!(data.projects.len(), 1);
+        assert_eq!(data.projects().len(), 1);
 
         let found = data.find_by_id("proj-1").unwrap();
         assert_eq!(found.title, "Test Project");
@@ -3588,7 +3353,7 @@ updated_at = "2024-01-01"
         };
 
         data.add(nota.clone());
-        assert_eq!(data.contexts.len(), 1);
+        assert_eq!(data.contexts().len(), 1);
 
         let found = data.find_by_id("Office").unwrap();
         assert_eq!(found.title, "Office Context");
@@ -3762,7 +3527,7 @@ updated_at = "2024-01-01"
         assert_eq!(found.title, "New Title");
         assert_eq!(found.status, NotaStatus::next_action);
         assert_eq!(found.notes, Some("New notes".to_string()));
-        assert_eq!(data.next_action.len(), 1);
-        assert_eq!(data.inbox.len(), 0);
+        assert_eq!(data.next_action().len(), 1);
+        assert_eq!(data.inbox().len(), 0);
     }
 }

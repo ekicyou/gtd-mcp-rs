@@ -41,7 +41,7 @@ use std::sync::Mutex;
 
 // Re-export commonly used types
 pub use git_ops::GitOps;
-pub use gtd::{Context, GtdData, Nota, NotaStatus, Project, Task, local_date_today};
+pub use gtd::{GtdData, Nota, NotaStatus, local_date_today};
 pub use storage::Storage;
 
 /// MCP Server handler for GTD task management
@@ -180,8 +180,17 @@ impl McpServer for GtdServerHandler {
     async fn empty_trash(&self) -> McpResult<String> {
         let mut data = self.data.lock().unwrap();
 
-        let count = data.trash.len();
-        data.trash.clear();
+        // Count and remove all trash notas
+        let count = data
+            .notas
+            .iter()
+            .filter(|n| n.status == NotaStatus::trash)
+            .count();
+        data.notas.retain(|n| n.status != NotaStatus::trash);
+
+        // Update nota_map
+        data.nota_map
+            .retain(|_, status| *status != NotaStatus::trash);
 
         drop(data);
 
@@ -217,10 +226,7 @@ impl McpServer for GtdServerHandler {
         let mut data = self.data.lock().unwrap();
 
         // Check for duplicate ID across all notas
-        if data.task_map.contains_key(&id)
-            || data.projects.contains_key(&id)
-            || data.contexts.contains_key(&id)
-        {
+        if data.nota_map.contains_key(&id) {
             drop(data);
             bail!("Nota ID '{}' already exists. Please use a unique ID.", id);
         }
@@ -632,6 +638,7 @@ impl McpServer for GtdServerHandler {
 mod tests {
     use super::*;
     use crate::gtd::{Nota, local_date_today};
+    use crate::migration::Task;
     use chrono::NaiveDate;
     use tempfile::NamedTempFile;
 
@@ -837,7 +844,7 @@ mod tests {
 
         // Verify all tasks moved
         let data = handler.data.lock().unwrap();
-        assert_eq!(data.next_action.len(), 3);
+        assert_eq!(data.next_action().len(), 3);
         for task_id in &task_ids {
             let task = data.find_task_by_id(task_id).unwrap();
             assert_eq!(task.status, NotaStatus::next_action);
@@ -977,8 +984,8 @@ mod tests {
             let data = handler.data.lock().unwrap();
             let task = data.find_task_by_id(&task_id).unwrap();
             assert!(matches!(task.status, NotaStatus::inbox));
-            assert_eq!(data.inbox.len(), 1);
-            assert_eq!(data.next_action.len(), 0);
+            assert_eq!(data.inbox().len(), 1);
+            assert_eq!(data.next_action().len(), 0);
         }
 
         // Update status to next_action using new method
@@ -992,8 +999,8 @@ mod tests {
             let data = handler.data.lock().unwrap();
             let task = data.find_task_by_id(&task_id).unwrap();
             assert!(matches!(task.status, NotaStatus::next_action));
-            assert_eq!(data.inbox.len(), 0);
-            assert_eq!(data.next_action.len(), 1);
+            assert_eq!(data.inbox().len(), 0);
+            assert_eq!(data.next_action().len(), 1);
         }
     }
 
@@ -1018,7 +1025,7 @@ mod tests {
 
         {
             let mut data = handler.data.lock().unwrap();
-            data.add(Nota::from_context(gtd::Context {
+            data.add(Nota::from_context(migration::Context {
                 name: "Office".to_string(),
                 notes: None,
                 title: None,
@@ -1600,7 +1607,7 @@ mod tests {
         // Add a context
         {
             let mut data = handler.data.lock().unwrap();
-            data.add(Nota::from_context(gtd::Context {
+            data.add(Nota::from_context(migration::Context {
                 name: "Office".to_string(),
                 notes: None,
                 title: None,
@@ -1696,8 +1703,8 @@ mod tests {
             let data = handler.data.lock().unwrap();
             let task = data.find_task_by_id(&task_id).unwrap();
             assert!(matches!(task.status, NotaStatus::next_action));
-            assert_eq!(data.next_action.len(), 1);
-            assert_eq!(data.inbox.len(), 0);
+            assert_eq!(data.next_action().len(), 1);
+            assert_eq!(data.inbox().len(), 0);
         }
 
         // Move back to inbox
@@ -1711,8 +1718,8 @@ mod tests {
             let data = handler.data.lock().unwrap();
             let task = data.find_task_by_id(&task_id).unwrap();
             assert!(matches!(task.status, NotaStatus::inbox));
-            assert_eq!(data.inbox.len(), 1);
-            assert_eq!(data.next_action.len(), 0);
+            assert_eq!(data.inbox().len(), 1);
+            assert_eq!(data.next_action().len(), 0);
         }
     }
 
@@ -1742,8 +1749,8 @@ mod tests {
         let data = handler.data.lock().unwrap();
         let task = data.find_task_by_id(&task_id).unwrap();
         assert!(matches!(task.status, NotaStatus::next_action));
-        assert_eq!(data.next_action.len(), 1);
-        assert_eq!(data.inbox.len(), 0);
+        assert_eq!(data.next_action().len(), 1);
+        assert_eq!(data.inbox().len(), 0);
     }
 
     #[tokio::test]
@@ -1772,8 +1779,8 @@ mod tests {
         let data = handler.data.lock().unwrap();
         let task = data.find_task_by_id(&task_id).unwrap();
         assert!(matches!(task.status, NotaStatus::waiting_for));
-        assert_eq!(data.waiting_for.len(), 1);
-        assert_eq!(data.inbox.len(), 0);
+        assert_eq!(data.waiting_for().len(), 1);
+        assert_eq!(data.inbox().len(), 0);
     }
 
     #[tokio::test]
@@ -1802,8 +1809,8 @@ mod tests {
         let data = handler.data.lock().unwrap();
         let task = data.find_task_by_id(&task_id).unwrap();
         assert!(matches!(task.status, NotaStatus::someday));
-        assert_eq!(data.someday.len(), 1);
-        assert_eq!(data.inbox.len(), 0);
+        assert_eq!(data.someday().len(), 1);
+        assert_eq!(data.inbox().len(), 0);
     }
 
     #[tokio::test]
@@ -1832,8 +1839,8 @@ mod tests {
         let data = handler.data.lock().unwrap();
         let task = data.find_task_by_id(&task_id).unwrap();
         assert!(matches!(task.status, NotaStatus::later));
-        assert_eq!(data.later.len(), 1);
-        assert_eq!(data.inbox.len(), 0);
+        assert_eq!(data.later().len(), 1);
+        assert_eq!(data.inbox().len(), 0);
     }
 
     #[tokio::test]
@@ -1862,8 +1869,8 @@ mod tests {
         let data = handler.data.lock().unwrap();
         let task = data.find_task_by_id(&task_id).unwrap();
         assert!(matches!(task.status, NotaStatus::done));
-        assert_eq!(data.done.len(), 1);
-        assert_eq!(data.inbox.len(), 0);
+        assert_eq!(data.done().len(), 1);
+        assert_eq!(data.inbox().len(), 0);
     }
 
     #[tokio::test]
@@ -1892,8 +1899,8 @@ mod tests {
         let data = handler.data.lock().unwrap();
         let task = data.find_task_by_id(&task_id).unwrap();
         assert!(matches!(task.status, NotaStatus::trash));
-        assert_eq!(data.trash.len(), 1);
-        assert_eq!(data.inbox.len(), 0);
+        assert_eq!(data.trash().len(), 1);
+        assert_eq!(data.inbox().len(), 0);
     }
 
     #[tokio::test]
@@ -1947,9 +1954,9 @@ mod tests {
 
         // Verify both tasks ended up in trash
         let data = handler.data.lock().unwrap();
-        assert_eq!(data.trash.len(), 2);
-        assert_eq!(data.inbox.len(), 0);
-        assert_eq!(data.done.len(), 0);
+        assert_eq!(data.trash().len(), 2);
+        assert_eq!(data.inbox().len(), 0);
+        assert_eq!(data.done().len(), 0);
 
         let task1 = data.find_task_by_id(&task_id_1).unwrap();
         let task2 = data.find_task_by_id(&task_id_2).unwrap();
@@ -2010,8 +2017,8 @@ mod tests {
 
         // すべてのタスクがtrashに移動されたことを確認
         let data = handler.data.lock().unwrap();
-        assert_eq!(data.trash.len(), 5);
-        assert_eq!(data.inbox.len(), 0);
+        assert_eq!(data.trash().len(), 5);
+        assert_eq!(data.inbox().len(), 0);
 
         for task_id in &task_ids {
             let task = data.find_task_by_id(task_id).unwrap();
@@ -2066,8 +2073,8 @@ mod tests {
 
         // 有効なタスクだけがtrashに移動されたことを確認
         let data = handler.data.lock().unwrap();
-        assert_eq!(data.trash.len(), 2);
-        assert_eq!(data.inbox.len(), 0);
+        assert_eq!(data.trash().len(), 2);
+        assert_eq!(data.inbox().len(), 0);
     }
 
     #[tokio::test]
@@ -2163,10 +2170,10 @@ mod tests {
 
         // すべてがtrashに移動されたことを確認
         let data = handler.data.lock().unwrap();
-        assert_eq!(data.trash.len(), 3);
-        assert_eq!(data.inbox.len(), 0);
-        assert_eq!(data.next_action.len(), 0);
-        assert_eq!(data.done.len(), 0);
+        assert_eq!(data.trash().len(), 3);
+        assert_eq!(data.inbox().len(), 0);
+        assert_eq!(data.next_action().len(), 0);
+        assert_eq!(data.done().len(), 0);
 
         let task1 = data.find_task_by_id(&inbox_task_id).unwrap();
         let task2 = data.find_task_by_id(&next_action_task_id).unwrap();
@@ -2206,8 +2213,8 @@ mod tests {
         let data = handler.data.lock().unwrap();
         let task = data.find_task_by_id(&task_id).unwrap();
         assert!(matches!(task.status, NotaStatus::calendar));
-        assert_eq!(data.calendar.len(), 1);
-        assert_eq!(data.inbox.len(), 0);
+        assert_eq!(data.calendar().len(), 1);
+        assert_eq!(data.inbox().len(), 0);
         assert!(task.start_date.is_some());
         assert_eq!(
             task.start_date.unwrap(),
@@ -2269,7 +2276,7 @@ mod tests {
         let data = handler.data.lock().unwrap();
         let task = data.find_task_by_id(&task_id).unwrap();
         assert!(matches!(task.status, NotaStatus::calendar));
-        assert_eq!(data.calendar.len(), 1);
+        assert_eq!(data.calendar().len(), 1);
         assert_eq!(
             task.start_date.unwrap(),
             NaiveDate::from_ymd_opt(2024, 11, 15).unwrap()
@@ -2424,9 +2431,9 @@ mod tests {
         assert!(result.unwrap().contains("Office"));
 
         let data = handler.data.lock().unwrap();
-        assert_eq!(data.contexts.len(), 1);
+        assert_eq!(data.contexts().len(), 1);
         let context = data.find_context_by_name("Office").unwrap();
-        assert_eq!(context.name, "Office");
+        assert_eq!(context.id, "Office");
         assert_eq!(context.notes, Some("Work environment".to_string()));
     }
 
@@ -2621,7 +2628,7 @@ mod tests {
         assert!(result.is_ok());
 
         let data = handler.data.lock().unwrap();
-        assert_eq!(data.contexts.len(), 0);
+        assert_eq!(data.contexts().len(), 0);
     }
 
     #[tokio::test]
@@ -2674,8 +2681,8 @@ mod tests {
 
         // Verify context still exists
         let data = handler.data.lock().unwrap();
-        assert_eq!(data.contexts.len(), 1);
-        assert!(data.contexts.contains_key("Office"));
+        assert_eq!(data.contexts().len(), 1);
+        assert!(data.contexts().contains_key("Office"));
     }
 
     #[tokio::test]
@@ -2718,8 +2725,8 @@ mod tests {
 
         // Verify context still exists
         let data = handler.data.lock().unwrap();
-        assert_eq!(data.contexts.len(), 1);
-        assert!(data.contexts.contains_key("Office"));
+        assert_eq!(data.contexts().len(), 1);
+        assert!(data.contexts().contains_key("Office"));
     }
 
     #[tokio::test]
@@ -2776,8 +2783,8 @@ mod tests {
 
         // Verify context still exists
         let data = handler.data.lock().unwrap();
-        assert_eq!(data.contexts.len(), 1);
-        assert!(data.contexts.contains_key("Office"));
+        assert_eq!(data.contexts().len(), 1);
+        assert!(data.contexts().contains_key("Office"));
     }
 
     #[tokio::test]
@@ -2830,7 +2837,7 @@ mod tests {
 
         // Verify context is gone
         let data = handler.data.lock().unwrap();
-        assert_eq!(data.contexts.len(), 0);
+        assert_eq!(data.contexts().len(), 0);
     }
 
     #[tokio::test]
@@ -2888,7 +2895,7 @@ mod tests {
 
         // Verify context is gone
         let data = handler.data.lock().unwrap();
-        assert_eq!(data.contexts.len(), 0);
+        assert_eq!(data.contexts().len(), 0);
     }
 
     #[tokio::test]
@@ -2944,7 +2951,7 @@ mod tests {
 
         // Verify context still exists
         let data = handler.data.lock().unwrap();
-        assert_eq!(data.contexts.len(), 1);
+        assert_eq!(data.contexts().len(), 1);
     }
 
     #[tokio::test]
@@ -2981,7 +2988,8 @@ mod tests {
 
         // Verify project has context
         let data = handler.data.lock().unwrap();
-        let project = data.projects.values().next().unwrap();
+        let projects = data.projects();
+        let project = projects.values().next().unwrap();
         assert_eq!(project.context, Some("Office".to_string()));
         assert_eq!(project.title, "Office Project");
     }
@@ -3471,8 +3479,8 @@ mod tests {
 
         // すべてのタスクがinboxに移動されたことを確認
         let data = handler.data.lock().unwrap();
-        assert_eq!(data.inbox.len(), 3);
-        assert_eq!(data.next_action.len(), 0);
+        assert_eq!(data.inbox().len(), 3);
+        assert_eq!(data.next_action().len(), 0);
 
         for task_id in &task_ids {
             let task = data.find_task_by_id(task_id).unwrap();
@@ -3518,8 +3526,8 @@ mod tests {
 
         // すべてのタスクがnext_actionに移動されたことを確認
         let data = handler.data.lock().unwrap();
-        assert_eq!(data.next_action.len(), 4);
-        assert_eq!(data.inbox.len(), 0);
+        assert_eq!(data.next_action().len(), 4);
+        assert_eq!(data.inbox().len(), 0);
 
         for task_id in &task_ids {
             let task = data.find_task_by_id(task_id).unwrap();
@@ -3565,8 +3573,8 @@ mod tests {
 
         // すべてのタスクがwaiting_forに移動されたことを確認
         let data = handler.data.lock().unwrap();
-        assert_eq!(data.waiting_for.len(), 3);
-        assert_eq!(data.inbox.len(), 0);
+        assert_eq!(data.waiting_for().len(), 3);
+        assert_eq!(data.inbox().len(), 0);
 
         for task_id in &task_ids {
             let task = data.find_task_by_id(task_id).unwrap();
@@ -3612,8 +3620,8 @@ mod tests {
 
         // すべてのタスクがsomedayに移動されたことを確認
         let data = handler.data.lock().unwrap();
-        assert_eq!(data.someday.len(), 3);
-        assert_eq!(data.inbox.len(), 0);
+        assert_eq!(data.someday().len(), 3);
+        assert_eq!(data.inbox().len(), 0);
 
         for task_id in &task_ids {
             let task = data.find_task_by_id(task_id).unwrap();
@@ -3659,8 +3667,8 @@ mod tests {
 
         // すべてのタスクがlaterに移動されたことを確認
         let data = handler.data.lock().unwrap();
-        assert_eq!(data.later.len(), 3);
-        assert_eq!(data.inbox.len(), 0);
+        assert_eq!(data.later().len(), 3);
+        assert_eq!(data.inbox().len(), 0);
 
         for task_id in &task_ids {
             let task = data.find_task_by_id(task_id).unwrap();
@@ -3706,8 +3714,8 @@ mod tests {
 
         // すべてのタスクがdoneに移動されたことを確認
         let data = handler.data.lock().unwrap();
-        assert_eq!(data.done.len(), 3);
-        assert_eq!(data.inbox.len(), 0);
+        assert_eq!(data.done().len(), 3);
+        assert_eq!(data.inbox().len(), 0);
 
         for task_id in &task_ids {
             let task = data.find_task_by_id(task_id).unwrap();
@@ -3882,8 +3890,8 @@ mod tests {
 
         // すべてのタスクがcalendarに移動されたことを確認
         let data = handler.data.lock().unwrap();
-        assert_eq!(data.calendar.len(), 3);
-        assert_eq!(data.inbox.len(), 0);
+        assert_eq!(data.calendar().len(), 3);
+        assert_eq!(data.inbox().len(), 0);
 
         for task_id in &task_ids {
             let task = data.find_task_by_id(task_id).unwrap();
@@ -3932,7 +3940,7 @@ mod tests {
 
         // すべてのタスクがcalendarに移動され、既存のstart_dateが保持されていることを確認
         let data = handler.data.lock().unwrap();
-        assert_eq!(data.calendar.len(), 2);
+        assert_eq!(data.calendar().len(), 2);
         for task_id in &task_ids {
             let task = data.find_task_by_id(task_id).unwrap();
             assert!(matches!(task.status, NotaStatus::calendar));
@@ -3995,8 +4003,8 @@ mod tests {
 
         // 1つのタスクだけが移動されたことを確認
         let data = handler.data.lock().unwrap();
-        assert_eq!(data.calendar.len(), 1);
-        assert_eq!(data.inbox.len(), 1);
+        assert_eq!(data.calendar().len(), 1);
+        assert_eq!(data.inbox().len(), 1);
     }
 
     // テスト: date フィルタリングの基本機能
