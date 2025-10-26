@@ -107,16 +107,26 @@ pub struct Project {
     /// Last update date
     #[serde(default = "local_date_today")]
     pub updated_at: NaiveDate,
-    /// Legacy status field - accepted during deserialization but ignored and not serialized
-    /// This allows old TOML files with "status = ..." to be loaded without errors
-    /// Defaults to None if not specified
+    /// Legacy status field - accepted during deserialization for backward compatibility
+    ///
+    /// Old TOML files (format_version = 2 and earlier) may contain a "status" field
+    /// for projects. This field is accepted during deserialization but is not used
+    /// in the current system (projects don't have status - only tasks/notas do).
+    /// The field is never serialized back to TOML, ensuring clean migration to the
+    /// new format where projects are simply identified by their `id` and contained
+    /// in the `[projects.{id}]` section.
+    ///
+    /// Defaults to None if not specified in the TOML file.
     #[serde(skip_serializing, default)]
     pub status: Option<String>,
 }
 
 impl Project {
     /// Create a new Project with all required fields, status defaults to None
-    #[allow(dead_code, clippy::too_many_arguments)]
+    ///
+    /// This helper method is used during migration from legacy formats to ensure
+    /// the status field is always set to None (it's not persisted in new format).
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         id: String,
         title: String,
