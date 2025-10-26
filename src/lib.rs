@@ -157,7 +157,7 @@ impl Drop for GtdServerHandler {
 /// GTD (Getting Things Done) task management server implementing David Allen's productivity methodology.
 ///
 /// This server helps you capture, organize, and track tasks through a proven workflow system.
-/// GTD organizes tasks into different status categories (inbox, next_action, waiting_for, someday, later, calendar, done, trash)
+/// GTD organizes tasks into different status categories (inbox, next_action, waiting_for, someday, later, calendar, done, reference, trash)
 /// and supports projects (multi-step endeavors) and contexts (environments/tools like @office, @home).
 ///
 /// Key concepts:
@@ -168,6 +168,7 @@ impl Drop for GtdServerHandler {
 /// - **later**: Deferred but planned tasks
 /// - **calendar**: Date-specific tasks
 /// - **done**: Completed tasks
+/// - **reference**: Non-actionable reference material for future use
 /// - **trash**: Deleted tasks
 ///
 /// Task IDs use format: #1, #2, #3
@@ -212,7 +213,7 @@ impl McpServer for GtdServerHandler {
         id: String,
         /// Title: brief description
         title: String,
-        /// Status: inbox/next_action/waiting_for/later/calendar/someday/done/project/context/trash
+        /// Status: inbox/next_action/waiting_for/later/calendar/someday/done/reference/project/context/trash
         status: String,
         /// Project: parent project ID (optional)
         project: Option<String>,
@@ -237,7 +238,7 @@ impl McpServer for GtdServerHandler {
             Err(_) => {
                 drop(data);
                 bail!(
-                    "Invalid status '{}'. Valid statuses: inbox, next_action, waiting_for, later, calendar, someday, done, trash, project, context",
+                    "Invalid status '{}'. Valid statuses: inbox, next_action, waiting_for, later, calendar, someday, done, reference, trash, project, context",
                     status
                 );
             }
@@ -320,7 +321,7 @@ impl McpServer for GtdServerHandler {
     #[tool]
     async fn list(
         &self,
-        /// Status filter: inbox/next_action/waiting_for/later/calendar/someday/done/project/context/trash. Empty=all.
+        /// Status filter: inbox/next_action/waiting_for/later/calendar/someday/done/reference/project/context/trash. Empty=all.
         status: Option<String>,
         /// Optional date filter (YYYY-MM-DD) - For calendar status, only shows tasks with start_date <= this date
         date: Option<String>,
@@ -336,7 +337,7 @@ impl McpServer for GtdServerHandler {
                 Err(_) => {
                     drop(data);
                     bail!(
-                        "Invalid status '{}'. Valid statuses: inbox, next_action, waiting_for, later, calendar, someday, done, trash, project, context",
+                        "Invalid status '{}'. Valid statuses: inbox, next_action, waiting_for, later, calendar, someday, done, reference, trash, project, context",
                         status_str
                     );
                 }
@@ -462,7 +463,7 @@ impl McpServer for GtdServerHandler {
                 Err(_) => {
                     drop(data);
                     bail!(
-                        "Invalid status '{}'. Valid statuses: inbox, next_action, waiting_for, later, calendar, someday, done, trash, project, context",
+                        "Invalid status '{}'. Valid statuses: inbox, next_action, waiting_for, later, calendar, someday, done, reference, trash, project, context",
                         new_status_str
                     );
                 }
@@ -548,7 +549,7 @@ impl McpServer for GtdServerHandler {
         &self,
         /// Nota ID
         id: String,
-        /// New status: inbox/next_action/waiting_for/later/calendar/someday/done/project/context/trash
+        /// New status: inbox/next_action/waiting_for/later/calendar/someday/done/reference/project/context/trash
         new_status: String,
         /// Start date YYYY-MM-DD (required for calendar)
         start_date: Option<String>,
@@ -561,7 +562,7 @@ impl McpServer for GtdServerHandler {
             Err(_) => {
                 drop(data);
                 bail!(
-                    "Invalid status '{}'. Valid statuses: inbox, next_action, waiting_for, later, calendar, someday, done, trash, project, context",
+                    "Invalid status '{}'. Valid statuses: inbox, next_action, waiting_for, later, calendar, someday, done, reference, trash, project, context",
                     new_status
                 );
             }

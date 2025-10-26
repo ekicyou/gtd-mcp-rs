@@ -171,6 +171,8 @@ pub struct GtdDataMigrationHelper {
     #[serde(default)]
     pub(crate) done: Vec<Task>,
     #[serde(default)]
+    pub(crate) reference: Vec<Task>,
+    #[serde(default)]
     pub(crate) trash: Vec<Task>,
     #[serde(default)]
     pub(crate) projects: Option<ProjectsFormat>,
@@ -331,6 +333,7 @@ pub fn normalize_context_line_endings(contexts: &mut HashMap<String, Context>) {
 /// * `calendar` - Output vector for calendar tasks
 /// * `someday` - Output vector for someday tasks
 /// * `done` - Output vector for done tasks
+/// * `reference` - Output vector for reference tasks
 /// * `trash` - Output vector for trash tasks
 /// * `projects` - Output HashMap for projects
 /// * `contexts` - Output HashMap for contexts
@@ -344,6 +347,7 @@ pub fn migrate_notas_v3_to_internal(
     calendar: &mut Vec<Task>,
     someday: &mut Vec<Task>,
     done: &mut Vec<Task>,
+    reference: &mut Vec<Task>,
     trash: &mut Vec<Task>,
     projects: &mut HashMap<String, Project>,
     contexts: &mut HashMap<String, Context>,
@@ -385,6 +389,11 @@ pub fn migrate_notas_v3_to_internal(
             NotaStatus::done => {
                 if let Some(task) = nota.to_task() {
                     done.push(task);
+                }
+            }
+            NotaStatus::reference => {
+                if let Some(task) = nota.to_task() {
+                    reference.push(task);
                 }
             }
             NotaStatus::trash => {

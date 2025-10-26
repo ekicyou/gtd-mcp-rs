@@ -11,7 +11,7 @@ A Model Context Protocol (MCP) server for GTD (Getting Things Done) task managem
 gtd-mcp is an MCP server that implements the Getting Things Done (GTD) workflow. It provides a complete task management system that works seamlessly with LLM assistants through the Model Context Protocol.
 
 **Key Features:**
-- ✅ Complete GTD workflow support (inbox, next actions, waiting for, someday/maybe, calendar, done, trash)
+- ✅ Complete GTD workflow support (inbox, next actions, waiting for, someday/maybe, calendar, done, reference material, trash)
 - ✅ **Unified nota interface** - single set of tools for tasks, projects, and contexts
 - ✅ Project and context management
 - ✅ **Flexible task IDs** - client-provided arbitrary strings (e.g., "meeting-prep", "call-sarah")
@@ -103,10 +103,31 @@ The system provides 5 unified tools that handle all GTD operations:
 - Use this as the first step in GTD workflow - quickly capture everything to process later
 
 **list** - Review all notas with optional filters (GTD Review step)
-- Optional: `status` - Filter by specific status (inbox, next_action, waiting_for, later, calendar, someday, done, trash, project, context)
+- Optional: `status` - Filter by specific status (inbox, next_action, waiting_for, later, calendar, someday, done, reference, trash, project, context)
 - Optional: `date` (YYYY-MM-DD) - For calendar status, shows tasks with start_date <= this date
 - Optional: `exclude_notes` (boolean) - Reduce token usage by excluding notes
 - Review regularly (daily/weekly) to keep your system current
+
+## GTD Status Categories
+
+The system supports the following status categories according to GTD methodology:
+
+### Actionable Items
+- **inbox**: Unprocessed items that need to be clarified (start here)
+- **next_action**: Ready-to-execute tasks that require your attention
+- **waiting_for**: Items blocked on someone else or an external event
+- **later**: Deferred tasks that you'll do eventually
+- **calendar**: Date-specific or time-specific tasks
+- **someday**: Potential future actions (not committed yet)
+
+### Non-Actionable Items
+- **reference**: Non-actionable information saved for future reference - important documents, notes, or information you might need later but don't require action
+- **done**: Completed tasks (for record-keeping and review)
+- **trash**: Discarded items (can be permanently deleted with empty_trash)
+
+### Organizational Structures
+- **project**: Multi-step outcomes requiring multiple actions
+- **context**: Environments, tools, or situations where actions can be performed (e.g., @office, @home, @computer)
 
 ### Organize and Execute
 
