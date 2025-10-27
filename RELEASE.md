@@ -68,7 +68,16 @@ pub enum RecurrencePattern {
 **Extended Nota Structure**:
 ```rust
 pub struct Nota {
-    // ... existing fields ...
+    pub id: String,
+    pub title: String,
+    pub status: NotaStatus,
+    pub project: Option<String>,
+    pub context: Option<String>,
+    pub notes: Option<String>,
+    pub start_date: Option<NaiveDate>,
+    pub created_at: NaiveDate,
+    pub updated_at: NaiveDate,
+    // New fields for recurring tasks:
     pub recurrence_pattern: Option<RecurrencePattern>,
     pub recurrence_config: Option<String>,
 }
