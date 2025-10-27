@@ -4021,7 +4021,11 @@ mod tests {
 
         // タスクをdoneに変更（完了）
         let result = handler
-            .change_status("task-completion".to_string(), "done".to_string(), None)
+            .change_status(
+                vec!["task-completion".to_string()],
+                "done".to_string(),
+                None,
+            )
             .await;
         assert!(result.is_ok());
 
@@ -5217,7 +5221,7 @@ mod tests {
             .unwrap();
 
         handler
-            .change_status("dup2".to_string(), "next_action".to_string(), None)
+            .change_status(vec!["dup2".to_string()], "next_action".to_string(), None)
             .await
             .unwrap();
 
