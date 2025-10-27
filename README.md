@@ -90,8 +90,6 @@ Once configured, you can ask your LLM assistant to help you manage tasks using t
 - "What's in my inbox?"
 - "Help me process my inbox" (uses built-in GTD workflow prompt)
 
-> **Note on Error Messages**: When using Claude.ai's web interface, detailed error messages may not be visible in the UI (you may see only "Tool execution failed"). However, the LLM still receives the full error details and can reason about them. See [ERROR_HANDLING.md](doc/ERROR_HANDLING.md) for more information and workarounds.
-
 ## MCP Tools
 
 The system provides 5 unified tools that handle all GTD operations:
@@ -208,7 +206,6 @@ git remote add origin https://github.com/yourusername/gtd-data.git
 
 - **[IMPLEMENTATION.md](doc/IMPLEMENTATION.md)** - Technical implementation details and architecture
 - **[GTD_ASSESSMENT.md](doc/GTD_ASSESSMENT.md)** - Feature assessment and enhancement roadmap
-- **[ERROR_HANDLING.md](doc/ERROR_HANDLING.md)** - Error handling and known limitations with Claude.ai
 - **[RELEASE.md](RELEASE.md)** - Release notes for all versions (newest first)
 
 ## Development
