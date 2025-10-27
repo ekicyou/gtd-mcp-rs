@@ -128,7 +128,7 @@ impl GtdServerHandler {
         let projects = data.projects();
         if projects.is_empty() {
             format!(
-                "Project '{}' does not exist. No projects have been created yet. Create a project first using inbox() with status=\"project\".",
+                "Project '{}' does not exist. No projects have been created yet. Create a project first using inbox() with status='project'.",
                 project_id
             )
         } else {
@@ -153,7 +153,7 @@ impl GtdServerHandler {
         let contexts = data.contexts();
         if contexts.is_empty() {
             format!(
-                "Context '{}' does not exist. No contexts have been created yet. Create a context first using inbox() with status=\"context\".",
+                "Context '{}' does not exist. No contexts have been created yet. Create a context first using inbox() with status='context'.",
                 context_name
             )
         } else {
