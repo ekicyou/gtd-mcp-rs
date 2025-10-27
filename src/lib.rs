@@ -286,7 +286,7 @@ impl McpServer for GtdServerHandler {
         data.add(nota);
         drop(data);
 
-        if let Err(e) = self.save_data_with_message(&format!("Add nota {}", id)) {
+        if let Err(e) = self.save_data_with_message(&format!("Add item {}", id)) {
             bail!("Failed to save: {}", e);
         }
 
@@ -522,7 +522,7 @@ impl McpServer for GtdServerHandler {
         }
         drop(data);
 
-        if let Err(e) = self.save_data_with_message(&format!("Update nota {}", id)) {
+        if let Err(e) = self.save_data_with_message(&format!("Update item {}", id)) {
             bail!("Failed to save: {}", e);
         }
 
@@ -611,7 +611,7 @@ impl McpServer for GtdServerHandler {
         drop(data);
 
         if let Err(e) =
-            self.save_data_with_message(&format!("Change nota {} status to {}", id, new_status))
+            self.save_data_with_message(&format!("Change item {} status to {}", id, new_status))
         {
             bail!("Failed to save: {}", e);
         }
