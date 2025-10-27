@@ -4906,7 +4906,7 @@ mod tests {
                     // When we convert an anyhow error to MCP error, what happens?
                     // Let's use the MCP error creation
                     Err(mcp_attr::Error::new(mcp_attr::ErrorCode::INTERNAL_ERROR)
-                        .with_message(&format!("Converted: {}", e), false))
+                        .with_message(format!("Converted: {}", e), false))
                 }
             }
         }
@@ -4948,6 +4948,7 @@ mod tests {
         if bail_is_public == bail_public_is_public {
             println!("⚠️  IMPORTANT: Both macros produce the same message_is_public flag!");
             println!("    This means the change from bail! to bail_public! may not be necessary.");
+            panic!("Unexpected: bail! and bail_public! produce the same message_is_public flag");
         } else {
             println!("✓ The macros produce different results:");
             println!("  - bail! sets message_is_public to false (not visible to clients)");
@@ -4955,5 +4956,15 @@ mod tests {
             println!("  This confirms that bail_public! was the correct choice.");
         }
         println!("==============================================\n");
+
+        // Assertions to ensure the test validates what we expect
+        assert!(
+            !bail_is_public,
+            "bail! should set message_is_public to false"
+        );
+        assert!(
+            bail_public_is_public,
+            "bail_public! should set message_is_public to true"
+        );
     }
 }
