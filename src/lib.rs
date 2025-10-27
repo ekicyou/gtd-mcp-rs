@@ -34,7 +34,7 @@ use anyhow::Result;
 use chrono::NaiveDate;
 
 use mcp_attr::server::{McpServer, mcp_server};
-use mcp_attr::{Result as McpResult, bail};
+use mcp_attr::{Result as McpResult, bail_public};
 use std::sync::Mutex;
 
 // Re-export for integration tests (McpServer trait already in scope above)
@@ -184,7 +184,7 @@ impl McpServer for GtdServerHandler {
         drop(data);
 
         if let Err(e) = self.save_data_with_message("Empty trash") {
-            bail!("Failed to save: {}", e);
+            bail_public!(_, "Failed to save: {}", e);
         }
 
         Ok(format!("Deleted {} task(s) from trash", count))
@@ -219,7 +219,8 @@ impl McpServer for GtdServerHandler {
         if data.nota_map.contains_key(&id) {
             let existing_status = data.nota_map[&id].clone();
             drop(data);
-            bail!(
+            bail_public!(
+                _,
                 "Duplicate ID error: ID '{}' already exists (status: {:?}). Each item must have a unique ID. Please choose a different ID.",
                 id,
                 existing_status
@@ -231,7 +232,8 @@ impl McpServer for GtdServerHandler {
             Ok(s) => s,
             Err(_) => {
                 drop(data);
-                bail!(
+                bail_public!(
+                    _,
                     "Invalid status '{}'. Valid statuses: inbox, next_action, waiting_for, later, calendar, someday, done, reference, trash, project, context",
                     status
                 );
@@ -241,7 +243,8 @@ impl McpServer for GtdServerHandler {
         // Validate calendar status has start_date
         if nota_status == NotaStatus::calendar && start_date.is_none() {
             drop(data);
-            bail!(
+            bail_public!(
+                _,
                 "Calendar status validation failed: status=calendar requires start_date parameter. Please provide a date in YYYY-MM-DD format."
             );
         }
@@ -252,7 +255,8 @@ impl McpServer for GtdServerHandler {
                 Ok(d) => Some(d),
                 Err(_) => {
                     drop(data);
-                    bail!(
+                    bail_public!(
+                        _,
                         "Invalid date format '{}'. Use YYYY-MM-DD (e.g., '2025-03-15')",
                         date_str
                     );
@@ -267,7 +271,8 @@ impl McpServer for GtdServerHandler {
             && data.find_project_by_id(proj_id).is_none()
         {
             drop(data);
-            bail!(
+            bail_public!(
+                _,
                 "Invalid project reference: Project '{}' does not exist. Create the project first or use an existing project ID.",
                 proj_id
             );
@@ -278,7 +283,8 @@ impl McpServer for GtdServerHandler {
             && data.find_context_by_name(ctx_name).is_none()
         {
             drop(data);
-            bail!(
+            bail_public!(
+                _,
                 "Invalid context reference: Context '{}' does not exist. Create the context first or use an existing context name.",
                 ctx_name
             );
@@ -301,7 +307,7 @@ impl McpServer for GtdServerHandler {
         drop(data);
 
         if let Err(e) = self.save_data_with_message(&format!("Add item {}", id)) {
-            bail!("Failed to save: {}", e);
+            bail_public!(_, "Failed to save: {}", e);
         }
 
         Ok(format!(
@@ -338,7 +344,8 @@ impl McpServer for GtdServerHandler {
                 Ok(s) => Some(s),
                 Err(_) => {
                     drop(data);
-                    bail!(
+                    bail_public!(
+                        _,
                         "Invalid status '{}'. Valid statuses: inbox, next_action, waiting_for, later, calendar, someday, done, reference, trash, project, context",
                         status_str
                     );
@@ -354,7 +361,8 @@ impl McpServer for GtdServerHandler {
                 Ok(d) => Some(d),
                 Err(_) => {
                     drop(data);
-                    bail!(
+                    bail_public!(
+                        _,
                         "Invalid date format '{}'. Use YYYY-MM-DD (e.g., '2025-03-15')",
                         date_str
                     );
@@ -451,7 +459,8 @@ impl McpServer for GtdServerHandler {
             Some(n) => n,
             None => {
                 drop(data);
-                bail!(
+                bail_public!(
+                    _,
                     "Item not found: Item '{}' does not exist. Use list() to see available items.",
                     id
                 );
@@ -468,7 +477,8 @@ impl McpServer for GtdServerHandler {
                 Ok(s) => s,
                 Err(_) => {
                     drop(data);
-                    bail!(
+                    bail_public!(
+                        _,
                         "Invalid status '{}'. Valid statuses: inbox, next_action, waiting_for, later, calendar, someday, done, reference, trash, project, context",
                         new_status_str
                     );
@@ -485,7 +495,8 @@ impl McpServer for GtdServerHandler {
                 // Validate project exists
                 if data.find_project_by_id(&proj).is_none() {
                     drop(data);
-                    bail!(
+                    bail_public!(
+                        _,
                         "Invalid project reference: Project '{}' does not exist. Create the project first or use an existing project ID.",
                         proj
                     );
@@ -501,7 +512,8 @@ impl McpServer for GtdServerHandler {
                 // Validate context exists
                 if data.find_context_by_name(&ctx).is_none() {
                     drop(data);
-                    bail!(
+                    bail_public!(
+                        _,
                         "Invalid context reference: Context '{}' does not exist. Create the context first or use an existing context name.",
                         ctx
                     );
@@ -522,7 +534,8 @@ impl McpServer for GtdServerHandler {
                     Ok(d) => Some(d),
                     Err(_) => {
                         drop(data);
-                        bail!(
+                        bail_public!(
+                            _,
                             "Invalid date format '{}'. Use YYYY-MM-DD (e.g., '2025-03-15')",
                             date_str
                         );
@@ -534,7 +547,8 @@ impl McpServer for GtdServerHandler {
         // Validate calendar status has start_date
         if nota.status == NotaStatus::calendar && nota.start_date.is_none() {
             drop(data);
-            bail!(
+            bail_public!(
+                _,
                 "Calendar status validation failed: status=calendar requires start_date. Please provide a start_date or change to a different status."
             );
         }
@@ -544,12 +558,12 @@ impl McpServer for GtdServerHandler {
         // Update the nota
         if data.update(&id, nota).is_none() {
             drop(data);
-            bail!("Failed to update item '{}'", id);
+            bail_public!(_, "Failed to update item '{}'", id);
         }
         drop(data);
 
         if let Err(e) = self.save_data_with_message(&format!("Update item {}", id)) {
-            bail!("Failed to save: {}", e);
+            bail_public!(_, "Failed to save: {}", e);
         }
 
         Ok(format!("Item {} updated successfully", id))
@@ -575,7 +589,8 @@ impl McpServer for GtdServerHandler {
             Ok(s) => s,
             Err(_) => {
                 drop(data);
-                bail!(
+                bail_public!(
+                    _,
                     "Invalid status '{}'. Valid statuses: inbox, next_action, waiting_for, later, calendar, someday, done, reference, trash, project, context",
                     new_status
                 );
@@ -587,7 +602,7 @@ impl McpServer for GtdServerHandler {
             Some(n) => n,
             None => {
                 drop(data);
-                bail!("Item '{}' not found", id);
+                bail_public!(_, "Item '{}' not found", id);
             }
         };
 
@@ -595,7 +610,8 @@ impl McpServer for GtdServerHandler {
         if nota_status == NotaStatus::calendar && start_date.is_none() && nota.start_date.is_none()
         {
             drop(data);
-            bail!(
+            bail_public!(
+                _,
                 "Calendar status validation failed: Moving to calendar status requires a start_date. The item '{}' has no existing start_date - please provide the start_date parameter.",
                 id
             );
@@ -605,7 +621,8 @@ impl McpServer for GtdServerHandler {
         let is_trash = nota_status == NotaStatus::trash;
         if is_trash && data.is_referenced(&id) {
             drop(data);
-            bail!(
+            bail_public!(
+                _,
                 "Cannot trash '{}': still referenced by other items. Remove references first.",
                 id
             );
@@ -620,7 +637,8 @@ impl McpServer for GtdServerHandler {
                 Ok(d) => Some(d),
                 Err(_) => {
                     drop(data);
-                    bail!(
+                    bail_public!(
+                        _,
                         "Invalid date format '{}'. Use YYYY-MM-DD (e.g., '2025-03-15')",
                         date_str
                     );
@@ -633,14 +651,14 @@ impl McpServer for GtdServerHandler {
         // Update the nota (this will automatically move it to the correct container)
         if data.update(&id, nota).is_none() {
             drop(data);
-            bail!("Failed to update item '{}'", id);
+            bail_public!(_, "Failed to update item '{}'", id);
         }
         drop(data);
 
         if let Err(e) =
             self.save_data_with_message(&format!("Change item {} status to {}", id, new_status))
         {
-            bail!("Failed to save: {}", e);
+            bail_public!(_, "Failed to save: {}", e);
         }
 
         Ok(if is_trash {
