@@ -4466,4 +4466,418 @@ mod tests {
         assert!(!result.contains("cal-future-notes"));
         assert!(!result.contains("Future notes"));
     }
+
+    // ============================================================================
+    // MCP Protocol-Level Tests for Issue #190
+    // ============================================================================
+    //
+    // These tests verify the MCP server's behavior at the protocol level,
+    // specifically testing error responses and ensuring they are properly
+    // formatted for MCP clients.
+    //
+    // Issue #190: Need to confirm that duplicate ID errors are properly
+    // returned to MCP clients with the correct error format.
+
+    /// Test MCP protocol response when duplicate ID is detected
+    ///
+    /// This test verifies issue #190: when a duplicate ID is provided to the inbox() method,
+    /// the server should return a proper error response that includes:
+    /// 1. Clear error message indicating duplicate ID
+    /// 2. The existing status of the duplicate ID
+    /// 3. Guidance on what the user should do
+    ///
+    /// The error should be returned via McpResult::Err and be visible to the MCP client.
+    #[tokio::test]
+    async fn test_mcp_duplicate_id_error_response() {
+        let (handler, _temp) = get_test_handler();
+
+        // Step 1: Create initial item with ID "test-task-1"
+        let result1 = handler
+            .inbox(
+                "test-task-1".to_string(),
+                "First task".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
+            .await;
+
+        // Verify first creation succeeds
+        assert!(result1.is_ok(), "First item creation should succeed");
+        let response1 = result1.unwrap();
+        assert!(
+            response1.contains("Item created with ID: test-task-1"),
+            "Response should confirm item creation: {}",
+            response1
+        );
+
+        // Step 2: Attempt to create another item with the same ID "test-task-1"
+        let result2 = handler
+            .inbox(
+                "test-task-1".to_string(), // Same ID - should trigger duplicate error
+                "Second task".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
+            .await;
+
+        // Step 3: Verify duplicate ID error is properly returned
+        assert!(
+            result2.is_err(),
+            "Duplicate ID should return error, got: {:?}",
+            result2
+        );
+
+        let error = result2.unwrap_err();
+        let error_msg = format!("{:?}", error);
+
+        // Verify error message contains key information
+        println!("\n=== MCP Protocol Test: Duplicate ID Error Response ===");
+        println!("Error message returned to MCP client:");
+        println!("{:?}", error);
+        println!("======================================================\n");
+
+        // Assertions to verify error message quality
+        assert!(
+            error_msg.contains("Duplicate ID error"),
+            "Error should mention 'Duplicate ID error'"
+        );
+        assert!(
+            error_msg.contains("test-task-1"),
+            "Error should include the duplicate ID"
+        );
+        assert!(
+            error_msg.contains("already exists"),
+            "Error should state that ID already exists"
+        );
+        assert!(
+            error_msg.contains("inbox"),
+            "Error should show the existing status"
+        );
+        assert!(
+            error_msg.contains("unique ID") || error_msg.contains("different ID"),
+            "Error should guide user to use a different ID"
+        );
+
+        // Additional verification: The error is a public error (visible to MCP client)
+        // This is ensured by using bail_public! in the implementation
+    }
+
+    /// Test MCP protocol response when duplicate ID exists across different statuses
+    ///
+    /// This test verifies that duplicate detection works across all nota types
+    /// (tasks, projects, contexts) and properly reports the existing status.
+    #[tokio::test]
+    async fn test_mcp_duplicate_id_across_statuses() {
+        let (handler, _temp) = get_test_handler();
+
+        // Create a task with ID "duplicate-test"
+        let result_task = handler
+            .inbox(
+                "duplicate-test".to_string(),
+                "Task".to_string(),
+                "next_action".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
+            .await;
+        assert!(result_task.is_ok());
+
+        // Try to create a project with the same ID
+        let result_project = handler
+            .inbox(
+                "duplicate-test".to_string(), // Same ID as task
+                "Project".to_string(),
+                "project".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
+            .await;
+
+        // Verify error
+        assert!(
+            result_project.is_err(),
+            "Should detect duplicate across types"
+        );
+        let error = result_project.unwrap_err();
+        let error_msg = format!("{:?}", error);
+
+        println!("\n=== MCP Protocol Test: Duplicate ID Across Statuses ===");
+        println!("Error message when creating project with duplicate task ID:");
+        println!("{:?}", error);
+        println!("======================================================\n");
+
+        // Verify error mentions the existing status (next_action)
+        assert!(
+            error_msg.contains("duplicate-test"),
+            "Error should include the ID"
+        );
+        assert!(
+            error_msg.contains("next_action"),
+            "Error should show existing status: {}",
+            error_msg
+        );
+    }
+
+    /// Test MCP protocol response format matches expectations
+    ///
+    /// This test documents the exact format of error responses to help
+    /// diagnose any client-side issues (related to issue #190).
+    #[tokio::test]
+    async fn test_mcp_error_response_format() {
+        let (handler, _temp) = get_test_handler();
+
+        // Create initial item
+        handler
+            .inbox(
+                "format-test".to_string(),
+                "Task".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        // Trigger duplicate error
+        let result = handler
+            .inbox(
+                "format-test".to_string(),
+                "Duplicate".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
+            .await;
+
+        let error = result.unwrap_err();
+
+        println!("\n=== MCP Protocol Test: Error Response Format ===");
+        println!("Error type: {:?}", error);
+        println!("Error debug: {:?}", error);
+        println!("================================================\n");
+
+        // The error should be a properly formatted McpError that can be
+        // serialized to JSON-RPC error response by the MCP framework
+        let error_msg = format!("{:?}", error);
+        assert!(!error_msg.is_empty(), "Error message should not be empty");
+        assert!(
+            error_msg.len() > 20,
+            "Error message should be descriptive, got: {}",
+            error_msg
+        );
+    }
+
+    /// Comprehensive test of multiple duplicate ID scenarios
+    ///
+    /// This test exercises various duplicate ID scenarios to ensure
+    /// all error paths are working correctly.
+    #[tokio::test]
+    async fn test_mcp_comprehensive_duplicate_scenarios() {
+        let (handler, _temp) = get_test_handler();
+
+        println!("\n=== MCP Protocol Test: Comprehensive Duplicate ID Scenarios ===\n");
+
+        // Scenario 1: Simple duplicate in inbox
+        handler
+            .inbox(
+                "dup1".to_string(),
+                "Task 1".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        let result = handler
+            .inbox(
+                "dup1".to_string(),
+                "Task 2".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
+            .await;
+        assert!(result.is_err());
+        println!("Scenario 1 (inbox duplicate): {:?}", result.unwrap_err());
+
+        // Scenario 2: Duplicate after status change
+        handler
+            .inbox(
+                "dup2".to_string(),
+                "Task".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        handler
+            .change_status("dup2".to_string(), "next_action".to_string(), None)
+            .await
+            .unwrap();
+
+        let result = handler
+            .inbox(
+                "dup2".to_string(),
+                "New Task".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
+            .await;
+        assert!(result.is_err());
+        println!(
+            "Scenario 2 (duplicate after status change): {:?}",
+            result.unwrap_err()
+        );
+
+        // Scenario 3: Project ID collision
+        handler
+            .inbox(
+                "proj1".to_string(),
+                "Project".to_string(),
+                "project".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        let result = handler
+            .inbox(
+                "proj1".to_string(),
+                "Task".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
+            .await;
+        assert!(result.is_err());
+        println!(
+            "Scenario 3 (project ID collision): {:?}",
+            result.unwrap_err()
+        );
+
+        // Scenario 4: Context ID collision
+        handler
+            .inbox(
+                "Home".to_string(),
+                "Home Context".to_string(),
+                "context".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        let result = handler
+            .inbox(
+                "Home".to_string(),
+                "Task".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
+            .await;
+        assert!(result.is_err());
+        println!(
+            "Scenario 4 (context ID collision): {:?}",
+            result.unwrap_err()
+        );
+
+        println!("\n===============================================================\n");
+    }
+
+    /// Test that verifies error messages are user-friendly and actionable
+    ///
+    /// This test ensures the error messages follow best practices:
+    /// - State what went wrong
+    /// - Explain why it's a problem
+    /// - Suggest how to fix it
+    #[tokio::test]
+    async fn test_mcp_error_message_quality() {
+        let (handler, _temp) = get_test_handler();
+
+        // Create initial task
+        handler
+            .inbox(
+                "task-123".to_string(),
+                "Original".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        // Trigger duplicate error
+        let result = handler
+            .inbox(
+                "task-123".to_string(),
+                "Duplicate".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
+            .await;
+
+        let error_msg = format!("{:?}", result.unwrap_err());
+
+        println!("\n=== MCP Protocol Test: Error Message Quality Assessment ===");
+        println!("Error message: {}", error_msg);
+
+        // Check for key components of a good error message
+        let has_what = error_msg.contains("Duplicate ID") || error_msg.contains("already exists");
+        let has_where = error_msg.contains("task-123");
+        let has_why = error_msg.contains("status:");
+        let has_how = error_msg.contains("unique ID") || error_msg.contains("different ID");
+
+        println!("\nError Message Quality Checklist:");
+        println!("✓ States what went wrong (Duplicate ID): {}", has_what);
+        println!("✓ Identifies the problematic ID: {}", has_where);
+        println!("✓ Shows existing status: {}", has_why);
+        println!("✓ Suggests fix (use different ID): {}", has_how);
+        println!("============================================================\n");
+
+        assert!(has_what, "Error should state what went wrong");
+        assert!(has_where, "Error should identify the ID");
+        assert!(has_why, "Error should show existing status");
+        assert!(has_how, "Error should suggest how to fix");
+    }
 }
