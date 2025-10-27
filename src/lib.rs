@@ -268,6 +268,13 @@ impl McpServer for GtdServerHandler {
         notes: Option<String>,
         /// Optional: YYYY-MM-DD, required for calendar status
         start_date: Option<String>,
+        /// Optional: Recurrence pattern - daily | weekly | monthly | yearly
+        recurrence: Option<String>,
+        /// Optional: Recurrence configuration
+        /// - weekly: weekday names (e.g., "Monday,Wednesday,Friday")
+        /// - monthly: day numbers (e.g., "1,15,25")
+        /// - yearly: month-day pairs (e.g., "1-1,12-25" for Jan 1 and Dec 25)
+        recurrence_config: Option<String>,
     ) -> McpResult<String> {
         let mut data = self.data.lock().unwrap();
 
@@ -340,6 +347,57 @@ impl McpServer for GtdServerHandler {
             bail_public!(_, "{}", error_msg);
         }
 
+        // Parse recurrence pattern if provided
+        let recurrence_pattern = if let Some(ref recurrence_str) = recurrence {
+            match recurrence_str.as_str() {
+                "daily" => Some(gtd::RecurrencePattern::daily),
+                "weekly" => Some(gtd::RecurrencePattern::weekly),
+                "monthly" => Some(gtd::RecurrencePattern::monthly),
+                "yearly" => Some(gtd::RecurrencePattern::yearly),
+                _ => {
+                    drop(data);
+                    bail_public!(
+                        _,
+                        "Invalid recurrence pattern '{}'. Valid patterns: daily, weekly, monthly, yearly",
+                        recurrence_str
+                    );
+                }
+            }
+        } else {
+            None
+        };
+
+        // Validate recurrence configuration if recurrence pattern is provided
+        if let Some(ref pattern) = recurrence_pattern
+            && recurrence_config.is_none()
+        {
+            // Only weekly, monthly, and yearly require config
+            match pattern {
+                gtd::RecurrencePattern::weekly => {
+                    drop(data);
+                    bail_public!(
+                        _,
+                        "Recurrence pattern 'weekly' requires recurrence_config with weekday names (e.g., \"Monday,Wednesday,Friday\")"
+                    );
+                }
+                gtd::RecurrencePattern::monthly => {
+                    drop(data);
+                    bail_public!(
+                        _,
+                        "Recurrence pattern 'monthly' requires recurrence_config with day numbers (e.g., \"1,15,25\")"
+                    );
+                }
+                gtd::RecurrencePattern::yearly => {
+                    drop(data);
+                    bail_public!(
+                        _,
+                        "Recurrence pattern 'yearly' requires recurrence_config with month-day pairs (e.g., \"1-1,12-25\")"
+                    );
+                }
+                gtd::RecurrencePattern::daily => {} // Daily doesn't need config
+            }
+        }
+
         let today = gtd::local_date_today();
         let nota = gtd::Nota {
             id: id.clone(),
@@ -351,6 +409,8 @@ impl McpServer for GtdServerHandler {
             start_date: parsed_start_date,
             created_at: today,
             updated_at: today,
+            recurrence_pattern,
+            recurrence_config,
         };
 
         data.add(nota);
@@ -722,13 +782,38 @@ impl McpServer for GtdServerHandler {
 
             nota.updated_at = gtd::local_date_today();
 
+            // Handle recurrence if moving to done status
+            let mut next_occurrence_info: Option<String> = None;
+            if nota_status == NotaStatus::done && nota.is_recurring() {
+                // Calculate next occurrence date
+                let from_date = nota.start_date.unwrap_or_else(gtd::local_date_today);
+                if let Some(next_date) = nota.calculate_next_occurrence(from_date) {
+                    // Create a new task for the next occurrence
+                    let mut next_nota = nota.clone();
+                    next_nota.id = format!("{}-{}", normalized_id, next_date.format("%Y%m%d"));
+                    next_nota.start_date = Some(next_date);
+                    next_nota.status = old_status.clone(); // Use the original status, not done
+                    next_nota.created_at = gtd::local_date_today();
+                    next_nota.updated_at = gtd::local_date_today();
+
+                    // Check if next occurrence ID already exists
+                    if !data.nota_map.contains_key(&next_nota.id) {
+                        data.add(next_nota.clone());
+                        next_occurrence_info = Some(format!(
+                            "Next occurrence created: {} on {}",
+                            next_nota.id, next_date
+                        ));
+                    }
+                }
+            }
+
             // Update the nota
             if data.update(&normalized_id, nota).is_none() {
                 failures.push(format!("{}: failed to update", normalized_id));
                 continue;
             }
 
-            successes.push((normalized_id, old_status));
+            successes.push((normalized_id, old_status, next_occurrence_info));
         }
 
         drop(data);
@@ -763,7 +848,7 @@ impl McpServer for GtdServerHandler {
                 successes.len(),
                 if successes.len() == 1 { "" } else { "s" }
             ));
-            for (id, old_status) in &successes {
+            for (id, old_status, next_info) in &successes {
                 if is_trash {
                     response.push_str(&format!("- {} (moved to trash)\n", id));
                 } else {
@@ -773,6 +858,9 @@ impl McpServer for GtdServerHandler {
                         format!("{:?}", old_status).to_lowercase(),
                         new_status
                     ));
+                    if let Some(info) = next_info {
+                        response.push_str(&format!("  {}\n", info));
+                    }
                 }
             }
         }
@@ -894,6 +982,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await;
         assert!(result.is_ok());
@@ -953,6 +1043,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await;
         assert!(result.is_ok());
@@ -988,6 +1080,8 @@ mod tests {
                     format!("task-{}", 5 - 1 + i),
                     format!("Test Task {}", i),
                     "inbox".to_string(),
+                    None,
+                    None,
                     None,
                     None,
                     None,
@@ -1032,6 +1126,8 @@ mod tests {
                     None,
                     None,
                     None,
+                    None,
+                    None,
                 )
                 .await;
             assert!(result.is_ok());
@@ -1067,6 +1163,8 @@ mod tests {
                 "valid-task".to_string(),
                 "Valid Task".to_string(),
                 "inbox".to_string(),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -1152,6 +1250,8 @@ mod tests {
                     None,
                     None,
                     None,
+                    None,
+                    None,
                 )
                 .await;
             assert!(result.is_ok());
@@ -1191,6 +1291,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await;
         assert!(result1.is_ok());
@@ -1201,6 +1303,8 @@ mod tests {
                 "task-norm-2".to_string(),
                 "Task 2".to_string(),
                 "inbox".to_string(),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -1235,6 +1339,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await;
         assert!(result1.is_ok());
@@ -1248,6 +1354,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await;
         assert!(result2.is_ok());
@@ -1257,6 +1365,8 @@ mod tests {
                 "task-waiting".to_string(),
                 "Waiting Task".to_string(),
                 "waiting_for".to_string(),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -1305,6 +1415,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await;
         assert!(result.is_ok());
@@ -1343,6 +1455,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await;
         assert!(result.is_ok());
@@ -1373,6 +1487,8 @@ mod tests {
                 "task-8".to_string(),
                 "Original Title".to_string(),
                 "inbox".to_string(),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -1414,6 +1530,8 @@ mod tests {
                 "task-9".to_string(),
                 "Test Task".to_string(),
                 "inbox".to_string(),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -1462,6 +1580,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await;
         assert!(project_result.is_ok());
@@ -1490,6 +1610,8 @@ mod tests {
                 "task-10".to_string(),
                 "Test Task".to_string(),
                 "inbox".to_string(),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -1534,6 +1656,8 @@ mod tests {
                 None,
                 Some("Some notes".to_string()),
                 Some("2024-12-25".to_string()),
+                None,
+                None,
             )
             .await;
         assert!(result.is_ok());
@@ -1582,6 +1706,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await;
         assert!(result.is_ok());
@@ -1616,6 +1742,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await;
         assert!(result.is_ok());
@@ -1646,6 +1774,8 @@ mod tests {
                 "task-13".to_string(),
                 "Test Task".to_string(),
                 "inbox".to_string(),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -1703,6 +1833,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await;
         assert!(result.is_ok());
@@ -1751,6 +1883,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await;
         assert!(result.is_ok());
@@ -1786,6 +1920,8 @@ mod tests {
                 "test-project-1".to_string(),
                 "Test Project".to_string(),
                 "project".to_string(),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -1849,6 +1985,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await;
         assert!(result.is_ok());
@@ -1902,6 +2040,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await;
         assert!(result.is_ok());
@@ -1951,6 +2091,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await;
         assert!(result.is_ok());
@@ -1962,6 +2104,8 @@ mod tests {
                 "Test Task".to_string(),
                 "inbox".to_string(),
                 Some("test-project-1".to_string()),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -1998,6 +2142,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await;
         assert!(result.is_ok());
@@ -2009,6 +2155,8 @@ mod tests {
                 "Test Task".to_string(),
                 "inbox".to_string(),
                 Some("test-project-1".to_string()),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -2059,6 +2207,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await;
         assert!(project_result.is_ok());
@@ -2088,6 +2238,8 @@ mod tests {
                 "task-15".to_string(),
                 "Original Task".to_string(),
                 "inbox".to_string(),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -2147,6 +2299,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await;
         assert!(result.is_ok());
@@ -2196,6 +2350,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await;
         assert!(result.is_ok());
@@ -2222,6 +2378,8 @@ mod tests {
                 "task-18".to_string(),
                 "Test Task".to_string(),
                 "inbox".to_string(),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -2256,6 +2414,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await;
         assert!(result.is_ok());
@@ -2282,6 +2442,8 @@ mod tests {
                 "task-20".to_string(),
                 "Test Task".to_string(),
                 "inbox".to_string(),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -2316,6 +2478,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await;
         assert!(result.is_ok());
@@ -2342,6 +2506,8 @@ mod tests {
                 "task-22".to_string(),
                 "Test Task".to_string(),
                 "inbox".to_string(),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -2377,6 +2543,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await;
         assert!(result.is_ok());
@@ -2393,6 +2561,8 @@ mod tests {
                 "task-24".to_string(),
                 "Indirect Trash Test".to_string(),
                 "inbox".to_string(),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -2455,6 +2625,8 @@ mod tests {
                     None,
                     None,
                     None,
+                    None,
+                    None,
                 )
                 .await;
             assert!(result.is_ok());
@@ -2498,6 +2670,8 @@ mod tests {
                     format!("task-{}", 26 - 1 + i),
                     format!("Test Task {}", i),
                     "inbox".to_string(),
+                    None,
+                    None,
                     None,
                     None,
                     None,
@@ -2571,6 +2745,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await;
         assert!(result.is_ok());
@@ -2582,6 +2758,8 @@ mod tests {
                 "task-28".to_string(),
                 "Next Action Task".to_string(),
                 "inbox".to_string(),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -2605,6 +2783,8 @@ mod tests {
                 "task-29".to_string(),
                 "Done Task".to_string(),
                 "inbox".to_string(),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -2660,6 +2840,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await;
         assert!(result.is_ok());
@@ -2700,6 +2882,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await;
         assert!(result.is_ok());
@@ -2726,6 +2910,8 @@ mod tests {
                 None,
                 None,
                 Some("2024-11-15".to_string()),
+                None,
+                None,
             )
             .await;
         assert!(result.is_ok());
@@ -2761,6 +2947,8 @@ mod tests {
                 None,
                 None,
                 Some("2024-11-15".to_string()),
+                None,
+                None,
             )
             .await;
         assert!(result.is_ok());
@@ -2798,6 +2986,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await;
         assert!(result.is_ok());
@@ -2823,6 +3013,8 @@ mod tests {
                 "task-33".to_string(),
                 "Test Task".to_string(),
                 "inbox".to_string(),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -2893,6 +3085,8 @@ mod tests {
                 None,
                 Some("Work environment".to_string()),
                 None,
+                None,
+                None,
             )
             .await;
         assert!(result.is_ok());
@@ -2918,6 +3112,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await;
         assert!(result.is_ok());
@@ -2928,6 +3124,8 @@ mod tests {
                 "Office".to_string(),
                 "Office".to_string(),
                 "context".to_string(),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -2959,6 +3157,8 @@ mod tests {
                 None,
                 Some("Work environment".to_string()),
                 None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -2967,6 +3167,8 @@ mod tests {
                 "Home".to_string(),
                 "Home".to_string(),
                 "context".to_string(),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -2995,6 +3197,8 @@ mod tests {
                 None,
                 None,
                 Some("Old description".to_string()),
+                None,
+                None,
                 None,
             )
             .await
@@ -3030,6 +3234,8 @@ mod tests {
                 None,
                 None,
                 Some("Old description".to_string()),
+                None,
+                None,
                 None,
             )
             .await
@@ -3084,6 +3290,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -3123,6 +3331,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -3135,6 +3345,8 @@ mod tests {
                 "inbox".to_string(),
                 None,
                 Some("Office".to_string()),
+                None,
+                None,
                 None,
                 None,
             )
@@ -3167,6 +3379,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -3179,6 +3393,8 @@ mod tests {
                 "project".to_string(),
                 None,
                 Some("Office".to_string()),
+                None,
+                None,
                 None,
                 None,
             )
@@ -3211,6 +3427,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -3225,6 +3443,8 @@ mod tests {
                 Some("Office".to_string()),
                 None,
                 None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -3237,6 +3457,8 @@ mod tests {
                 "project".to_string(),
                 None,
                 Some("Office".to_string()),
+                None,
+                None,
                 None,
                 None,
             )
@@ -3269,6 +3491,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -3281,6 +3505,8 @@ mod tests {
                 "inbox".to_string(),
                 None,
                 Some("Office".to_string()),
+                None,
+                None,
                 None,
                 None,
             )
@@ -3322,6 +3548,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -3334,6 +3562,8 @@ mod tests {
                 "project".to_string(),
                 None,
                 Some("Office".to_string()),
+                None,
+                None,
                 None,
                 None,
             )
@@ -3380,6 +3610,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -3394,6 +3626,8 @@ mod tests {
                 Some("Office".to_string()),
                 None,
                 None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -3405,6 +3639,8 @@ mod tests {
                 "inbox".to_string(),
                 None,
                 Some("Office".to_string()),
+                None,
+                None,
                 None,
                 None,
             )
@@ -3436,6 +3672,8 @@ mod tests {
                 None,
                 Some("Work environment".to_string()),
                 None,
+                None,
+                None,
             )
             .await;
         assert!(result.is_ok());
@@ -3448,6 +3686,8 @@ mod tests {
                 "project".to_string(),
                 None,
                 Some("Office".to_string()),
+                None,
+                None,
                 None,
                 None,
             )
@@ -3476,6 +3716,8 @@ mod tests {
                 Some("NonExistent".to_string()),
                 None,
                 None,
+                None,
+                None,
             )
             .await;
         assert!(result.is_err());
@@ -3495,6 +3737,8 @@ mod tests {
                 None,
                 Some("Work environment".to_string()),
                 None,
+                None,
+                None,
             )
             .await;
 
@@ -3504,6 +3748,8 @@ mod tests {
                 "test-project-1".to_string(),
                 "Test Project".to_string(),
                 "project".to_string(),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -3547,6 +3793,8 @@ mod tests {
                 None,
                 Some("Work environment".to_string()),
                 None,
+                None,
+                None,
             )
             .await;
 
@@ -3558,6 +3806,8 @@ mod tests {
                 "project".to_string(),
                 None,
                 Some("Office".to_string()),
+                None,
+                None,
                 None,
                 None,
             )
@@ -3598,6 +3848,8 @@ mod tests {
                 None,
                 Some("Project with custom ID".to_string()),
                 None,
+                None,
+                None,
             )
             .await;
         assert!(result.is_ok());
@@ -3624,6 +3876,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await;
         assert!(result.is_ok());
@@ -3634,6 +3888,8 @@ mod tests {
                 "duplicate-id".to_string(),
                 "Second Project".to_string(),
                 "inbox".to_string(),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -3675,6 +3931,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await;
         assert!(result.is_err());
@@ -3712,6 +3970,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -3721,6 +3981,8 @@ mod tests {
                 "project2".to_string(),
                 "Second Project".to_string(),
                 "project".to_string(),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -3736,6 +3998,8 @@ mod tests {
                 "Task with invalid project".to_string(),
                 "inbox".to_string(),
                 Some("non-existent-project".to_string()),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -3781,6 +4045,8 @@ mod tests {
                 Some("NonExistentContext".to_string()),
                 None,
                 None,
+                None,
+                None,
             )
             .await;
         assert!(result.is_err());
@@ -3818,6 +4084,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -3827,6 +4095,8 @@ mod tests {
                 "Home".to_string(),
                 "Home Context".to_string(),
                 "context".to_string(),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -3843,6 +4113,8 @@ mod tests {
                 "inbox".to_string(),
                 None,
                 Some("NonExistentContext".to_string()),
+                None,
+                None,
                 None,
                 None,
             )
@@ -3986,6 +4258,8 @@ mod tests {
                 None,
                 None,
                 Some("2025-12-31".to_string()),
+                None,
+                None,
             )
             .await;
         assert!(result.is_ok());
@@ -4014,6 +4288,8 @@ mod tests {
                 None,
                 None,
                 Some("2024-06-15".to_string()),
+                None,
+                None,
             )
             .await;
         assert!(result.is_ok());
@@ -4042,6 +4318,8 @@ mod tests {
                 None,
                 Some("Important notes here".to_string()),
                 None,
+                None,
+                None,
             )
             .await;
         assert!(result.is_ok());
@@ -4052,6 +4330,8 @@ mod tests {
                 "task-35".to_string(),
                 "Task without notes".to_string(),
                 "inbox".to_string(),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -4093,6 +4373,8 @@ mod tests {
                 None,
                 Some("Important notes here".to_string()),
                 None,
+                None,
+                None,
             )
             .await;
         assert!(result.is_ok());
@@ -4122,6 +4404,8 @@ mod tests {
                 None,
                 Some("Line 1\nLine 2\nLine 3".to_string()),
                 None,
+                None,
+                None,
             )
             .await;
         assert!(result.is_ok());
@@ -4147,6 +4431,8 @@ mod tests {
                 "task-timestamps".to_string(),
                 "Task with timestamps".to_string(),
                 "inbox".to_string(),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -4193,6 +4479,8 @@ mod tests {
                 "task-completion".to_string(),
                 "Task to complete".to_string(),
                 "inbox".to_string(),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -4249,6 +4537,8 @@ mod tests {
                     None,
                     None,
                     None,
+                    None,
+                    None,
                 )
                 .await;
             assert!(result.is_ok());
@@ -4300,6 +4590,8 @@ mod tests {
                     None,
                     None,
                     None,
+                    None,
+                    None,
                 )
                 .await;
             assert!(result.is_ok());
@@ -4343,6 +4635,8 @@ mod tests {
                     format!("task-{}", 38 - 1 + i),
                     format!("Test Task {}", i),
                     "inbox".to_string(),
+                    None,
+                    None,
                     None,
                     None,
                     None,
@@ -4394,6 +4688,8 @@ mod tests {
                     None,
                     None,
                     None,
+                    None,
+                    None,
                 )
                 .await;
             assert!(result.is_ok());
@@ -4437,6 +4733,8 @@ mod tests {
                     format!("task-{}", 40 - 1 + i),
                     format!("Test Task {}", i),
                     "inbox".to_string(),
+                    None,
+                    None,
                     None,
                     None,
                     None,
@@ -4488,6 +4786,8 @@ mod tests {
                     None,
                     None,
                     None,
+                    None,
+                    None,
                 )
                 .await;
             assert!(result.is_ok());
@@ -4535,6 +4835,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await;
         assert!(result.is_ok());
@@ -4567,6 +4869,8 @@ mod tests {
                 "task-43".to_string(),
                 "Test Task".to_string(),
                 "inbox".to_string(),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -4661,6 +4965,8 @@ mod tests {
                     None,
                     None,
                     None,
+                    None,
+                    None,
                 )
                 .await;
             assert!(result.is_ok());
@@ -4715,6 +5021,8 @@ mod tests {
                     None,
                     None,
                     Some("2025-02-01".to_string()),
+                    None,
+                    None,
                 )
                 .await;
             assert!(result.is_ok());
@@ -4764,6 +5072,8 @@ mod tests {
                 None,
                 None,
                 Some("2025-03-01".to_string()),
+                None,
+                None,
             )
             .await;
         assert!(result.is_ok());
@@ -4775,6 +5085,8 @@ mod tests {
                 "task-46".to_string(),
                 "Task without date".to_string(),
                 "inbox".to_string(),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -4819,6 +5131,8 @@ mod tests {
                 None,
                 None,
                 Some("2024-01-01".to_string()),
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -4833,6 +5147,8 @@ mod tests {
                 None,
                 None,
                 Some("2024-06-15".to_string()),
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -4847,6 +5163,8 @@ mod tests {
                 None,
                 None,
                 Some("2025-12-31".to_string()),
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -4883,6 +5201,8 @@ mod tests {
                 None,
                 None,
                 Some("2025-12-31".to_string()),
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -4896,6 +5216,8 @@ mod tests {
                 None,
                 None,
                 Some("2025-12-31".to_string()),
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -4910,6 +5232,8 @@ mod tests {
                 None,
                 None,
                 Some("2025-12-31".to_string()),
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -4942,6 +5266,8 @@ mod tests {
                 "task-no-date".to_string(),
                 "Task without date".to_string(),
                 "inbox".to_string(),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -5007,6 +5333,8 @@ mod tests {
                 None,
                 Some("These are detailed notes".to_string()),
                 None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -5040,6 +5368,8 @@ mod tests {
                 None,
                 None,
                 Some("2024-01-01".to_string()),
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -5053,6 +5383,8 @@ mod tests {
                 None,
                 None,
                 Some("2025-12-31".to_string()),
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -5062,6 +5394,8 @@ mod tests {
                 "inbox-task".to_string(),
                 "Inbox task".to_string(),
                 "inbox".to_string(),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -5101,6 +5435,8 @@ mod tests {
                 None,
                 Some("Important calendar notes".to_string()),
                 Some("2024-01-01".to_string()),
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -5114,6 +5450,8 @@ mod tests {
                 None,
                 Some("Future notes".to_string()),
                 Some("2025-12-31".to_string()),
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -5170,6 +5508,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await;
 
@@ -5188,6 +5528,8 @@ mod tests {
                 "test-task-1".to_string(), // Same ID - should trigger duplicate error
                 "Second task".to_string(),
                 "inbox".to_string(),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -5255,6 +5597,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await;
         assert!(result_task.is_ok());
@@ -5265,6 +5609,8 @@ mod tests {
                 "duplicate-test".to_string(), // Same ID as task
                 "Project".to_string(),
                 "project".to_string(),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -5315,6 +5661,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -5325,6 +5673,8 @@ mod tests {
                 "format-test".to_string(),
                 "Duplicate".to_string(),
                 "inbox".to_string(),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -5370,6 +5720,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -5379,6 +5731,8 @@ mod tests {
                 "dup1".to_string(),
                 "Task 2".to_string(),
                 "inbox".to_string(),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -5394,6 +5748,8 @@ mod tests {
                 "dup2".to_string(),
                 "Task".to_string(),
                 "inbox".to_string(),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -5416,6 +5772,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await;
         assert!(result.is_err());
@@ -5434,6 +5792,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -5443,6 +5803,8 @@ mod tests {
                 "proj1".to_string(),
                 "Task".to_string(),
                 "inbox".to_string(),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -5465,6 +5827,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -5474,6 +5838,8 @@ mod tests {
                 "Home".to_string(),
                 "Task".to_string(),
                 "inbox".to_string(),
+                None,
+                None,
                 None,
                 None,
                 None,
@@ -5509,6 +5875,8 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -5519,6 +5887,8 @@ mod tests {
                 "task-123".to_string(),
                 "Duplicate".to_string(),
                 "inbox".to_string(),
+                None,
+                None,
                 None,
                 None,
                 None,

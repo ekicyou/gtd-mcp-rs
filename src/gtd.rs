@@ -11,6 +11,23 @@ pub fn local_date_today() -> NaiveDate {
     Local::now().date_naive()
 }
 
+/// Recurrence pattern for recurring tasks
+///
+/// Defines how a task repeats after completion.
+/// Uses snake_case naming to match TOML serialization format.
+#[allow(non_camel_case_types)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RecurrencePattern {
+    /// Repeats every day
+    daily,
+    /// Repeats on specific weekdays (e.g., Monday, Wednesday, Friday)
+    weekly,
+    /// Repeats on specific days of the month (e.g., 1st, 15th, 25th)
+    monthly,
+    /// Repeats on specific month-days each year (e.g., Jan 1, Dec 25)
+    yearly,
+}
+
 /// Task status in the GTD workflow
 ///
 /// Represents the different states a task can be in according to GTD methodology.
@@ -77,6 +94,7 @@ impl FromStr for NotaStatus {
 /// This design is inspired by TiddlyWiki's tiddler concept.
 #[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Nota {
     /// Unique identifier (e.g., "meeting-prep", "website-redesign", "Office")
     pub id: String,
@@ -96,6 +114,34 @@ pub struct Nota {
     pub created_at: NaiveDate,
     /// Date when the nota was last updated
     pub updated_at: NaiveDate,
+    /// Optional recurrence pattern (daily, weekly, monthly, yearly)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recurrence_pattern: Option<RecurrencePattern>,
+    /// Optional recurrence configuration (weekdays for weekly, dates for monthly/yearly)
+    /// Format: comma-separated values
+    /// - weekly: weekday names (e.g., "Monday,Wednesday,Friday")
+    /// - monthly: day numbers (e.g., "1,15,25")
+    /// - yearly: month-day pairs (e.g., "1-1,12-25" for Jan 1 and Dec 25)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recurrence_config: Option<String>,
+}
+
+impl Default for Nota {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            title: String::new(),
+            status: NotaStatus::inbox,
+            project: None,
+            context: None,
+            notes: None,
+            start_date: None,
+            created_at: local_date_today(),
+            updated_at: local_date_today(),
+            recurrence_pattern: None,
+            recurrence_config: None,
+        }
+    }
 }
 
 #[allow(dead_code)]
@@ -112,6 +158,7 @@ impl Nota {
             start_date: task.start_date,
             created_at: task.created_at,
             updated_at: task.updated_at,
+            ..Default::default()
         }
     }
 
@@ -127,6 +174,7 @@ impl Nota {
             start_date: project.start_date,
             created_at: project.created_at,
             updated_at: project.updated_at,
+            ..Default::default()
         }
     }
 
@@ -142,6 +190,7 @@ impl Nota {
             start_date: context.start_date,
             created_at: context.created_at.unwrap_or_else(local_date_today),
             updated_at: context.updated_at.unwrap_or_else(local_date_today),
+            ..Default::default()
         }
     }
 
@@ -213,6 +262,119 @@ impl Nota {
     /// Check if this nota is a context
     pub fn is_context(&self) -> bool {
         self.status == NotaStatus::context
+    }
+
+    /// Check if this nota has recurrence configured
+    pub fn is_recurring(&self) -> bool {
+        self.recurrence_pattern.is_some()
+    }
+
+    /// Calculate the next occurrence date for a recurring task
+    ///
+    /// # Arguments
+    /// * `from_date` - The date to calculate from (typically the current start_date or today)
+    ///
+    /// # Returns
+    /// The next occurrence date if this is a recurring task, None otherwise
+    pub fn calculate_next_occurrence(&self, from_date: NaiveDate) -> Option<NaiveDate> {
+        use chrono::{Datelike, Duration, Weekday};
+
+        let pattern = self.recurrence_pattern.as_ref()?;
+        let config = self.recurrence_config.as_ref();
+
+        match pattern {
+            RecurrencePattern::daily => Some(from_date + Duration::days(1)),
+
+            RecurrencePattern::weekly => {
+                let weekdays = config?;
+                let target_weekdays: Vec<Weekday> = weekdays
+                    .split(',')
+                    .filter_map(|day| match day.trim() {
+                        "Monday" => Some(Weekday::Mon),
+                        "Tuesday" => Some(Weekday::Tue),
+                        "Wednesday" => Some(Weekday::Wed),
+                        "Thursday" => Some(Weekday::Thu),
+                        "Friday" => Some(Weekday::Fri),
+                        "Saturday" => Some(Weekday::Sat),
+                        "Sunday" => Some(Weekday::Sun),
+                        _ => None,
+                    })
+                    .collect();
+
+                if target_weekdays.is_empty() {
+                    return None;
+                }
+
+                // Find the next occurrence of any of the target weekdays
+                let mut next_date = from_date + Duration::days(1);
+
+                for _ in 0..7 {
+                    if target_weekdays.contains(&next_date.weekday()) {
+                        return Some(next_date);
+                    }
+                    next_date += Duration::days(1);
+                }
+
+                None
+            }
+
+            RecurrencePattern::monthly => {
+                let days = config?;
+                let target_days: Vec<u32> = days
+                    .split(',')
+                    .filter_map(|day| day.trim().parse::<u32>().ok())
+                    .collect();
+
+                if target_days.is_empty() {
+                    return None;
+                }
+
+                // Find the next occurrence of any of the target days
+                let mut next_date = from_date + Duration::days(1);
+                for _ in 0..366 {
+                    // Check up to 1 year ahead
+                    if target_days.contains(&next_date.day()) {
+                        return Some(next_date);
+                    }
+                    next_date += Duration::days(1);
+                }
+
+                None
+            }
+
+            RecurrencePattern::yearly => {
+                let dates = config?;
+                let target_dates: Vec<(u32, u32)> = dates
+                    .split(',')
+                    .filter_map(|date| {
+                        let parts: Vec<&str> = date.trim().split('-').collect();
+                        if parts.len() == 2 {
+                            let month = parts[0].parse::<u32>().ok()?;
+                            let day = parts[1].parse::<u32>().ok()?;
+                            Some((month, day))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect();
+
+                if target_dates.is_empty() {
+                    return None;
+                }
+
+                // Find the next occurrence of any of the target dates
+                let mut next_date = from_date + Duration::days(1);
+                for _ in 0..366 {
+                    // Check up to 1 year ahead
+                    if target_dates.contains(&(next_date.month(), next_date.day())) {
+                        return Some(next_date);
+                    }
+                    next_date += Duration::days(1);
+                }
+
+                None
+            }
+        }
     }
 }
 
@@ -977,6 +1139,7 @@ mod tests {
             start_date: None,
             created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
             updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            ..Default::default()
         };
 
         data.add(nota.clone());
@@ -1002,6 +1165,7 @@ mod tests {
                 start_date: None,
                 created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
                 updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+                ..Default::default()
             };
             data.add(nota);
         }
@@ -1026,6 +1190,7 @@ mod tests {
             start_date: None,
             created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
             updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+            ..Default::default()
         };
 
         data.add(nota);
@@ -3420,6 +3585,7 @@ updated_at = "2024-01-01"
             start_date: None,
             created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
             updated_at: NaiveDate::from_ymd_opt(2024, 1, 2).unwrap(),
+            ..Default::default()
         };
 
         let task = nota.to_task().unwrap();
@@ -3441,6 +3607,7 @@ updated_at = "2024-01-01"
             start_date: None,
             created_at: local_date_today(),
             updated_at: local_date_today(),
+            ..Default::default()
         };
 
         assert!(nota.to_task().is_none());
@@ -3458,6 +3625,7 @@ updated_at = "2024-01-01"
             start_date: None,
             created_at: local_date_today(),
             updated_at: local_date_today(),
+            ..Default::default()
         };
 
         let project = nota.to_project().unwrap();
@@ -3479,6 +3647,7 @@ updated_at = "2024-01-01"
             start_date: None,
             created_at: local_date_today(),
             updated_at: local_date_today(),
+            ..Default::default()
         };
 
         let context = nota.to_context().unwrap();
@@ -3502,6 +3671,7 @@ updated_at = "2024-01-01"
             start_date: None,
             created_at: local_date_today(),
             updated_at: local_date_today(),
+            ..Default::default()
         };
 
         data.add(nota.clone());
@@ -3527,6 +3697,7 @@ updated_at = "2024-01-01"
             start_date: None,
             created_at: local_date_today(),
             updated_at: local_date_today(),
+            ..Default::default()
         };
 
         data.add(nota.clone());
@@ -3551,6 +3722,7 @@ updated_at = "2024-01-01"
             start_date: None,
             created_at: local_date_today(),
             updated_at: local_date_today(),
+            ..Default::default()
         };
 
         data.add(nota.clone());
@@ -3575,6 +3747,7 @@ updated_at = "2024-01-01"
             start_date: None,
             created_at: local_date_today(),
             updated_at: local_date_today(),
+            ..Default::default()
         };
 
         data.add(nota.clone());
@@ -3601,6 +3774,7 @@ updated_at = "2024-01-01"
             start_date: None,
             created_at: local_date_today(),
             updated_at: local_date_today(),
+            ..Default::default()
         });
 
         // Add a project
@@ -3614,6 +3788,7 @@ updated_at = "2024-01-01"
             start_date: None,
             created_at: local_date_today(),
             updated_at: local_date_today(),
+            ..Default::default()
         });
 
         // Add a context
@@ -3627,6 +3802,7 @@ updated_at = "2024-01-01"
             start_date: None,
             created_at: local_date_today(),
             updated_at: local_date_today(),
+            ..Default::default()
         });
 
         let all_notas = data.list_all(None);
@@ -3658,6 +3834,7 @@ updated_at = "2024-01-01"
             start_date: None,
             created_at: local_date_today(),
             updated_at: local_date_today(),
+            ..Default::default()
         });
 
         // Add a context
@@ -3671,6 +3848,7 @@ updated_at = "2024-01-01"
             start_date: None,
             created_at: local_date_today(),
             updated_at: local_date_today(),
+            ..Default::default()
         });
 
         // Add a task that references both
@@ -3684,6 +3862,7 @@ updated_at = "2024-01-01"
             start_date: None,
             created_at: local_date_today(),
             updated_at: local_date_today(),
+            ..Default::default()
         });
 
         assert!(data.is_referenced("proj-1"));
@@ -3707,6 +3886,7 @@ updated_at = "2024-01-01"
             start_date: None,
             created_at: local_date_today(),
             updated_at: local_date_today(),
+            ..Default::default()
         });
 
         // Update it
@@ -3720,6 +3900,7 @@ updated_at = "2024-01-01"
             start_date: None,
             created_at: local_date_today(),
             updated_at: local_date_today(),
+            ..Default::default()
         };
 
         data.update("task-1", updated).unwrap();
@@ -3761,6 +3942,7 @@ updated_at = "2024-01-01"
             start_date: None,
             created_at: local_date_today(),
             updated_at: local_date_today(),
+            ..Default::default()
         });
 
         data.add(Nota {
@@ -3773,6 +3955,7 @@ updated_at = "2024-01-01"
             start_date: None,
             created_at: local_date_today(),
             updated_at: local_date_today(),
+            ..Default::default()
         });
 
         data.add(Nota {
@@ -3785,6 +3968,7 @@ updated_at = "2024-01-01"
             start_date: None,
             created_at: local_date_today(),
             updated_at: local_date_today(),
+            ..Default::default()
         });
 
         // Verify HashMap matches Vec
@@ -3826,6 +4010,7 @@ updated_at = "2024-01-01"
                 start_date: None,
                 created_at: local_date_today(),
                 updated_at: local_date_today(),
+                ..Default::default()
             });
         }
 
@@ -3861,6 +4046,7 @@ updated_at = "2024-01-01"
                 start_date: None,
                 created_at: local_date_today(),
                 updated_at: local_date_today(),
+                ..Default::default()
             });
         }
 
@@ -3897,6 +4083,7 @@ updated_at = "2024-01-01"
                 start_date: None,
                 created_at: local_date_today(),
                 updated_at: local_date_today(),
+                ..Default::default()
             });
         }
 
@@ -3936,6 +4123,7 @@ updated_at = "2024-01-01"
                 start_date: None,
                 created_at: local_date_today(),
                 updated_at: local_date_today(),
+                ..Default::default()
             });
         }
 
@@ -4008,6 +4196,7 @@ updated_at = "2024-01-01"
             start_date: None,
             created_at: local_date_today(),
             updated_at: local_date_today(),
+            ..Default::default()
         });
 
         data.add(Nota {
@@ -4020,6 +4209,7 @@ updated_at = "2024-01-01"
             start_date: None,
             created_at: local_date_today(),
             updated_at: local_date_today(),
+            ..Default::default()
         });
 
         // Serialize to TOML
@@ -4068,6 +4258,7 @@ updated_at = "2024-01-01"
                 start_date: None,
                 created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
                 updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
+                ..Default::default()
             };
             data.add(nota);
         }
@@ -4098,5 +4289,229 @@ updated_at = "2024-01-01"
             reference_pos < trash_pos,
             "reference should come before trash (trash should be last)"
         );
+    }
+
+    // Tests for recurrence functionality
+    #[test]
+    fn test_recurrence_daily() {
+        let nota = Nota {
+            id: "daily-task".to_string(),
+            title: "Daily Task".to_string(),
+            status: NotaStatus::calendar,
+            recurrence_pattern: Some(RecurrencePattern::daily),
+            recurrence_config: None,
+            start_date: Some(NaiveDate::from_ymd_opt(2025, 10, 31).unwrap()),
+            ..Default::default()
+        };
+
+        assert!(nota.is_recurring());
+        let next = nota
+            .calculate_next_occurrence(NaiveDate::from_ymd_opt(2025, 10, 31).unwrap())
+            .unwrap();
+        assert_eq!(next, NaiveDate::from_ymd_opt(2025, 11, 1).unwrap());
+    }
+
+    #[test]
+    fn test_recurrence_weekly_single_day() {
+        let nota = Nota {
+            id: "weekly-task".to_string(),
+            title: "Weekly Review".to_string(),
+            status: NotaStatus::calendar,
+            recurrence_pattern: Some(RecurrencePattern::weekly),
+            recurrence_config: Some("Friday".to_string()),
+            start_date: Some(NaiveDate::from_ymd_opt(2025, 10, 31).unwrap()), // Friday
+            ..Default::default()
+        };
+
+        let next = nota
+            .calculate_next_occurrence(NaiveDate::from_ymd_opt(2025, 10, 31).unwrap())
+            .unwrap();
+        assert_eq!(next, NaiveDate::from_ymd_opt(2025, 11, 7).unwrap()); // Next Friday
+    }
+
+    #[test]
+    fn test_recurrence_weekly_multiple_days() {
+        let nota = Nota {
+            id: "mwf-task".to_string(),
+            title: "Mon/Wed/Fri Task".to_string(),
+            status: NotaStatus::calendar,
+            recurrence_pattern: Some(RecurrencePattern::weekly),
+            recurrence_config: Some("Monday,Wednesday,Friday".to_string()),
+            start_date: Some(NaiveDate::from_ymd_opt(2025, 10, 31).unwrap()), // Friday
+            ..Default::default()
+        };
+
+        // Next after Friday should be Monday
+        let next = nota
+            .calculate_next_occurrence(NaiveDate::from_ymd_opt(2025, 10, 31).unwrap())
+            .unwrap();
+        assert_eq!(next, NaiveDate::from_ymd_opt(2025, 11, 3).unwrap()); // Monday
+
+        // Next after Monday should be Wednesday
+        let next = nota
+            .calculate_next_occurrence(NaiveDate::from_ymd_opt(2025, 11, 3).unwrap())
+            .unwrap();
+        assert_eq!(next, NaiveDate::from_ymd_opt(2025, 11, 5).unwrap()); // Wednesday
+    }
+
+    #[test]
+    fn test_recurrence_monthly_single_day() {
+        let nota = Nota {
+            id: "monthly-task".to_string(),
+            title: "Monthly Report".to_string(),
+            status: NotaStatus::calendar,
+            recurrence_pattern: Some(RecurrencePattern::monthly),
+            recurrence_config: Some("15".to_string()),
+            start_date: Some(NaiveDate::from_ymd_opt(2025, 10, 15).unwrap()),
+            ..Default::default()
+        };
+
+        let next = nota
+            .calculate_next_occurrence(NaiveDate::from_ymd_opt(2025, 10, 15).unwrap())
+            .unwrap();
+        assert_eq!(next, NaiveDate::from_ymd_opt(2025, 11, 15).unwrap());
+    }
+
+    #[test]
+    fn test_recurrence_monthly_multiple_days() {
+        let nota = Nota {
+            id: "multi-monthly-task".to_string(),
+            title: "Multiple Monthly Dates".to_string(),
+            status: NotaStatus::calendar,
+            recurrence_pattern: Some(RecurrencePattern::monthly),
+            recurrence_config: Some("5,15,25".to_string()),
+            start_date: Some(NaiveDate::from_ymd_opt(2025, 10, 5).unwrap()),
+            ..Default::default()
+        };
+
+        // Next after 5th should be 15th
+        let next = nota
+            .calculate_next_occurrence(NaiveDate::from_ymd_opt(2025, 10, 5).unwrap())
+            .unwrap();
+        assert_eq!(next, NaiveDate::from_ymd_opt(2025, 10, 15).unwrap());
+
+        // Next after 15th should be 25th
+        let next = nota
+            .calculate_next_occurrence(NaiveDate::from_ymd_opt(2025, 10, 15).unwrap())
+            .unwrap();
+        assert_eq!(next, NaiveDate::from_ymd_opt(2025, 10, 25).unwrap());
+
+        // Next after 25th should be next month's 5th
+        let next = nota
+            .calculate_next_occurrence(NaiveDate::from_ymd_opt(2025, 10, 25).unwrap())
+            .unwrap();
+        assert_eq!(next, NaiveDate::from_ymd_opt(2025, 11, 5).unwrap());
+    }
+
+    #[test]
+    fn test_recurrence_yearly_single_date() {
+        let nota = Nota {
+            id: "yearly-task".to_string(),
+            title: "Annual Review".to_string(),
+            status: NotaStatus::calendar,
+            recurrence_pattern: Some(RecurrencePattern::yearly),
+            recurrence_config: Some("12-25".to_string()), // Dec 25
+            start_date: Some(NaiveDate::from_ymd_opt(2024, 12, 25).unwrap()),
+            ..Default::default()
+        };
+
+        let next = nota
+            .calculate_next_occurrence(NaiveDate::from_ymd_opt(2024, 12, 25).unwrap())
+            .unwrap();
+        assert_eq!(next, NaiveDate::from_ymd_opt(2025, 12, 25).unwrap());
+    }
+
+    #[test]
+    fn test_recurrence_yearly_multiple_dates() {
+        let nota = Nota {
+            id: "multi-yearly-task".to_string(),
+            title: "Multiple Yearly Dates".to_string(),
+            status: NotaStatus::calendar,
+            recurrence_pattern: Some(RecurrencePattern::yearly),
+            recurrence_config: Some("1-1,6-15,12-25".to_string()), // Jan 1, Jun 15, Dec 25
+            start_date: Some(NaiveDate::from_ymd_opt(2025, 1, 1).unwrap()),
+            ..Default::default()
+        };
+
+        // Next after Jan 1 should be Jun 15
+        let next = nota
+            .calculate_next_occurrence(NaiveDate::from_ymd_opt(2025, 1, 1).unwrap())
+            .unwrap();
+        assert_eq!(next, NaiveDate::from_ymd_opt(2025, 6, 15).unwrap());
+
+        // Next after Jun 15 should be Dec 25
+        let next = nota
+            .calculate_next_occurrence(NaiveDate::from_ymd_opt(2025, 6, 15).unwrap())
+            .unwrap();
+        assert_eq!(next, NaiveDate::from_ymd_opt(2025, 12, 25).unwrap());
+
+        // Next after Dec 25 should be next year's Jan 1
+        let next = nota
+            .calculate_next_occurrence(NaiveDate::from_ymd_opt(2025, 12, 25).unwrap())
+            .unwrap();
+        assert_eq!(next, NaiveDate::from_ymd_opt(2026, 1, 1).unwrap());
+    }
+
+    #[test]
+    fn test_non_recurring_nota() {
+        let nota = Nota {
+            id: "one-time-task".to_string(),
+            title: "One Time Task".to_string(),
+            status: NotaStatus::calendar,
+            recurrence_pattern: None,
+            recurrence_config: None,
+            start_date: Some(NaiveDate::from_ymd_opt(2025, 10, 31).unwrap()),
+            ..Default::default()
+        };
+
+        assert!(!nota.is_recurring());
+        assert!(
+            nota.calculate_next_occurrence(NaiveDate::from_ymd_opt(2025, 10, 31).unwrap())
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn test_recurrence_serialization() {
+        let nota = Nota {
+            id: "recurring-task".to_string(),
+            title: "Test Recurring".to_string(),
+            status: NotaStatus::calendar,
+            recurrence_pattern: Some(RecurrencePattern::weekly),
+            recurrence_config: Some("Monday,Friday".to_string()),
+            start_date: Some(NaiveDate::from_ymd_opt(2025, 10, 31).unwrap()),
+            ..Default::default()
+        };
+
+        // Serialize to TOML
+        let toml_str = toml::to_string(&nota).unwrap();
+
+        // Verify recurrence fields are in TOML
+        assert!(toml_str.contains("recurrence_pattern = \"weekly\""));
+        assert!(toml_str.contains("recurrence_config = \"Monday,Friday\""));
+
+        // Deserialize back
+        let deserialized: Nota = toml::from_str(&toml_str).unwrap();
+        assert_eq!(deserialized.id, nota.id);
+        assert_eq!(deserialized.recurrence_pattern, nota.recurrence_pattern);
+        assert_eq!(deserialized.recurrence_config, nota.recurrence_config);
+    }
+
+    #[test]
+    fn test_recurrence_backward_compatibility() {
+        // TOML without recurrence fields should deserialize successfully
+        let toml_str = r#"
+id = "old-task"
+title = "Old Task"
+status = "inbox"
+created_at = "2025-10-31"
+updated_at = "2025-10-31"
+"#;
+
+        let nota: Nota = toml::from_str(toml_str).unwrap();
+        assert_eq!(nota.id, "old-task");
+        assert!(nota.recurrence_pattern.is_none());
+        assert!(nota.recurrence_config.is_none());
+        assert!(!nota.is_recurring());
     }
 }
