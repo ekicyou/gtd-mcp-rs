@@ -368,9 +368,11 @@ impl McpServer for GtdServerHandler {
         };
 
         // Validate recurrence configuration if recurrence pattern is provided
-        if recurrence_pattern.is_some() && recurrence_config.is_none() {
+        if let Some(ref pattern) = recurrence_pattern
+            && recurrence_config.is_none()
+        {
             // Only weekly, monthly, and yearly require config
-            match recurrence_pattern.as_ref().unwrap() {
+            match pattern {
                 gtd::RecurrencePattern::weekly => {
                     drop(data);
                     bail_public!(
