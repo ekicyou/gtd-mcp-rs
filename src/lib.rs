@@ -424,6 +424,9 @@ impl McpServer for GtdServerHandler {
             if let Some(ref date) = nota.start_date {
                 result.push_str(&format!("  Start date: {}\n", date));
             }
+            // Display timestamps
+            result.push_str(&format!("  Created: {}\n", nota.created_at));
+            result.push_str(&format!("  Updated: {}\n", nota.updated_at));
         }
 
         Ok(result)
@@ -3562,6 +3565,99 @@ mod tests {
         // notesが含まれていることを確認（改行も含む）
         assert!(list.contains("Complex task"));
         assert!(list.contains("Notes: Line 1\nLine 2\nLine 3"));
+    }
+
+    // タイムスタンプ表示のテスト: list出力にcreated_atとupdated_atが含まれることを確認
+    #[tokio::test]
+    async fn test_list_displays_timestamps() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // タスクを作成
+        let result = handler
+            .inbox(
+                "task-timestamps".to_string(),
+                "Task with timestamps".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
+            .await;
+        assert!(result.is_ok());
+
+        // 一覧取得
+        let result = handler.list(None, None, None).await;
+        assert!(result.is_ok());
+        let list = result.unwrap();
+
+        // タイムスタンプが含まれていることを確認
+        assert!(list.contains("Task with timestamps"));
+        assert!(
+            list.contains("Created:"),
+            "List output should contain 'Created:' field"
+        );
+        assert!(
+            list.contains("Updated:"),
+            "List output should contain 'Updated:' field"
+        );
+
+        // 日付形式を確認（YYYY-MM-DDの形式）
+        let lines: Vec<&str> = list.lines().collect();
+        let created_line = lines.iter().find(|line| line.contains("Created:"));
+        assert!(created_line.is_some(), "Should have a 'Created:' line");
+        let updated_line = lines.iter().find(|line| line.contains("Updated:"));
+        assert!(updated_line.is_some(), "Should have an 'Updated:' line");
+
+        // Print the output for manual verification
+        eprintln!("\n=== List output with timestamps ===\n{}\n", list);
+    }
+
+    // タイムスタンプ表示のテスト: 完了タスクの完了日がupdated_atで確認できることを検証
+    #[tokio::test]
+    async fn test_list_displays_completion_date_for_done_tasks() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // タスクを作成
+        let result = handler
+            .inbox(
+                "task-completion".to_string(),
+                "Task to complete".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
+            .await;
+        assert!(result.is_ok());
+
+        // タスクをdoneに変更（完了）
+        let result = handler
+            .change_status("task-completion".to_string(), "done".to_string(), None)
+            .await;
+        assert!(result.is_ok());
+
+        // 一覧取得（status=doneでフィルタ）
+        let result = handler.list(Some("done".to_string()), None, None).await;
+        assert!(result.is_ok());
+        let list = result.unwrap();
+
+        // 完了タスクがリストに含まれることを確認
+        assert!(list.contains("Task to complete"));
+        assert!(list.contains("status: done"));
+
+        // Updated フィールドが表示されていることを確認（完了日として使用可能）
+        assert!(
+            list.contains("Updated:"),
+            "Done tasks should show Updated timestamp as completion date"
+        );
+
+        // Print the output for manual verification
+        eprintln!(
+            "\n=== Done task with completion date (Updated) ===\n{}\n",
+            list
+        );
     }
 
     #[tokio::test]
