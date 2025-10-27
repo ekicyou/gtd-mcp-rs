@@ -217,7 +217,7 @@ impl McpServer for GtdServerHandler {
 
         // Check for duplicate ID across all notas
         if data.nota_map.contains_key(&id) {
-            let existing_status = data.nota_map.get(&id).unwrap().clone();
+            let existing_status = data.nota_map[&id].clone();
             drop(data);
             bail!(
                 "Duplicate ID error: ID '{}' already exists (status: {:?}). Each item must have a unique ID. Please choose a different ID.",
@@ -596,7 +596,7 @@ impl McpServer for GtdServerHandler {
         {
             drop(data);
             bail!(
-                "Calendar status validation failed: Moving to calendar status requires start_date. The item '{}' has no existing start_date - please provide start_date parameter.",
+                "Calendar status validation failed: Moving to calendar status requires a start_date. The item '{}' has no existing start_date - please provide the start_date parameter.",
                 id
             );
         }
