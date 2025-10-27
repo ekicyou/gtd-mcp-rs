@@ -575,19 +575,25 @@ impl McpServer for GtdServerHandler {
     /// **Organize/Do**: Move items through workflow stages as you process them.
     /// **When**: inbox→next_action(ready) | →waiting_for(blocked) | →done(complete) | →trash(discard).
     /// **Tip**: Use change_status to trash before empty_trash to permanently delete.
+    /// **Batch**: Supports multiple IDs for efficient batch operations (e.g., weekly review).
     #[tool]
     async fn change_status(
         &self,
-        /// Item ID
-        id: String,
+        /// Item IDs to change - format: ["#1", "#2", "#3"] for batch operations, or single ID for single item
+        ids: Vec<String>,
         /// New status: inbox | next_action | waiting_for | later | calendar | someday | done | reference | project | context | trash
         new_status: String,
         /// Optional: Start date YYYY-MM-DD (required for calendar)
         start_date: Option<String>,
     ) -> McpResult<String> {
+        // Validate we have at least one ID
+        if ids.is_empty() {
+            bail_public!(_, "No IDs provided. Please specify at least one item ID.");
+        }
+
         let mut data = self.data.lock().unwrap();
 
-        // Parse new status
+        // Parse new status once
         let nota_status: NotaStatus = match new_status.parse() {
             Ok(s) => s,
             Err(_) => {
@@ -600,43 +606,11 @@ impl McpServer for GtdServerHandler {
             }
         };
 
-        // Find existing nota
-        let mut nota = match data.find_by_id(&id) {
-            Some(n) => n,
-            None => {
-                drop(data);
-                bail_public!(_, "Item '{}' not found", id);
-            }
-        };
-
-        // Validate calendar status has start_date (either provided or already exists)
-        if nota_status == NotaStatus::calendar && start_date.is_none() && nota.start_date.is_none()
-        {
-            drop(data);
-            bail_public!(
-                _,
-                "Calendar status validation failed: Moving to calendar status requires a start_date. The item '{}' has no existing start_date - please provide the start_date parameter.",
-                id
-            );
-        }
-
-        // Check if moving to trash and if nota is still referenced
         let is_trash = nota_status == NotaStatus::trash;
-        if is_trash && data.is_referenced(&id) {
-            drop(data);
-            bail_public!(
-                _,
-                "Cannot trash '{}': still referenced by other items. Remove references first.",
-                id
-            );
-        }
 
-        // Update status
-        nota.status = nota_status;
-
-        // Update start_date if provided for calendar
-        if let Some(date_str) = start_date {
-            nota.start_date = match NaiveDate::parse_from_str(&date_str, "%Y-%m-%d") {
+        // Parse start_date once if provided
+        let parsed_start_date = if let Some(date_str) = &start_date {
+            match NaiveDate::parse_from_str(date_str, "%Y-%m-%d") {
                 Ok(d) => Some(d),
                 Err(_) => {
                     drop(data);
@@ -646,29 +620,139 @@ impl McpServer for GtdServerHandler {
                         date_str
                     );
                 }
+            }
+        } else {
+            None
+        };
+
+        // Track successes and failures
+        let mut successes = Vec::new();
+        let mut failures = Vec::new();
+
+        // Normalize all IDs upfront for efficiency
+        let normalized_ids: Vec<String> =
+            ids.iter().map(|id| Self::normalize_task_id(id)).collect();
+
+        // Process each ID
+        for normalized_id in normalized_ids {
+            // Find existing nota
+            let mut nota = match data.find_by_id(&normalized_id) {
+                Some(n) => n,
+                None => {
+                    failures.push(format!("{}: not found", normalized_id));
+                    continue;
+                }
             };
+
+            // Store old status for reporting
+            let old_status = nota.status.clone();
+
+            // Validate calendar status has start_date
+            if nota_status == NotaStatus::calendar
+                && parsed_start_date.is_none()
+                && nota.start_date.is_none()
+            {
+                failures.push(format!(
+                    "{}: calendar status requires a start_date",
+                    normalized_id
+                ));
+                continue;
+            }
+
+            // Check if moving to trash and if nota is still referenced
+            if is_trash && data.is_referenced(&normalized_id) {
+                failures.push(format!(
+                    "{}: still referenced by other items",
+                    normalized_id
+                ));
+                continue;
+            }
+
+            // Update status
+            nota.status = nota_status.clone();
+
+            // Update start_date if provided
+            if let Some(date) = parsed_start_date {
+                nota.start_date = Some(date);
+            }
+
+            nota.updated_at = gtd::local_date_today();
+
+            // Update the nota
+            if data.update(&normalized_id, nota).is_none() {
+                failures.push(format!("{}: failed to update", normalized_id));
+                continue;
+            }
+
+            successes.push((normalized_id, old_status));
         }
 
-        nota.updated_at = gtd::local_date_today();
-
-        // Update the nota (this will automatically move it to the correct container)
-        if data.update(&id, nota).is_none() {
-            drop(data);
-            bail_public!(_, "Failed to update item '{}'", id);
-        }
         drop(data);
 
-        if let Err(e) =
-            self.save_data_with_message(&format!("Change item {} status to {}", id, new_status))
-        {
-            bail_public!(_, "Failed to save: {}", e);
+        // Save data if any changes were made
+        if !successes.is_empty() {
+            let ids_str = if successes.len() == 1 {
+                successes[0].0.clone()
+            } else {
+                format!("{} items", successes.len())
+            };
+
+            if let Err(e) =
+                self.save_data_with_message(&format!("Change {} status to {}", ids_str, new_status))
+            {
+                bail_public!(_, "Failed to save: {}", e);
+            }
         }
 
-        Ok(if is_trash {
-            format!("Item {} deleted (moved to trash)", id)
-        } else {
-            format!("Item {} status changed to {} successfully", id, new_status)
-        })
+        // Build response message
+        let mut response = String::new();
+
+        if !successes.is_empty() {
+            let action = if is_trash {
+                "deleted"
+            } else {
+                "changed status"
+            };
+            response.push_str(&format!(
+                "Successfully {} for {} item{}:\n",
+                action,
+                successes.len(),
+                if successes.len() == 1 { "" } else { "s" }
+            ));
+            for (id, old_status) in &successes {
+                if is_trash {
+                    response.push_str(&format!("- {} (moved to trash)\n", id));
+                } else {
+                    response.push_str(&format!(
+                        "- {}: {} → {}\n",
+                        id,
+                        format!("{:?}", old_status).to_lowercase(),
+                        new_status
+                    ));
+                }
+            }
+        }
+
+        if !failures.is_empty() {
+            if !response.is_empty() {
+                response.push('\n');
+            }
+            response.push_str(&format!(
+                "Failed to change status for {} item{}:\n",
+                failures.len(),
+                if failures.len() == 1 { "" } else { "s" }
+            ));
+            for failure in &failures {
+                response.push_str(&format!("- {}\n", failure));
+            }
+        }
+
+        // If all failed, return error
+        if successes.is_empty() {
+            bail_public!(_, "{}", response.trim());
+        }
+
+        Ok(response.trim().to_string())
     }
 }
 #[cfg(test)]
@@ -773,7 +857,7 @@ mod tests {
 
         // Test moving to next_action
         let result = handler
-            .change_status(task_id.clone(), "next_action".to_string(), None)
+            .change_status(vec![task_id.clone()], "next_action".to_string(), None)
             .await;
         assert!(result.is_ok());
         {
@@ -784,7 +868,7 @@ mod tests {
 
         // Test moving to done
         let result = handler
-            .change_status(task_id.clone(), "done".to_string(), None)
+            .change_status(vec![task_id.clone()], "done".to_string(), None)
             .await;
         assert!(result.is_ok());
         {
@@ -795,7 +879,7 @@ mod tests {
 
         // Test moving to trash
         let result = handler
-            .change_status(task_id.clone(), "trash".to_string(), None)
+            .change_status(vec![task_id.clone()], "trash".to_string(), None)
             .await;
         assert!(result.is_ok());
         {
@@ -806,7 +890,7 @@ mod tests {
 
         // Test invalid status
         let result = handler
-            .change_status(task_id.clone(), "invalid_status".to_string(), None)
+            .change_status(vec![task_id.clone()], "invalid_status".to_string(), None)
             .await;
         assert!(result.is_err());
     }
@@ -833,7 +917,7 @@ mod tests {
         // Test moving to calendar with date
         let result = handler
             .change_status(
-                task_id.clone(),
+                vec![task_id.clone()],
                 "calendar".to_string(),
                 Some("2024-12-25".to_string()),
             )
@@ -874,7 +958,7 @@ mod tests {
         // Test batch move to next_action
         for task_id in &task_ids {
             let result = handler
-                .change_status(task_id.clone(), "next_action".to_string(), None)
+                .change_status(vec![task_id.clone()], "next_action".to_string(), None)
                 .await;
             assert!(result.is_ok());
         }
@@ -886,6 +970,281 @@ mod tests {
             let task = data.find_task_by_id(task_id).unwrap();
             assert_eq!(task.status, NotaStatus::next_action);
         }
+    }
+
+    #[tokio::test]
+    async fn test_batch_change_status_multiple_ids() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Create multiple tasks
+        let mut task_ids = Vec::new();
+        for i in 1..=3 {
+            let result = handler
+                .inbox(
+                    format!("batch-task-{}", i),
+                    format!("Batch Test Task {}", i),
+                    "inbox".to_string(),
+                    None,
+                    None,
+                    None,
+                    None,
+                )
+                .await;
+            assert!(result.is_ok());
+            let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
+            task_ids.push(task_id);
+        }
+
+        // Batch change status to done
+        let result = handler
+            .change_status(task_ids.clone(), "done".to_string(), None)
+            .await;
+        assert!(result.is_ok());
+        let response = result.unwrap();
+        assert!(response.contains("Successfully changed status for 3 items"));
+        assert!(response.contains("→ done"));
+
+        // Verify all tasks moved to done
+        let data = handler.data.lock().unwrap();
+        assert_eq!(data.done().len(), 3);
+        for task_id in &task_ids {
+            let task = data.find_task_by_id(task_id).unwrap();
+            assert_eq!(task.status, NotaStatus::done);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_batch_change_status_partial_failure() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Create one valid task
+        let result = handler
+            .inbox(
+                "valid-task".to_string(),
+                "Valid Task".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
+            .await;
+        assert!(result.is_ok());
+
+        // Try to change status for mix of valid and invalid IDs
+        let result = handler
+            .change_status(
+                vec![
+                    "valid-task".to_string(),
+                    "invalid-id-1".to_string(),
+                    "invalid-id-2".to_string(),
+                ],
+                "done".to_string(),
+                None,
+            )
+            .await;
+
+        // Should succeed because at least one item succeeded
+        assert!(result.is_ok());
+        let response = result.unwrap();
+        assert!(response.contains("Successfully changed status for 1 item"));
+        assert!(response.contains("Failed to change status for 2 items"));
+        assert!(response.contains("invalid-id-1: not found"));
+        assert!(response.contains("invalid-id-2: not found"));
+
+        // Verify the valid task was moved
+        let data = handler.data.lock().unwrap();
+        let task = data.find_task_by_id("valid-task").unwrap();
+        assert_eq!(task.status, NotaStatus::done);
+    }
+
+    #[tokio::test]
+    async fn test_batch_change_status_all_failures() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Try to change status for all invalid IDs
+        let result = handler
+            .change_status(
+                vec![
+                    "invalid-1".to_string(),
+                    "invalid-2".to_string(),
+                    "invalid-3".to_string(),
+                ],
+                "done".to_string(),
+                None,
+            )
+            .await;
+
+        // Should fail because all items failed
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_batch_change_status_empty_array() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Try to change status with empty array
+        let result = handler
+            .change_status(vec![], "done".to_string(), None)
+            .await;
+
+        // Should fail
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_batch_change_status_to_trash() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Create multiple tasks
+        let mut task_ids = Vec::new();
+        for i in 1..=3 {
+            let result = handler
+                .inbox(
+                    format!("trash-task-{}", i),
+                    format!("Trash Test Task {}", i),
+                    "inbox".to_string(),
+                    None,
+                    None,
+                    None,
+                    None,
+                )
+                .await;
+            assert!(result.is_ok());
+            let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
+            task_ids.push(task_id);
+        }
+
+        // Batch move to trash
+        let result = handler
+            .change_status(task_ids.clone(), "trash".to_string(), None)
+            .await;
+        assert!(result.is_ok());
+        let response = result.unwrap();
+        assert!(response.contains("Successfully deleted for 3 items"));
+        assert!(response.contains("moved to trash"));
+
+        // Verify all tasks moved to trash
+        let data = handler.data.lock().unwrap();
+        assert_eq!(data.trash().len(), 3);
+        for task_id in &task_ids {
+            let task = data.find_task_by_id(task_id).unwrap();
+            assert_eq!(task.status, NotaStatus::trash);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_batch_change_status_with_id_normalization() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Create tasks and get their actual IDs
+        let result1 = handler
+            .inbox(
+                "task-norm-1".to_string(),
+                "Task 1".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
+            .await;
+        assert!(result1.is_ok());
+        let task_id1 = GtdServerHandler::extract_id_from_response(&result1.unwrap());
+
+        let result2 = handler
+            .inbox(
+                "task-norm-2".to_string(),
+                "Task 2".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
+            .await;
+        assert!(result2.is_ok());
+        let task_id2 = GtdServerHandler::extract_id_from_response(&result2.unwrap());
+
+        // Change status using both IDs
+        let result = handler
+            .change_status(vec![task_id1, task_id2], "done".to_string(), None)
+            .await;
+        assert!(result.is_ok());
+
+        // Verify both tasks were updated
+        let data = handler.data.lock().unwrap();
+        assert_eq!(data.done().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_batch_change_status_different_initial_statuses() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Create tasks in different statuses
+        let result1 = handler
+            .inbox(
+                "task-inbox".to_string(),
+                "Inbox Task".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
+            .await;
+        assert!(result1.is_ok());
+
+        let result2 = handler
+            .inbox(
+                "task-next".to_string(),
+                "Next Action Task".to_string(),
+                "next_action".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
+            .await;
+        assert!(result2.is_ok());
+
+        let result3 = handler
+            .inbox(
+                "task-waiting".to_string(),
+                "Waiting Task".to_string(),
+                "waiting_for".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
+            .await;
+        assert!(result3.is_ok());
+
+        // Batch change all to done
+        let result = handler
+            .change_status(
+                vec![
+                    "task-inbox".to_string(),
+                    "task-next".to_string(),
+                    "task-waiting".to_string(),
+                ],
+                "done".to_string(),
+                None,
+            )
+            .await;
+        assert!(result.is_ok());
+        let response = result.unwrap();
+        assert!(response.contains("inbox → done"));
+        assert!(response.contains("next_action → done"));
+        assert!(response.contains("waiting_for → done"));
+
+        // Verify all tasks are now done
+        let data = handler.data.lock().unwrap();
+        assert_eq!(data.done().len(), 3);
+        assert_eq!(data.inbox().len(), 0);
+        assert_eq!(data.next_action().len(), 0);
+        assert_eq!(data.waiting_for().len(), 0);
     }
 
     #[tokio::test]
@@ -946,7 +1305,11 @@ mod tests {
 
         // Move to next_action using the arbitrary ID
         let result = handler
-            .change_status("call-sarah".to_string(), "next_action".to_string(), None)
+            .change_status(
+                vec!["call-sarah".to_string()],
+                "next_action".to_string(),
+                None,
+            )
             .await;
         assert!(result.is_ok());
 
@@ -1027,7 +1390,7 @@ mod tests {
 
         // Update status to next_action using new method
         let result = handler
-            .change_status(task_id.clone(), "next_action".to_string(), None)
+            .change_status(vec![task_id.clone()], "next_action".to_string(), None)
             .await;
         assert!(result.is_ok());
 
@@ -1501,7 +1864,11 @@ mod tests {
 
         // Delete the project
         let result = handler
-            .change_status("test-project-1".to_string(), "trash".to_string(), None)
+            .change_status(
+                vec!["test-project-1".to_string()],
+                "trash".to_string(),
+                None,
+            )
             .await;
         assert!(result.is_ok());
         assert!(result.unwrap().contains("deleted"));
@@ -1517,7 +1884,11 @@ mod tests {
 
         // Try to delete non-existent project
         let result = handler
-            .change_status("non-existent-id".to_string(), "trash".to_string(), None)
+            .change_status(
+                vec!["non-existent-id".to_string()],
+                "trash".to_string(),
+                None,
+            )
             .await;
         assert!(result.is_err());
     }
@@ -1556,7 +1927,11 @@ mod tests {
 
         // Try to delete the project (should fail)
         let result = handler
-            .change_status("test-project-1".to_string(), "trash".to_string(), None)
+            .change_status(
+                vec!["test-project-1".to_string()],
+                "trash".to_string(),
+                None,
+            )
             .await;
         assert!(result.is_err());
 
@@ -1613,7 +1988,11 @@ mod tests {
 
         // Now delete the project (should succeed)
         let result = handler
-            .change_status("test-project-1".to_string(), "trash".to_string(), None)
+            .change_status(
+                vec!["test-project-1".to_string()],
+                "trash".to_string(),
+                None,
+            )
             .await;
         assert!(result.is_ok());
 
@@ -1690,7 +2069,7 @@ mod tests {
 
         // Change status separately using new method
         let result = handler
-            .change_status(task_id.clone(), "done".to_string(), None)
+            .change_status(vec![task_id.clone()], "done".to_string(), None)
             .await;
         assert!(result.is_ok());
 
@@ -1731,7 +2110,7 @@ mod tests {
 
         // Move to next_action first
         let result = handler
-            .change_status(task_id.clone(), "next_action".to_string(), None)
+            .change_status(vec![task_id.clone()], "next_action".to_string(), None)
             .await;
         assert!(result.is_ok());
 
@@ -1746,7 +2125,7 @@ mod tests {
 
         // Move back to inbox
         let result = handler
-            .change_status(task_id.clone(), "inbox".to_string(), None)
+            .change_status(vec![task_id.clone()], "inbox".to_string(), None)
             .await;
         assert!(result.is_ok());
 
@@ -1779,7 +2158,7 @@ mod tests {
         let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         let result = handler
-            .change_status(task_id.clone(), "next_action".to_string(), None)
+            .change_status(vec![task_id.clone()], "next_action".to_string(), None)
             .await;
         assert!(result.is_ok());
 
@@ -1809,7 +2188,7 @@ mod tests {
         let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         let result = handler
-            .change_status(task_id.clone(), "waiting_for".to_string(), None)
+            .change_status(vec![task_id.clone()], "waiting_for".to_string(), None)
             .await;
         assert!(result.is_ok());
 
@@ -1839,7 +2218,7 @@ mod tests {
         let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         let result = handler
-            .change_status(task_id.clone(), "someday".to_string(), None)
+            .change_status(vec![task_id.clone()], "someday".to_string(), None)
             .await;
         assert!(result.is_ok());
 
@@ -1869,7 +2248,7 @@ mod tests {
         let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         let result = handler
-            .change_status(task_id.clone(), "later".to_string(), None)
+            .change_status(vec![task_id.clone()], "later".to_string(), None)
             .await;
         assert!(result.is_ok());
 
@@ -1899,7 +2278,7 @@ mod tests {
         let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         let result = handler
-            .change_status(task_id.clone(), "done".to_string(), None)
+            .change_status(vec![task_id.clone()], "done".to_string(), None)
             .await;
         assert!(result.is_ok());
 
@@ -1929,7 +2308,7 @@ mod tests {
         let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         let result = handler
-            .change_status(task_id.clone(), "trash".to_string(), None)
+            .change_status(vec![task_id.clone()], "trash".to_string(), None)
             .await;
         assert!(result.is_ok(), "Failed to trash task: {:?}", result.err());
 
@@ -1960,7 +2339,7 @@ mod tests {
         let task_id_1 = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         let result = handler
-            .change_status(task_id_1.clone(), "trash".to_string(), None)
+            .change_status(vec![task_id_1.clone()], "trash".to_string(), None)
             .await;
         assert!(result.is_ok(), "Direct trash failed: {:?}", result.err());
 
@@ -1980,12 +2359,12 @@ mod tests {
         let task_id_2 = GtdServerHandler::extract_id_from_response(&result.unwrap());
 
         let result = handler
-            .change_status(task_id_2.clone(), "done".to_string(), None)
+            .change_status(vec![task_id_2.clone()], "done".to_string(), None)
             .await;
         assert!(result.is_ok(), "Moving to done failed: {:?}", result.err());
 
         let result = handler
-            .change_status(task_id_2.clone(), "trash".to_string(), None)
+            .change_status(vec![task_id_2.clone()], "trash".to_string(), None)
             .await;
         assert!(result.is_ok(), "Trash from done failed: {:?}", result.err());
 
@@ -2010,7 +2389,7 @@ mod tests {
 
         for task_id in test_cases {
             let result = handler
-                .change_status(task_id.to_string(), "trash".to_string(), None)
+                .change_status(vec![task_id.to_string()], "trash".to_string(), None)
                 .await;
             assert!(result.is_err(), "Expected error for task_id: {}", task_id);
         }
@@ -2042,7 +2421,7 @@ mod tests {
         // 複数のタスクを一度にtrashに移動
         for task_id in &task_ids {
             let result = handler
-                .change_status(task_id.clone(), "trash".to_string(), None)
+                .change_status(vec![task_id.clone()], "trash".to_string(), None)
                 .await;
             assert!(
                 result.is_ok(),
@@ -2095,7 +2474,7 @@ mod tests {
         let mut fail_count = 0;
         for task_id in &task_ids {
             let result = handler
-                .change_status(task_id.clone(), "trash".to_string(), None)
+                .change_status(vec![task_id.clone()], "trash".to_string(), None)
                 .await;
             if result.is_ok() {
                 success_count += 1;
@@ -2128,7 +2507,7 @@ mod tests {
         // すべて失敗する場合はエラーを返す
         if !task_ids.is_empty() {
             let result = handler
-                .change_status(task_ids[0].clone(), "trash".to_string(), None)
+                .change_status(vec![task_ids[0].clone()], "trash".to_string(), None)
                 .await;
             assert!(result.is_err(), "Expected error when all tasks are invalid");
         }
@@ -2168,7 +2547,11 @@ mod tests {
         assert!(result.is_ok());
         let next_action_task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
         handler
-            .change_status(next_action_task_id.clone(), "next_action".to_string(), None)
+            .change_status(
+                vec![next_action_task_id.clone()],
+                "next_action".to_string(),
+                None,
+            )
             .await
             .unwrap();
 
@@ -2187,7 +2570,7 @@ mod tests {
         assert!(result.is_ok());
         let done_task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
         handler
-            .change_status(done_task_id.clone(), "done".to_string(), None)
+            .change_status(vec![done_task_id.clone()], "done".to_string(), None)
             .await
             .unwrap();
 
@@ -2199,7 +2582,7 @@ mod tests {
         ];
         for task_id in &task_ids {
             let result = handler
-                .change_status(task_id.clone(), "trash".to_string(), None)
+                .change_status(vec![task_id.clone()], "trash".to_string(), None)
                 .await;
             assert!(result.is_ok(), "Failed to trash task: {:?}", result.err());
         }
@@ -2240,7 +2623,7 @@ mod tests {
 
         let result = handler
             .change_status(
-                task_id.clone(),
+                vec![task_id.clone()],
                 "calendar".to_string(),
                 Some("2024-12-25".to_string()),
             )
@@ -2280,7 +2663,7 @@ mod tests {
 
         // start_dateを指定せずにcalendarに移動しようとするとエラー
         let result = handler
-            .change_status(task_id.clone(), "calendar".to_string(), None)
+            .change_status(vec![task_id.clone()], "calendar".to_string(), None)
             .await;
         assert!(result.is_err());
     }
@@ -2306,7 +2689,7 @@ mod tests {
 
         // start_dateパラメータなしでcalendarに移動（既存のstart_dateを使用）
         let result = handler
-            .change_status(task_id.clone(), "calendar".to_string(), None)
+            .change_status(vec![task_id.clone()], "calendar".to_string(), None)
             .await;
         assert!(result.is_ok());
 
@@ -2342,7 +2725,7 @@ mod tests {
         // 新しいstart_dateを指定してcalendarに移動（既存のstart_dateを上書き）
         let result = handler
             .change_status(
-                task_id.clone(),
+                vec![task_id.clone()],
                 "calendar".to_string(),
                 Some("2024-12-31".to_string()),
             )
@@ -2379,7 +2762,7 @@ mod tests {
         // 無効な日付形式
         let result = handler
             .change_status(
-                task_id.clone(),
+                vec![task_id.clone()],
                 "calendar".to_string(),
                 Some("2024/12/25".to_string()),
             )
@@ -2413,7 +2796,7 @@ mod tests {
 
         // Move to next_action
         let result = handler
-            .change_status(task_id.clone(), "next_action".to_string(), None)
+            .change_status(vec![task_id.clone()], "next_action".to_string(), None)
             .await;
         assert!(result.is_ok());
 
@@ -2429,7 +2812,7 @@ mod tests {
 
         let result = handler
             .change_status(
-                "nonexistent-id".to_string(),
+                vec!["nonexistent-id".to_string()],
                 "next_action".to_string(),
                 None,
             )
@@ -2437,12 +2820,16 @@ mod tests {
         assert!(result.is_err());
 
         let result = handler
-            .change_status("nonexistent-id".to_string(), "done".to_string(), None)
+            .change_status(vec!["nonexistent-id".to_string()], "done".to_string(), None)
             .await;
         assert!(result.is_err());
 
         let result = handler
-            .change_status("nonexistent-id".to_string(), "trash".to_string(), None)
+            .change_status(
+                vec!["nonexistent-id".to_string()],
+                "trash".to_string(),
+                None,
+            )
             .await;
         assert!(result.is_err());
     }
@@ -2658,7 +3045,7 @@ mod tests {
             .unwrap();
 
         let result = handler
-            .change_status("Office".to_string(), "trash".to_string(), None)
+            .change_status(vec!["Office".to_string()], "trash".to_string(), None)
             .await;
         assert!(result.is_ok());
         let result = handler.empty_trash().await;
@@ -2673,7 +3060,7 @@ mod tests {
         let (handler, _temp_file) = get_test_handler();
 
         let result = handler
-            .change_status("NonExistent".to_string(), "trash".to_string(), None)
+            .change_status(vec!["NonExistent".to_string()], "trash".to_string(), None)
             .await;
         assert!(result.is_err());
     }
@@ -2712,7 +3099,7 @@ mod tests {
 
         // Try to delete the context - should fail
         let result = handler
-            .change_status("Office".to_string(), "trash".to_string(), None)
+            .change_status(vec!["Office".to_string()], "trash".to_string(), None)
             .await;
         assert!(result.is_err());
 
@@ -2756,7 +3143,7 @@ mod tests {
 
         // Try to delete the context - should fail
         let result = handler
-            .change_status("Office".to_string(), "trash".to_string(), None)
+            .change_status(vec!["Office".to_string()], "trash".to_string(), None)
             .await;
         assert!(result.is_err());
 
@@ -2814,7 +3201,7 @@ mod tests {
 
         // Try to delete the context - should fail (task check comes first)
         let result = handler
-            .change_status("Office".to_string(), "trash".to_string(), None)
+            .change_status(vec!["Office".to_string()], "trash".to_string(), None)
             .await;
         assert!(result.is_err());
 
@@ -2867,7 +3254,7 @@ mod tests {
 
         // Now deletion should succeed
         let result = handler
-            .change_status("Office".to_string(), "trash".to_string(), None)
+            .change_status(vec!["Office".to_string()], "trash".to_string(), None)
             .await;
         assert!(result.is_ok());
         assert!(result.unwrap().contains("deleted"));
@@ -2925,7 +3312,7 @@ mod tests {
 
         // Now deletion should succeed
         let result = handler
-            .change_status("Office".to_string(), "trash".to_string(), None)
+            .change_status(vec!["Office".to_string()], "trash".to_string(), None)
             .await;
         assert!(result.is_ok());
         assert!(result.unwrap().contains("deleted"));
@@ -2982,7 +3369,7 @@ mod tests {
 
         // Try to delete the context - should fail with the first task found
         let result = handler
-            .change_status("Office".to_string(), "trash".to_string(), None)
+            .change_status(vec!["Office".to_string()], "trash".to_string(), None)
             .await;
         assert!(result.is_err());
 
@@ -3682,7 +4069,7 @@ mod tests {
             let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
             // Move to next_action first
             let _ = handler
-                .change_status(task_id.clone(), "next_action".to_string(), None)
+                .change_status(vec![task_id.clone()], "next_action".to_string(), None)
                 .await;
             task_ids.push(task_id);
         }
@@ -3690,7 +4077,7 @@ mod tests {
         // 複数のタスクを一度にinboxに移動
         for task_id in &task_ids {
             let result = handler
-                .change_status(task_id.clone(), "inbox".to_string(), None)
+                .change_status(vec![task_id.clone()], "inbox".to_string(), None)
                 .await;
             assert!(
                 result.is_ok(),
@@ -3737,7 +4124,7 @@ mod tests {
         // 複数のタスクを一度にnext_actionに移動
         for task_id in &task_ids {
             let result = handler
-                .change_status(task_id.clone(), "next_action".to_string(), None)
+                .change_status(vec![task_id.clone()], "next_action".to_string(), None)
                 .await;
             assert!(
                 result.is_ok(),
@@ -3784,7 +4171,7 @@ mod tests {
         // 複数のタスクを一度にwaiting_forに移動
         for task_id in &task_ids {
             let result = handler
-                .change_status(task_id.clone(), "waiting_for".to_string(), None)
+                .change_status(vec![task_id.clone()], "waiting_for".to_string(), None)
                 .await;
             assert!(
                 result.is_ok(),
@@ -3831,7 +4218,7 @@ mod tests {
         // 複数のタスクを一度にsomedayに移動
         for task_id in &task_ids {
             let result = handler
-                .change_status(task_id.clone(), "someday".to_string(), None)
+                .change_status(vec![task_id.clone()], "someday".to_string(), None)
                 .await;
             assert!(
                 result.is_ok(),
@@ -3878,7 +4265,7 @@ mod tests {
         // 複数のタスクを一度にlaterに移動
         for task_id in &task_ids {
             let result = handler
-                .change_status(task_id.clone(), "later".to_string(), None)
+                .change_status(vec![task_id.clone()], "later".to_string(), None)
                 .await;
             assert!(
                 result.is_ok(),
@@ -3925,7 +4312,7 @@ mod tests {
         // 複数のタスクを一度にdoneに移動
         for task_id in &task_ids {
             let result = handler
-                .change_status(task_id.clone(), "done".to_string(), None)
+                .change_status(vec![task_id.clone()], "done".to_string(), None)
                 .await;
             assert!(
                 result.is_ok(),
@@ -3969,7 +4356,7 @@ mod tests {
 
         // 無効なステータス "in_progress" でエラーをテスト（問題として報告されたもの）
         let result = handler
-            .change_status(task_id.clone(), "in_progress".to_string(), None)
+            .change_status(vec![task_id.clone()], "in_progress".to_string(), None)
             .await;
         assert!(result.is_err());
         let err_msg = format!("{:?}", result.unwrap_err());
@@ -4017,7 +4404,7 @@ mod tests {
 
         for invalid_status in invalid_statuses {
             let result = handler
-                .change_status(task_id.clone(), invalid_status.to_string(), None)
+                .change_status(vec![task_id.clone()], invalid_status.to_string(), None)
                 .await;
             assert!(
                 result.is_err(),
@@ -4099,7 +4486,7 @@ mod tests {
         for task_id in &task_ids {
             let result = handler
                 .change_status(
-                    task_id.clone(),
+                    vec![task_id.clone()],
                     "calendar".to_string(),
                     Some("2025-01-15".to_string()),
                 )
@@ -4152,7 +4539,7 @@ mod tests {
         // start_dateを指定せずにcalendarに移動（既存のstart_dateを使用）
         for task_id in &task_ids {
             let result = handler
-                .change_status(task_id.clone(), "calendar".to_string(), None)
+                .change_status(vec![task_id.clone()], "calendar".to_string(), None)
                 .await;
             assert!(
                 result.is_ok(),
@@ -4214,13 +4601,13 @@ mod tests {
         // start_dateを指定せずに移動を試みる（部分的な失敗）
         // First task has date, should succeed
         let result1 = handler
-            .change_status(task_ids[0].clone(), "calendar".to_string(), None)
+            .change_status(vec![task_ids[0].clone()], "calendar".to_string(), None)
             .await;
         assert!(result1.is_ok(), "Task with date should move to calendar");
 
         // Second task has no date, should fail
         let result2 = handler
-            .change_status(task_ids[1].clone(), "calendar".to_string(), None)
+            .change_status(vec![task_ids[1].clone()], "calendar".to_string(), None)
             .await;
         assert!(result2.is_err(), "Task without date should fail");
 
