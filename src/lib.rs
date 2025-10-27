@@ -351,6 +351,8 @@ impl McpServer for GtdServerHandler {
             start_date: parsed_start_date,
             created_at: today,
             updated_at: today,
+            recurrence_pattern: None,
+            recurrence_config: None,
         };
 
         data.add(nota);
