@@ -243,12 +243,18 @@ impl McpServer for GtdServerHandler {
     /// **Capture**: Quickly capture anything needing attention. First GTD step - all items start here.
     /// **When**: Something crosses your mind? Capture immediately without thinking.
     /// **Next**: Use list(status="inbox") to review, then update/change_status to organize.
-    /// **ID**: Choose a unique ID - once set, IDs are immutable and cannot be changed.
+    ///
+    /// **ID Naming Guidelines**:
+    /// - Use kebab-case (lowercase with hyphens): "fix-io-button", "review-q3-sales"
+    /// - Start with verb when possible: "update-", "fix-", "create-", "review-"
+    /// - Keep concise but meaningful (3-5 words max)
+    /// - Use project prefix for clarity: "eci-fix-button", "fft-level-cloud"
+    /// - IDs are immutable - choose carefully as they cannot be changed later
     #[allow(clippy::too_many_arguments)]
     #[tool]
     async fn inbox(
         &self,
-        /// Unique string ID (e.g., "call-john", "web-redesign"). IDs are immutable - cannot be changed later.
+        /// Unique string ID - follow kebab-case guidelines above (e.g., "call-john", "web-redesign")
         id: String,
         /// Brief description
         title: String,
