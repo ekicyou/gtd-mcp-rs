@@ -626,11 +626,12 @@ impl McpServer for GtdServerHandler {
         let mut successes = Vec::new();
         let mut failures = Vec::new();
 
-        // Process each ID
-        for id in ids.iter() {
-            // Normalize task ID (add # prefix if missing and looks like a number)
-            let normalized_id = Self::normalize_task_id(id);
+        // Normalize all IDs upfront for efficiency
+        let normalized_ids: Vec<String> =
+            ids.iter().map(|id| Self::normalize_task_id(id)).collect();
 
+        // Process each ID
+        for normalized_id in normalized_ids {
             // Find existing nota
             let mut nota = match data.find_by_id(&normalized_id) {
                 Some(n) => n,
@@ -719,7 +720,12 @@ impl McpServer for GtdServerHandler {
                 if is_trash {
                     response.push_str(&format!("- {} (moved to trash)\n", id));
                 } else {
-                    response.push_str(&format!("- {}: {:?} → {}\n", id, old_status, new_status));
+                    response.push_str(&format!(
+                        "- {}: {} → {}\n",
+                        id,
+                        format!("{:?}", old_status).to_lowercase(),
+                        new_status
+                    ));
                 }
             }
         }
