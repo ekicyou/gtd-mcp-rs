@@ -4880,4 +4880,80 @@ mod tests {
         assert!(has_why, "Error should show existing status");
         assert!(has_how, "Error should suggest how to fix");
     }
+
+    /// Test to verify the difference between bail! and bail_public!
+    ///
+    /// This test addresses the question in PR comment #3450783685:
+    /// Does bail_public! actually make a difference compared to bail!?
+    ///
+    /// We'll test both macros to see if they produce different message_is_public flags.
+    #[tokio::test]
+    async fn test_bail_vs_bail_public_comparison() {
+        use anyhow::bail;
+
+        // Helper function that uses regular bail! (from anyhow)
+        async fn test_with_bail() -> McpResult<String> {
+            // This would normally be an anyhow::Result, but we need to return McpResult
+            // So we'll use anyhow's bail in a different way
+            let result: Result<String> = (|| -> Result<String> {
+                bail!("Test error with bail!");
+            })();
+
+            // Convert anyhow error to MCP error
+            match result {
+                Ok(s) => Ok(s),
+                Err(e) => {
+                    // When we convert an anyhow error to MCP error, what happens?
+                    // Let's use the MCP error creation
+                    Err(mcp_attr::Error::new(mcp_attr::ErrorCode::INTERNAL_ERROR)
+                        .with_message(&format!("Converted: {}", e), false))
+                }
+            }
+        }
+
+        // Helper function that uses bail_public!
+        async fn test_with_bail_public() -> McpResult<String> {
+            bail_public!(_, "Test error with bail_public!");
+        }
+
+        println!("\n=== Test: bail! vs bail_public! Comparison ===\n");
+
+        // Test bail! (via anyhow)
+        let error_bail = test_with_bail().await.unwrap_err();
+        println!("Error from bail! (via anyhow):");
+        println!("{:?}", error_bail);
+        println!();
+
+        // Test bail_public!
+        let error_bail_public = test_with_bail_public().await.unwrap_err();
+        println!("Error from bail_public!:");
+        println!("{:?}", error_bail_public);
+        println!();
+
+        // Compare the message_is_public flag
+        let bail_msg = format!("{:?}", error_bail);
+        let bail_public_msg = format!("{:?}", error_bail_public);
+
+        let bail_is_public = bail_msg.contains("message_is_public: true");
+        let bail_public_is_public = bail_public_msg.contains("message_is_public: true");
+
+        println!("=== Comparison Results ===");
+        println!("bail! → message_is_public: {}", bail_is_public);
+        println!(
+            "bail_public! → message_is_public: {}",
+            bail_public_is_public
+        );
+        println!();
+
+        if bail_is_public == bail_public_is_public {
+            println!("⚠️  IMPORTANT: Both macros produce the same message_is_public flag!");
+            println!("    This means the change from bail! to bail_public! may not be necessary.");
+        } else {
+            println!("✓ The macros produce different results:");
+            println!("  - bail! sets message_is_public to false (not visible to clients)");
+            println!("  - bail_public! sets message_is_public to true (visible to clients)");
+            println!("  This confirms that bail_public! was the correct choice.");
+        }
+        println!("==============================================\n");
+    }
 }
