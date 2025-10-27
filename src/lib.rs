@@ -118,8 +118,8 @@ impl GtdServerHandler {
 
     /// Extract ID from response message
     ///
-    /// Helper function for tests to extract nota ID from response messages.
-    /// Response format: "Nota created with ID: <id> (type: task)"
+    /// Helper function for tests to extract ID from response messages.
+    /// Response format: "Item created with ID: <id> (type: task)"
     ///
     /// # Arguments
     /// * `response` - The response message from inbox() or similar operations
@@ -128,7 +128,7 @@ impl GtdServerHandler {
     /// The extracted ID
     #[cfg(test)]
     fn extract_id_from_response(response: &str) -> String {
-        // Parse "Nota created with ID: <id> (type: ...)"
+        // Parse "Item created with ID: <id> (type: ...)"
         if let Some(start) = response.find("ID: ") {
             let id_part = &response[start + 4..];
             if let Some(end) = id_part.find(" (") {
