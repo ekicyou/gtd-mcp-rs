@@ -118,8 +118,8 @@ impl GtdServerHandler {
 
     /// Extract ID from response message
     ///
-    /// Helper function for tests to extract nota ID from response messages.
-    /// Response format: "Nota created with ID: <id> (type: task)"
+    /// Helper function for tests to extract ID from response messages.
+    /// Response format: "Item created with ID: <id> (type: task)"
     ///
     /// # Arguments
     /// * `response` - The response message from inbox() or similar operations
@@ -128,7 +128,7 @@ impl GtdServerHandler {
     /// The extracted ID
     #[cfg(test)]
     fn extract_id_from_response(response: &str) -> String {
-        // Parse "Nota created with ID: <id> (type: ...)"
+        // Parse "Item created with ID: <id> (type: ...)"
         if let Some(start) = response.find("ID: ") {
             let id_part = &response[start + 4..];
             if let Some(end) = id_part.find(" (") {
@@ -217,7 +217,7 @@ impl McpServer for GtdServerHandler {
         // Check for duplicate ID across all notas
         if data.nota_map.contains_key(&id) {
             drop(data);
-            bail!("Nota ID '{}' already exists. Please use a unique ID.", id);
+            bail!("ID '{}' already exists. Please use a unique ID.", id);
         }
 
         // Parse status
@@ -286,12 +286,12 @@ impl McpServer for GtdServerHandler {
         data.add(nota);
         drop(data);
 
-        if let Err(e) = self.save_data_with_message(&format!("Add nota {}", id)) {
+        if let Err(e) = self.save_data_with_message(&format!("Add item {}", id)) {
             bail!("Failed to save: {}", e);
         }
 
         Ok(format!(
-            "Nota created with ID: {} (type: {})",
+            "Item created with ID: {} (type: {})",
             id,
             if nota_status == NotaStatus::context {
                 "context"
@@ -303,7 +303,7 @@ impl McpServer for GtdServerHandler {
         ))
     }
 
-    /// **Review**: List/filter all notas. Essential for daily/weekly reviews.
+    /// **Review**: List/filter all items. Essential for daily/weekly reviews.
     /// **When**: Daily - check next_action. Weekly - review all. Use filters to focus.
     /// **Filters**: No filter=all | status="inbox"=unprocessed | status="next_action"=ready | status="calendar"+date=today's tasks.
     #[tool]
@@ -372,10 +372,10 @@ impl McpServer for GtdServerHandler {
         }
 
         if notas.is_empty() {
-            return Ok("No notas found".to_string());
+            return Ok("No items found".to_string());
         }
 
-        let mut result = format!("Found {} nota(s):\n\n", notas.len());
+        let mut result = format!("Found {} item(s):\n\n", notas.len());
         for nota in notas {
             let nota_type = if nota.is_context() {
                 "context"
@@ -407,14 +407,14 @@ impl McpServer for GtdServerHandler {
         Ok(result)
     }
 
-    /// **Clarify**: Update nota details. Add context, notes, project links after capturing.
+    /// **Clarify**: Update item details. Add context, notes, project links after capturing.
     /// **When**: After inbox capture, clarify what it is, why it matters, what's needed.
     /// **Tip**: Use ""(empty string) to clear optional fields.
     #[allow(clippy::too_many_arguments)]
     #[tool]
     async fn update(
         &self,
-        /// Nota ID to update
+        /// Item ID to update
         id: String,
         /// Optional: New title
         title: Option<String>,
@@ -436,7 +436,7 @@ impl McpServer for GtdServerHandler {
             Some(n) => n,
             None => {
                 drop(data);
-                bail!("Nota '{}' not found", id);
+                bail!("Item '{}' not found", id);
             }
         };
 
@@ -518,24 +518,24 @@ impl McpServer for GtdServerHandler {
         // Update the nota
         if data.update(&id, nota).is_none() {
             drop(data);
-            bail!("Failed to update nota '{}'", id);
+            bail!("Failed to update item '{}'", id);
         }
         drop(data);
 
-        if let Err(e) = self.save_data_with_message(&format!("Update nota {}", id)) {
+        if let Err(e) = self.save_data_with_message(&format!("Update item {}", id)) {
             bail!("Failed to save: {}", e);
         }
 
-        Ok(format!("Nota {} updated successfully", id))
+        Ok(format!("Item {} updated successfully", id))
     }
 
-    /// **Organize/Do**: Move nota through workflow stages as you process them.
+    /// **Organize/Do**: Move items through workflow stages as you process them.
     /// **When**: inbox→next_action(ready) | →waiting_for(blocked) | →done(complete) | →trash(discard).
     /// **Tip**: Use change_status to trash before empty_trash to permanently delete.
     #[tool]
     async fn change_status(
         &self,
-        /// Nota ID
+        /// Item ID
         id: String,
         /// New status: inbox | next_action | waiting_for | later | calendar | someday | done | reference | project | context | trash
         new_status: String,
@@ -561,7 +561,7 @@ impl McpServer for GtdServerHandler {
             Some(n) => n,
             None => {
                 drop(data);
-                bail!("Nota '{}' not found", id);
+                bail!("Item '{}' not found", id);
             }
         };
 
@@ -606,20 +606,20 @@ impl McpServer for GtdServerHandler {
         // Update the nota (this will automatically move it to the correct container)
         if data.update(&id, nota).is_none() {
             drop(data);
-            bail!("Failed to update nota '{}'", id);
+            bail!("Failed to update item '{}'", id);
         }
         drop(data);
 
         if let Err(e) =
-            self.save_data_with_message(&format!("Change nota {} status to {}", id, new_status))
+            self.save_data_with_message(&format!("Change item {} status to {}", id, new_status))
         {
             bail!("Failed to save: {}", e);
         }
 
         Ok(if is_trash {
-            format!("Nota {} deleted (moved to trash)", id)
+            format!("Item {} deleted (moved to trash)", id)
         } else {
-            format!("Nota {} status changed to {} successfully", id, new_status)
+            format!("Item {} status changed to {} successfully", id, new_status)
         })
     }
 }
@@ -2464,7 +2464,7 @@ mod tests {
 
         let result = handler.list(None, None, None).await;
         assert!(result.is_ok());
-        assert!(result.unwrap().contains("No notas found")); // list() returns generic message
+        assert!(result.unwrap().contains("No items found")); // list() returns generic message
     }
 
     #[tokio::test]
@@ -4058,7 +4058,7 @@ mod tests {
         assert!(result.contains("task-past"));
         assert!(result.contains("task-today"));
         assert!(!result.contains("task-future"));
-        assert!(result.contains("Found 2 nota(s)"));
+        assert!(result.contains("Found 2 item(s)"));
     }
 
     // テスト: date フィルタは calendar ステータスのみに適用される
@@ -4276,7 +4276,7 @@ mod tests {
         assert!(result.contains("cal-past"));
         assert!(!result.contains("cal-future"));
         assert!(!result.contains("inbox-task"));
-        assert!(result.contains("Found 1 nota(s)"));
+        assert!(result.contains("Found 1 item(s)"));
     }
 
     // テスト: date フィルタと exclude_notes の併用
