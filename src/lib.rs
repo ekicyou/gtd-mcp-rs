@@ -116,6 +116,56 @@ impl GtdServerHandler {
         task_id.trim().to_string()
     }
 
+    /// Format an error message for invalid project reference with available projects list
+    ///
+    /// # Arguments
+    /// * `project_id` - The invalid project ID that was provided
+    /// * `data` - Reference to GtdData to get available projects
+    ///
+    /// # Returns
+    /// A formatted error message including the list of available projects
+    fn format_invalid_project_error(project_id: &str, data: &GtdData) -> String {
+        let projects = data.projects();
+        if projects.is_empty() {
+            format!(
+                "Project '{}' does not exist. No projects have been created yet. Create a project first with status='project'.",
+                project_id
+            )
+        } else {
+            let project_list: Vec<String> = projects.keys().cloned().collect();
+            format!(
+                "Project '{}' does not exist.\nAvailable projects: {}",
+                project_id,
+                project_list.join(", ")
+            )
+        }
+    }
+
+    /// Format an error message for invalid context reference with available contexts list
+    ///
+    /// # Arguments
+    /// * `context_name` - The invalid context name that was provided
+    /// * `data` - Reference to GtdData to get available contexts
+    ///
+    /// # Returns
+    /// A formatted error message including the list of available contexts
+    fn format_invalid_context_error(context_name: &str, data: &GtdData) -> String {
+        let contexts = data.contexts();
+        if contexts.is_empty() {
+            format!(
+                "Context '{}' does not exist. No contexts have been created yet. Create a context first with status='context'.",
+                context_name
+            )
+        } else {
+            let context_list: Vec<String> = contexts.keys().cloned().collect();
+            format!(
+                "Context '{}' does not exist.\nAvailable contexts: {}",
+                context_name,
+                context_list.join(", ")
+            )
+        }
+    }
+
     /// Extract ID from response message
     ///
     /// Helper function for tests to extract ID from response messages.
@@ -270,24 +320,18 @@ impl McpServer for GtdServerHandler {
         if let Some(ref proj_id) = project
             && data.find_project_by_id(proj_id).is_none()
         {
+            let error_msg = Self::format_invalid_project_error(proj_id, &data);
             drop(data);
-            bail_public!(
-                _,
-                "Invalid project reference: Project '{}' does not exist. Create the project first or use an existing project ID.",
-                proj_id
-            );
+            bail_public!(_, "{}", error_msg);
         }
 
         // Validate context reference if provided
         if let Some(ref ctx_name) = context
             && data.find_context_by_name(ctx_name).is_none()
         {
+            let error_msg = Self::format_invalid_context_error(ctx_name, &data);
             drop(data);
-            bail_public!(
-                _,
-                "Invalid context reference: Context '{}' does not exist. Create the context first or use an existing context name.",
-                ctx_name
-            );
+            bail_public!(_, "{}", error_msg);
         }
 
         let today = gtd::local_date_today();
@@ -497,12 +541,9 @@ impl McpServer for GtdServerHandler {
             } else {
                 // Validate project exists
                 if data.find_project_by_id(&proj).is_none() {
+                    let error_msg = Self::format_invalid_project_error(&proj, &data);
                     drop(data);
-                    bail_public!(
-                        _,
-                        "Invalid project reference: Project '{}' does not exist. Create the project first or use an existing project ID.",
-                        proj
-                    );
+                    bail_public!(_, "{}", error_msg);
                 }
                 Some(proj)
             };
@@ -514,12 +555,9 @@ impl McpServer for GtdServerHandler {
             } else {
                 // Validate context exists
                 if data.find_context_by_name(&ctx).is_none() {
+                    let error_msg = Self::format_invalid_context_error(&ctx, &data);
                     drop(data);
-                    bail_public!(
-                        _,
-                        "Invalid context reference: Context '{}' does not exist. Create the context first or use an existing context name.",
-                        ctx
-                    );
+                    bail_public!(_, "{}", error_msg);
                 }
                 Some(ctx)
             };
@@ -3621,6 +3659,70 @@ mod tests {
     async fn test_invalid_project_reference_error_message() {
         let (handler, _temp_file) = get_test_handler();
 
+        // Try to add task with non-existent project (when no projects exist)
+        let result = handler
+            .inbox(
+                "task-ref-test".to_string(),
+                "Task with invalid project".to_string(),
+                "inbox".to_string(),
+                Some("non-existent-project".to_string()),
+                None,
+                None,
+                None,
+            )
+            .await;
+        assert!(result.is_err());
+
+        // Verify error message mentions the non-existent project and explains no projects exist
+        let err_msg = format!("{:?}", result.unwrap_err());
+        assert!(
+            err_msg.contains("non-existent-project"),
+            "Error message should contain the invalid project ID, got: {}",
+            err_msg
+        );
+        assert!(
+            err_msg.contains("does not exist"),
+            "Error message should say 'does not exist', got: {}",
+            err_msg
+        );
+        assert!(
+            err_msg.contains("No projects have been created yet"),
+            "Error message should explain that no projects exist, got: {}",
+            err_msg
+        );
+    }
+
+    #[tokio::test]
+    async fn test_invalid_project_reference_with_available_projects() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // First create some projects
+        handler
+            .inbox(
+                "project1".to_string(),
+                "First Project".to_string(),
+                "project".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        handler
+            .inbox(
+                "project2".to_string(),
+                "Second Project".to_string(),
+                "project".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
         // Try to add task with non-existent project
         let result = handler
             .inbox(
@@ -3635,13 +3737,8 @@ mod tests {
             .await;
         assert!(result.is_err());
 
-        // Verify error message is specific about invalid project reference
+        // Verify error message lists available projects
         let err_msg = format!("{:?}", result.unwrap_err());
-        assert!(
-            err_msg.contains("Invalid project reference"),
-            "Error message should mention 'Invalid project reference', got: {}",
-            err_msg
-        );
         assert!(
             err_msg.contains("non-existent-project"),
             "Error message should contain the invalid project ID, got: {}",
@@ -3652,11 +3749,85 @@ mod tests {
             "Error message should say 'does not exist', got: {}",
             err_msg
         );
+        assert!(
+            err_msg.contains("Available projects:"),
+            "Error message should list available projects, got: {}",
+            err_msg
+        );
+        assert!(
+            err_msg.contains("project1") && err_msg.contains("project2"),
+            "Error message should list both project1 and project2, got: {}",
+            err_msg
+        );
     }
 
     #[tokio::test]
     async fn test_invalid_context_reference_error_message() {
         let (handler, _temp_file) = get_test_handler();
+
+        // Try to add task with non-existent context (when no contexts exist)
+        let result = handler
+            .inbox(
+                "task-ctx-test".to_string(),
+                "Task with invalid context".to_string(),
+                "inbox".to_string(),
+                None,
+                Some("NonExistentContext".to_string()),
+                None,
+                None,
+            )
+            .await;
+        assert!(result.is_err());
+
+        // Verify error message mentions the non-existent context and explains no contexts exist
+        let err_msg = format!("{:?}", result.unwrap_err());
+        assert!(
+            err_msg.contains("NonExistentContext"),
+            "Error message should contain the invalid context name, got: {}",
+            err_msg
+        );
+        assert!(
+            err_msg.contains("does not exist"),
+            "Error message should say 'does not exist', got: {}",
+            err_msg
+        );
+        assert!(
+            err_msg.contains("No contexts have been created yet"),
+            "Error message should explain that no contexts exist, got: {}",
+            err_msg
+        );
+    }
+
+    #[tokio::test]
+    async fn test_invalid_context_reference_with_available_contexts() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // First create some contexts
+        handler
+            .inbox(
+                "Office".to_string(),
+                "Office Context".to_string(),
+                "context".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        handler
+            .inbox(
+                "Home".to_string(),
+                "Home Context".to_string(),
+                "context".to_string(),
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
 
         // Try to add task with non-existent context
         let result = handler
@@ -3672,13 +3843,8 @@ mod tests {
             .await;
         assert!(result.is_err());
 
-        // Verify error message is specific about invalid context reference
+        // Verify error message lists available contexts
         let err_msg = format!("{:?}", result.unwrap_err());
-        assert!(
-            err_msg.contains("Invalid context reference"),
-            "Error message should mention 'Invalid context reference', got: {}",
-            err_msg
-        );
         assert!(
             err_msg.contains("NonExistentContext"),
             "Error message should contain the invalid context name, got: {}",
@@ -3687,6 +3853,16 @@ mod tests {
         assert!(
             err_msg.contains("does not exist"),
             "Error message should say 'does not exist', got: {}",
+            err_msg
+        );
+        assert!(
+            err_msg.contains("Available contexts:"),
+            "Error message should list available contexts, got: {}",
+            err_msg
+        );
+        assert!(
+            err_msg.contains("Office") && err_msg.contains("Home"),
+            "Error message should list both Office and Home, got: {}",
             err_msg
         );
     }
@@ -4021,7 +4197,11 @@ mod tests {
 
         // タスクをdoneに変更（完了）
         let result = handler
-            .change_status("task-completion".to_string(), "done".to_string(), None)
+            .change_status(
+                vec!["task-completion".to_string()],
+                "done".to_string(),
+                None,
+            )
             .await;
         assert!(result.is_ok());
 
@@ -5217,7 +5397,7 @@ mod tests {
             .unwrap();
 
         handler
-            .change_status("dup2".to_string(), "next_action".to_string(), None)
+            .change_status(vec!["dup2".to_string()], "next_action".to_string(), None)
             .await
             .unwrap();
 
