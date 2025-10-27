@@ -193,11 +193,12 @@ impl McpServer for GtdServerHandler {
     /// **Capture**: Quickly capture anything needing attention. First GTD step - all items start here.
     /// **When**: Something crosses your mind? Capture immediately without thinking.
     /// **Next**: Use list(status="inbox") to review, then update/change_status to organize.
+    /// **ID**: Choose a unique ID - once set, IDs are immutable and cannot be changed.
     #[allow(clippy::too_many_arguments)]
     #[tool]
     async fn inbox(
         &self,
-        /// Any string ID (e.g., "call-john", "web-redesign")
+        /// Unique string ID (e.g., "call-john", "web-redesign"). IDs are immutable - cannot be changed later.
         id: String,
         /// Brief description
         title: String,
@@ -216,8 +217,13 @@ impl McpServer for GtdServerHandler {
 
         // Check for duplicate ID across all notas
         if data.nota_map.contains_key(&id) {
+            let existing_status = data.nota_map[&id].clone();
             drop(data);
-            bail!("ID '{}' already exists. Please use a unique ID.", id);
+            bail!(
+                "Duplicate ID error: ID '{}' already exists (status: {:?}). Each item must have a unique ID. Please choose a different ID.",
+                id,
+                existing_status
+            );
         }
 
         // Parse status
@@ -235,7 +241,9 @@ impl McpServer for GtdServerHandler {
         // Validate calendar status has start_date
         if nota_status == NotaStatus::calendar && start_date.is_none() {
             drop(data);
-            bail!("Calendar status requires start_date parameter");
+            bail!(
+                "Calendar status validation failed: status=calendar requires start_date parameter. Please provide a date in YYYY-MM-DD format."
+            );
         }
 
         // Parse start_date if provided
@@ -259,7 +267,10 @@ impl McpServer for GtdServerHandler {
             && data.find_project_by_id(proj_id).is_none()
         {
             drop(data);
-            bail!("Project '{}' does not exist", proj_id);
+            bail!(
+                "Invalid project reference: Project '{}' does not exist. Create the project first or use an existing project ID.",
+                proj_id
+            );
         }
 
         // Validate context reference if provided
@@ -267,7 +278,10 @@ impl McpServer for GtdServerHandler {
             && data.find_context_by_name(ctx_name).is_none()
         {
             drop(data);
-            bail!("Context '{}' does not exist", ctx_name);
+            bail!(
+                "Invalid context reference: Context '{}' does not exist. Create the context first or use an existing context name.",
+                ctx_name
+            );
         }
 
         let today = gtd::local_date_today();
@@ -410,11 +424,12 @@ impl McpServer for GtdServerHandler {
     /// **Clarify**: Update item details. Add context, notes, project links after capturing.
     /// **When**: After inbox capture, clarify what it is, why it matters, what's needed.
     /// **Tip**: Use ""(empty string) to clear optional fields.
+    /// **Note**: Item ID cannot be changed - IDs are immutable. To "rename", create new item and delete old one.
     #[allow(clippy::too_many_arguments)]
     #[tool]
     async fn update(
         &self,
-        /// Item ID to update
+        /// Item ID to update (immutable - cannot be changed)
         id: String,
         /// Optional: New title
         title: Option<String>,
@@ -436,7 +451,10 @@ impl McpServer for GtdServerHandler {
             Some(n) => n,
             None => {
                 drop(data);
-                bail!("Item '{}' not found", id);
+                bail!(
+                    "Item not found: Item '{}' does not exist. Use list() to see available items.",
+                    id
+                );
             }
         };
 
@@ -467,7 +485,10 @@ impl McpServer for GtdServerHandler {
                 // Validate project exists
                 if data.find_project_by_id(&proj).is_none() {
                     drop(data);
-                    bail!("Project '{}' does not exist", proj);
+                    bail!(
+                        "Invalid project reference: Project '{}' does not exist. Create the project first or use an existing project ID.",
+                        proj
+                    );
                 }
                 Some(proj)
             };
@@ -480,7 +501,10 @@ impl McpServer for GtdServerHandler {
                 // Validate context exists
                 if data.find_context_by_name(&ctx).is_none() {
                     drop(data);
-                    bail!("Context '{}' does not exist", ctx);
+                    bail!(
+                        "Invalid context reference: Context '{}' does not exist. Create the context first or use an existing context name.",
+                        ctx
+                    );
                 }
                 Some(ctx)
             };
@@ -510,7 +534,9 @@ impl McpServer for GtdServerHandler {
         // Validate calendar status has start_date
         if nota.status == NotaStatus::calendar && nota.start_date.is_none() {
             drop(data);
-            bail!("Calendar status requires start_date");
+            bail!(
+                "Calendar status validation failed: status=calendar requires start_date. Please provide a start_date or change to a different status."
+            );
         }
 
         nota.updated_at = gtd::local_date_today();
@@ -570,7 +596,8 @@ impl McpServer for GtdServerHandler {
         {
             drop(data);
             bail!(
-                "Calendar status requires start_date parameter (task has no existing start_date)"
+                "Calendar status validation failed: Moving to calendar status requires a start_date. The item '{}' has no existing start_date - please provide the start_date parameter.",
+                id
             );
         }
 
@@ -3162,7 +3189,100 @@ mod tests {
             )
             .await;
         assert!(result.is_err());
+
+        // Verify error message is specific about duplicate ID
+        let err_msg = format!("{:?}", result.unwrap_err());
+        assert!(
+            err_msg.contains("Duplicate ID error"),
+            "Error message should mention 'Duplicate ID error', got: {}",
+            err_msg
+        );
+        assert!(
+            err_msg.contains("duplicate-id"),
+            "Error message should contain the duplicate ID, got: {}",
+            err_msg
+        );
+        assert!(
+            err_msg.contains("already exists"),
+            "Error message should say 'already exists', got: {}",
+            err_msg
+        );
     }
+
+    #[tokio::test]
+    async fn test_invalid_project_reference_error_message() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Try to add task with non-existent project
+        let result = handler
+            .inbox(
+                "task-ref-test".to_string(),
+                "Task with invalid project".to_string(),
+                "inbox".to_string(),
+                Some("non-existent-project".to_string()),
+                None,
+                None,
+                None,
+            )
+            .await;
+        assert!(result.is_err());
+
+        // Verify error message is specific about invalid project reference
+        let err_msg = format!("{:?}", result.unwrap_err());
+        assert!(
+            err_msg.contains("Invalid project reference"),
+            "Error message should mention 'Invalid project reference', got: {}",
+            err_msg
+        );
+        assert!(
+            err_msg.contains("non-existent-project"),
+            "Error message should contain the invalid project ID, got: {}",
+            err_msg
+        );
+        assert!(
+            err_msg.contains("does not exist"),
+            "Error message should say 'does not exist', got: {}",
+            err_msg
+        );
+    }
+
+    #[tokio::test]
+    async fn test_invalid_context_reference_error_message() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Try to add task with non-existent context
+        let result = handler
+            .inbox(
+                "task-ctx-test".to_string(),
+                "Task with invalid context".to_string(),
+                "inbox".to_string(),
+                None,
+                Some("NonExistentContext".to_string()),
+                None,
+                None,
+            )
+            .await;
+        assert!(result.is_err());
+
+        // Verify error message is specific about invalid context reference
+        let err_msg = format!("{:?}", result.unwrap_err());
+        assert!(
+            err_msg.contains("Invalid context reference"),
+            "Error message should mention 'Invalid context reference', got: {}",
+            err_msg
+        );
+        assert!(
+            err_msg.contains("NonExistentContext"),
+            "Error message should contain the invalid context name, got: {}",
+            err_msg
+        );
+        assert!(
+            err_msg.contains("does not exist"),
+            "Error message should say 'does not exist', got: {}",
+            err_msg
+        );
+    }
+
     // ==================== Prompt Tests ====================
 
     // GTD workflow methods removed - tests commented out
