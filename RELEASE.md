@@ -317,10 +317,12 @@ When marked done, creates next year's occurrence.
 - Tests previously embedded in `src/*.rs` files now properly separated
 - Better test organization with dedicated test files:
   - `tests/integration_test.rs` - MCP handler integration tests (127 tests)
+  - `tests/gtd_data_test.rs` - Core GTD data structure tests (99 tests)
   - `tests/storage_test.rs` - Storage and file I/O tests (22 tests)
   - `tests/migration_test.rs` - Format migration tests (6 tests)
-  - `tests/git_ops_test.rs` - Git operation tests (3 tests)
-- Unit tests for private functionality remain in source files (111 tests)
+  - `tests/git_ops_test.rs` - Git operation tests (4 tests)
+- Unit tests for private functionality remain in source files (8 tests)
+- Doc tests in source documentation (3 tests)
 
 **Test Coverage Improvements**:
 - **Total: 269 tests** (up from 191 in v0.7.0, +78 tests)
@@ -498,11 +500,11 @@ The README has been verified to accurately describe the current 5-tool architect
 All functionality remains fully operational with significant improvements:
 - ✅ **269 tests pass** (increased from 191 in v0.7.0, +78 tests = 41% increase)
   - 127 integration tests (MCP handler tests)
-  - 111 unit tests (internal logic tests)
+  - 111 unit tests (99 gtd_data + 8 lib + 4 git_ops)
   - 22 storage tests
-  - 6 migration tests  
-  - 3 git operations tests
-  - 9 new recurrence pattern tests
+  - 6 migration tests
+  - 3 doc tests
+  - Includes 9 new recurrence pattern tests
 - ✅ Zero test failures
 - ✅ No breaking changes to data format (automatic migration)
 - ✅ Full backward compatibility with existing `gtd.toml` files
@@ -517,9 +519,12 @@ Comprehensive testing ensures reliability:
 - ✅ **269 total tests pass** (up from 191 in v0.7.0, +41% increase)
   - **Integration tests**: 127 tests covering all MCP handlers
   - **Unit tests**: 111 tests for core logic and data structures
+    - gtd_data_test.rs: 99 tests (includes 9 recurrence pattern tests)
+    - lib unit tests: 8 tests
+    - git_ops_test.rs: 4 tests  
   - **Storage tests**: 22 tests for file I/O and persistence
   - **Migration tests**: 6 tests for format version upgrades (v1→v2→v3)
-  - **Git operations tests**: 3 tests for version control integration
+  - **Doc tests**: 3 tests for documentation examples
 - ✅ **Recurrence feature tests**: 9 comprehensive tests
   - Daily recurrence calculation
   - Weekly recurrence (single and multiple weekdays)
