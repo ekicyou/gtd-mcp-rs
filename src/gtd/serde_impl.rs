@@ -7,8 +7,16 @@
 use super::gtd_data::GtdData;
 use super::nota::{Nota, NotaStatus};
 use crate::migration::{
-    GtdDataMigrationHelper, migrate_projects_to_latest, normalize_context_line_endings,
-    normalize_project_line_endings, normalize_task_line_endings, populate_context_names,
+    // Helper type for migration
+    GtdDataMigrationHelper,
+    // Migration functions
+    migrate_projects_to_latest,
+    // Normalization functions
+    normalize_context_line_endings,
+    normalize_project_line_endings,
+    normalize_task_line_endings,
+    // Populate functions
+    populate_context_names,
     populate_project_ids,
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
