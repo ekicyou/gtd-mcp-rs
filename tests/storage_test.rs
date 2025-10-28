@@ -242,11 +242,7 @@ fn test_storage_save_and_load_comprehensive() {
     // Add multiple contexts
     for i in 1..=2 {
         let context = Context {
-            name: format!(
-                "Context {
-}",
-                i
-            ),
+            name: format!("Context {}", i),
             notes: None,
             title: None,
             status: NotaStatus::context,
@@ -660,9 +656,8 @@ fn test_storage_git_push_on_shutdown() {
     let test_path = temp_dir.path().join("gtd.toml");
     let storage = Storage::new(&test_path, true);
 
-    // Verify that sync_git is enabled and git is detected
-    //     assert!(storage.sync_git);
-    //     assert!(storage.git_ops.is_git_managed());
+    // Note: Cannot verify sync_git and git_ops fields as they are private
+    // The test validates that shutdown returns an error when no remote is configured
 
     // shutdownを呼び出すと、remoteがないのでエラーが返されることを確認
     // (Before fix: errors were silently ignored. After fix: errors are propagated)
