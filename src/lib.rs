@@ -445,7 +445,7 @@ impl McpServer for GtdServerHandler {
         date: Option<String>,
         /// Optional: True to exclude notes and reduce token usage
         exclude_notes: Option<bool>,
-        /// Optional: Search keyword in title and notes (case-insensitive)
+        /// Optional: Search keyword in id, title and notes (case-insensitive)
         keyword: Option<String>,
         /// Optional: Filter by project ID - use meaningful abbreviation (e.g., "website-redesign", "q1-budget")
         project: Option<String>,
@@ -509,10 +509,13 @@ impl McpServer for GtdServerHandler {
             });
         }
 
-        // Apply keyword filtering (case-insensitive search in title and notes)
+        // Apply keyword filtering (case-insensitive search in id, title and notes)
         if let Some(ref keyword_filter) = keyword {
             let keyword_lower = keyword_filter.to_lowercase();
             notas.retain(|nota| {
+                // Search in id
+                let id_matches = nota.id.to_lowercase().contains(&keyword_lower);
+
                 // Search in title
                 let title_matches = nota.title.to_lowercase().contains(&keyword_lower);
 
@@ -523,7 +526,7 @@ impl McpServer for GtdServerHandler {
                     .map(|n| n.to_lowercase().contains(&keyword_lower))
                     .unwrap_or(false);
 
-                title_matches || notes_matches
+                id_matches || title_matches || notes_matches
             });
         }
 
@@ -6287,6 +6290,66 @@ mod tests {
         assert!(result.contains("Regular title"));
         assert!(!result.contains("Unrelated task"));
         assert!(result.contains("Found 2 item(s)"));
+    }
+
+    // テスト: keyword フィルタ - IDで検索
+    #[tokio::test]
+    async fn test_list_with_keyword_filter_in_id() {
+        let (handler, _temp_file) = get_test_handler();
+
+        handler
+            .inbox(
+                "fft-algorithm".to_string(),
+                "Implement algorithm".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        handler
+            .inbox(
+                "web-redesign".to_string(),
+                "Redesign website".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        handler
+            .inbox(
+                "meeting-notes".to_string(),
+                "Take notes".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        // "fft"で検索（ID内を検索）
+        let result = handler
+            .list(None, None, None, Some("fft".to_string()), None, None)
+            .await
+            .unwrap();
+
+        assert!(result.contains("fft-algorithm"));
+        assert!(!result.contains("web-redesign"));
+        assert!(!result.contains("meeting-notes"));
+        assert!(result.contains("Found 1 item(s)"));
     }
 
     // テスト: project フィルタ
