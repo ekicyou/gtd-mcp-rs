@@ -265,6 +265,7 @@ mod tests {
     }
 
     #[test]
+    // ==================== INFRASTRUCTURE TESTS ====================
     fn test_custom_file_path() {
         // カスタムファイルパスでハンドラーを作成
         let temp_file = NamedTempFile::new().unwrap();
@@ -329,6 +330,8 @@ mod tests {
     }
 
     #[tokio::test]
+
+    // ==================== CHANGE STATUS TESTS ====================
     async fn test_change_task_status_unified_api() {
         let (handler, _temp_file) = get_test_handler();
 
@@ -762,6 +765,8 @@ mod tests {
     }
 
     #[tokio::test]
+
+    // ==================== UPDATE TESTS ====================
     async fn test_update_task_with_arbitrary_id() {
         let (handler, _temp_file) = get_test_handler();
 
@@ -802,6 +807,8 @@ mod tests {
     }
 
     #[tokio::test]
+
+    // ==================== CHANGE STATUS TESTS ====================
     async fn test_status_movement_with_arbitrary_id() {
         let (handler, _temp_file) = get_test_handler();
 
@@ -838,6 +845,8 @@ mod tests {
     }
 
     #[tokio::test]
+
+    // ==================== UPDATE TESTS ====================
     async fn test_update_task_title() {
         let (handler, _temp_file) = get_test_handler();
 
@@ -881,6 +890,8 @@ mod tests {
     }
 
     #[tokio::test]
+
+    // ==================== CHANGE STATUS TESTS ====================
     async fn test_update_task_status_using_next_action_task() {
         let (handler, _temp_file) = get_test_handler();
 
@@ -927,6 +938,8 @@ mod tests {
     }
 
     #[tokio::test]
+
+    // ==================== UPDATE TESTS ====================
     async fn test_update_task_project_and_context() {
         let (handler, _temp_file) = get_test_handler();
 
@@ -1387,6 +1400,8 @@ mod tests {
     }
 
     #[tokio::test]
+
+    // ==================== OTHER HANDLERS TESTS ====================
     async fn test_delete_project_success() {
         let (handler, _temp_file) = get_test_handler();
 
@@ -1554,6 +1569,8 @@ mod tests {
     }
 
     #[tokio::test]
+
+    // ==================== UPDATE TESTS ====================
     async fn test_update_multiple_fields_simultaneously() {
         let (handler, _temp_file) = get_test_handler();
 
@@ -1646,6 +1663,8 @@ mod tests {
     // Tests for new status movement methods
 
     #[tokio::test]
+
+    // ==================== INBOX TESTS ====================
     async fn test_inbox_task() {
         let (handler, _temp_file) = get_test_handler();
 
@@ -1698,6 +1717,8 @@ mod tests {
     }
 
     #[tokio::test]
+
+    // ==================== CHANGE STATUS TESTS ====================
     async fn test_next_action_task() {
         let (handler, _temp_file) = get_test_handler();
 
@@ -1858,6 +1879,8 @@ mod tests {
     }
 
     #[tokio::test]
+
+    // ==================== INBOX TESTS ====================
     async fn test_trash_task_from_inbox() {
         let (handler, _temp_file) = get_test_handler();
 
@@ -1890,6 +1913,8 @@ mod tests {
     }
 
     #[tokio::test]
+
+    // ==================== EMPTY TRASH TESTS ====================
     async fn test_trash_task_workflow_comparison() {
         let (handler, _temp_file) = get_test_handler();
 
@@ -2188,6 +2213,8 @@ mod tests {
     }
 
     #[tokio::test]
+
+    // ==================== CHANGE STATUS TESTS ====================
     async fn test_calendar_task_with_start_date() {
         let (handler, _temp_file) = get_test_handler();
 
@@ -2433,6 +2460,8 @@ mod tests {
     // Tests for context management
 
     #[tokio::test]
+
+    // ==================== OTHER HANDLERS TESTS ====================
     async fn test_add_context() {
         let (handler, _temp_file) = get_test_handler();
 
@@ -2496,6 +2525,8 @@ mod tests {
     }
 
     #[tokio::test]
+
+    // ==================== LIST TESTS ====================
     async fn test_list_contexts_empty() {
         let (handler, _temp_file) = get_test_handler();
 
@@ -2546,6 +2577,8 @@ mod tests {
     }
 
     #[tokio::test]
+
+    // ==================== UPDATE TESTS ====================
     async fn test_update_context() {
         let (handler, _temp_file) = get_test_handler();
 
@@ -2638,6 +2671,8 @@ mod tests {
     }
 
     #[tokio::test]
+
+    // ==================== OTHER HANDLERS TESTS ====================
     async fn test_delete_context() {
         let (handler, _temp_file) = get_test_handler();
 
@@ -3084,6 +3119,8 @@ mod tests {
     }
 
     #[tokio::test]
+
+    // ==================== UPDATE TESTS ====================
     async fn test_update_project_context() {
         let (handler, _temp_file) = get_test_handler();
 
@@ -3195,6 +3232,8 @@ mod tests {
         assert_eq!(project.context, None);
     }
     #[tokio::test]
+
+    // ==================== OTHER HANDLERS TESTS ====================
     async fn test_add_project_with_custom_id() {
         let (handler, _temp_file) = get_test_handler();
 
@@ -3278,6 +3317,8 @@ mod tests {
     }
 
     #[tokio::test]
+
+    // ==================== INFRASTRUCTURE TESTS ====================
     async fn test_invalid_project_reference_error_message() {
         let (handler, _temp_file) = get_test_handler();
 
@@ -3605,6 +3646,8 @@ mod tests {
     */
     // 日付フィルタリングのテスト: 日付フィルタなしでは全タスク表示
     #[tokio::test]
+
+    // ==================== LIST TESTS ====================
     async fn test_list_tasks_without_date_filter_shows_all_tasks() {
         let (handler, _temp_file) = get_test_handler();
 
@@ -3830,6 +3873,8 @@ mod tests {
 
     // タイムスタンプ表示のテスト: 完了タスクの完了日がupdated_atで確認できることを検証
     #[tokio::test]
+
+    // ==================== CHANGE STATUS TESTS ====================
     async fn test_list_displays_completion_date_for_done_tasks() {
         let (handler, _temp_file) = get_test_handler();
 
@@ -3884,6 +3929,8 @@ mod tests {
     }
 
     #[tokio::test]
+
+    // ==================== INBOX TESTS ====================
     async fn test_inbox_tasks_multiple_tasks() {
         let (handler, _temp_file) = get_test_handler();
 
@@ -3937,6 +3984,164 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_inbox_duplicate_id_error() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Create first task
+        let result = handler
+            .inbox(
+                "dup-test".to_string(),
+                "First Task".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await;
+        assert!(result.is_ok());
+
+        // Try to create second task with same ID - should fail
+        let result = handler
+            .inbox(
+                "dup-test".to_string(),
+                "Second Task".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await;
+        assert!(result.is_err());
+        let error_msg = format!("{:?}", result.unwrap_err());
+        assert!(error_msg.contains("Duplicate ID"));
+        assert!(error_msg.contains("dup-test"));
+    }
+
+    #[tokio::test]
+    async fn test_inbox_invalid_status_error() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Try to create task with invalid status
+        let result = handler
+            .inbox(
+                "test-inv-status".to_string(),
+                "Test Task".to_string(),
+                "invalid_status_name".to_string(),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await;
+        assert!(result.is_err());
+        let error_msg = format!("{:?}", result.unwrap_err());
+        assert!(error_msg.contains("Invalid status"));
+    }
+
+    #[tokio::test]
+    async fn test_inbox_calendar_without_date_error() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Try to create calendar item without start_date
+        let result = handler
+            .inbox(
+                "test-cal".to_string(),
+                "Calendar Task".to_string(),
+                "calendar".to_string(),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await;
+        assert!(result.is_err());
+        let error_msg = format!("{:?}", result.unwrap_err());
+        assert!(error_msg.contains("calendar"));
+        assert!(error_msg.contains("start_date"));
+    }
+
+    #[tokio::test]
+    async fn test_inbox_invalid_date_format() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Try to create task with invalid date format
+        let result = handler
+            .inbox(
+                "test-date".to_string(),
+                "Test Task".to_string(),
+                "calendar".to_string(),
+                None,
+                None,
+                None,
+                Some("2024/03/15".to_string()), // Wrong format
+                None,
+                None,
+            )
+            .await;
+        assert!(result.is_err());
+        let error_msg = format!("{:?}", result.unwrap_err());
+        assert!(error_msg.contains("Invalid date format"));
+    }
+
+    #[tokio::test]
+    async fn test_inbox_invalid_project_reference() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Try to create task with non-existent project reference
+        let result = handler
+            .inbox(
+                "test-proj".to_string(),
+                "Test Task".to_string(),
+                "inbox".to_string(),
+                Some("nonexistent-project".to_string()),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await;
+        assert!(result.is_err());
+        let error_msg = format!("{:?}", result.unwrap_err());
+        assert!(error_msg.contains("Project") || error_msg.contains("project"));
+    }
+
+    #[tokio::test]
+    async fn test_inbox_invalid_context_reference() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Try to create task with non-existent context reference
+        let result = handler
+            .inbox(
+                "test-ctx".to_string(),
+                "Test Task".to_string(),
+                "inbox".to_string(),
+                None,
+                Some("nonexistent-context".to_string()),
+                None,
+                None,
+                None,
+                None,
+            )
+            .await;
+        assert!(result.is_err());
+        let error_msg = format!("{:?}", result.unwrap_err());
+        assert!(error_msg.contains("Context") || error_msg.contains("context"));
+    }
+
+    #[tokio::test]
+
+    // ==================== CHANGE STATUS TESTS ====================
     async fn test_next_action_tasks_multiple_tasks() {
         let (handler, _temp_file) = get_test_handler();
 
@@ -4274,6 +4479,8 @@ mod tests {
     }
 
     #[tokio::test]
+
+    // ==================== LIST TESTS ====================
     async fn test_list_tasks_invalid_status_error_message() {
         let (handler, _temp_file) = get_test_handler();
 
@@ -4326,6 +4533,8 @@ mod tests {
         }
     }
     #[tokio::test]
+
+    // ==================== CHANGE STATUS TESTS ====================
     async fn test_calendar_tasks_multiple_tasks_with_date() {
         let (handler, _temp_file) = get_test_handler();
 
@@ -4493,6 +4702,8 @@ mod tests {
 
     // テスト: date フィルタリングの基本機能
     #[tokio::test]
+
+    // ==================== LIST TESTS ====================
     async fn test_list_with_date_filter_basic() {
         let (handler, _temp_file) = get_test_handler();
 
@@ -4892,6 +5103,8 @@ mod tests {
     ///
     /// The error should be returned via McpResult::Err and be visible to the MCP client.
     #[tokio::test]
+
+    // ==================== INFRASTRUCTURE TESTS ====================
     async fn test_mcp_duplicate_id_error_response() {
         let (handler, _temp) = get_test_handler();
 
@@ -5410,6 +5623,8 @@ mod tests {
 
     // テスト: keyword フィルタ - タイトルで検索
     #[tokio::test]
+
+    // ==================== LIST TESTS ====================
     async fn test_list_with_keyword_filter_in_title() {
         let (handler, _temp_file) = get_test_handler();
 

@@ -1,7 +1,8 @@
-// Common test utilities for integration tests
+//! Common test utilities for integration tests
 
-use gtd_mcp::{GtdServerHandler, NotaStatus, Task};
-use gtd_mcp::gtd::{Nota, local_date_today};
+use gtd_mcp::{GtdServerHandler, Nota, NotaStatus};
+use gtd_mcp::gtd::local_date_today;
+use gtd_mcp::migration::Task;
 use tempfile::NamedTempFile;
 use chrono::NaiveDate;
 
