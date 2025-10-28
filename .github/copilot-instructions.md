@@ -148,19 +148,30 @@ cargo run               # stdio MCPサーバーを起動
 **重要**: コードを変更した後は、必ず以下のCIチェックを実行してください。これらはGitHub ActionsのCIで自動実行されるチェックと同じです：
 
 ```bash
-# コードフォーマットチェック（必須）
-cargo fmt --check
+# 1. コードフォーマットチェック（必須）
+cargo fmt --all -- --check
 
-# Lintチェック（必須）
-cargo clippy -- -D warnings
+# 2. Lintチェック - 全ターゲット・全機能を含む（必須）
+cargo clippy --all-targets --all-features -- -D warnings
 
-# 全テストの実行（必須）
-cargo test
+# 3. ビルドチェック（必須）
+cargo build --verbose
+
+# 4. 全テストの実行（必須）
+cargo test --verbose
+
+# 5. リリースビルドチェック（必須）
+cargo build --release --verbose
 ```
 
-これらのチェックが全て通ることを確認してからコミット・プルリクエストを作成してください。CIで失敗すると、マージがブロックされます。
+**注意点:**
+- `cargo clippy` は必ず `--all-targets --all-features` フラグを付けて実行すること
+  - これによりテストコード（`#[cfg(test)]`）も含めてlintチェックされます
+  - 未使用のimportなどがテストコードにあるとCIで失敗します
+- これらのチェックが全て通ることを確認してからコミット・プルリクエストを作成してください
+- CIで失敗すると、マージがブロックされます
 
-フォーマットエラーが出た場合は、`cargo fmt`で自動修正できます。
+フォーマットエラーが出た場合は、`cargo fmt --all`で自動修正できます。
 
 ## テスト規約
 
