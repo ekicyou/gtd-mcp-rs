@@ -11,6 +11,7 @@ use std::collections::HashMap;
 #[derive(Deserialize)]
 pub struct GtdDataMigrationHelper {
     #[serde(default)]
+    // Used for format detection during deserialization (read from TOML but not directly referenced, causing warning)
     // デシリアライズ時のフォーマット検出に使用（TOMLから読み込まれるが、直接参照されないため警告が出る）
     #[allow(dead_code)]
     pub(crate) format_version: u32,
