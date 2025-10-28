@@ -25,16 +25,18 @@
 //! }
 //! ```
 
+pub mod formatting;
 pub mod git_ops;
 pub mod gtd;
+pub mod handlers;
 pub mod migration;
 pub mod storage;
+pub mod validation;
 
 use anyhow::Result;
-use chrono::NaiveDate;
 
+use mcp_attr::Result as McpResult;
 use mcp_attr::server::{McpServer, mcp_server};
-use mcp_attr::{Result as McpResult, bail_public};
 use std::sync::Mutex;
 
 // Re-export for integration tests (McpServer trait already in scope above)
@@ -81,284 +83,17 @@ impl GtdServerHandler {
 
     /// Save GTD data with a default message
     #[allow(dead_code)]
-    fn save_data(&self) -> Result<()> {
+    pub(crate) fn save_data(&self) -> Result<()> {
         let data = self.data.lock().unwrap();
         self.storage.save(&data)?;
         Ok(())
     }
 
     /// Save GTD data with a custom commit message
-    fn save_data_with_message(&self, message: &str) -> Result<()> {
+    pub(crate) fn save_data_with_message(&self, message: &str) -> Result<()> {
         let data = self.data.lock().unwrap();
         self.storage.save_with_message(&data, message)?;
         Ok(())
-    }
-
-    /// Normalize task ID by returning it as-is (no transformation)
-    ///
-    /// This helper function previously added '#' prefix for backwards compatibility,
-    /// but now task IDs are arbitrary strings chosen by the MCP client.
-    ///
-    /// # Arguments
-    /// * `task_id` - The task ID (e.g., "task-1", "meeting-prep")
-    ///
-    /// # Returns
-    /// The task ID unchanged
-    ///
-    /// # Examples
-    /// ```
-    /// # use gtd_mcp::GtdServerHandler;
-    /// // normalize_task_id("task-1") -> "task-1"
-    /// // normalize_task_id("meeting-prep") -> "meeting-prep"
-    /// ```
-    #[allow(dead_code)]
-    fn normalize_task_id(task_id: &str) -> String {
-        task_id.trim().to_string()
-    }
-
-    /// Format an error message for invalid project reference with available projects list
-    ///
-    /// # Arguments
-    /// * `project_id` - The invalid project ID that was provided
-    /// * `data` - Reference to GtdData to get available projects
-    ///
-    /// # Returns
-    /// A formatted error message including the list of available projects
-    fn format_invalid_project_error(project_id: &str, data: &GtdData) -> String {
-        let projects = data.projects();
-        if projects.is_empty() {
-            format!(
-                "Project '{}' does not exist. No projects have been created yet. Create a project first using inbox() with status='project'.",
-                project_id
-            )
-        } else {
-            let project_list: Vec<String> = projects.keys().cloned().collect();
-            format!(
-                "Project '{}' does not exist.\nAvailable projects: {}",
-                project_id,
-                project_list.join(", ")
-            )
-        }
-    }
-
-    /// Format an error message for invalid context reference with available contexts list
-    ///
-    /// # Arguments
-    /// * `context_name` - The invalid context name that was provided
-    /// * `data` - Reference to GtdData to get available contexts
-    ///
-    /// # Returns
-    /// A formatted error message including the list of available contexts
-    fn format_invalid_context_error(context_name: &str, data: &GtdData) -> String {
-        let contexts = data.contexts();
-        if contexts.is_empty() {
-            format!(
-                "Context '{}' does not exist. No contexts have been created yet. Create a context first using inbox() with status='context'.",
-                context_name
-            )
-        } else {
-            let context_list: Vec<String> = contexts.keys().cloned().collect();
-            format!(
-                "Context '{}' does not exist.\nAvailable contexts: {}",
-                context_name,
-                context_list.join(", ")
-            )
-        }
-    }
-
-    /// Extract ID from response message
-    ///
-    /// Helper function for tests to extract ID from response messages.
-    /// Response format: "Item created with ID: <id> (type: task)"
-    ///
-    /// # Arguments
-    /// * `response` - The response message from inbox() or similar operations
-    ///
-    /// # Returns
-    /// The extracted ID
-    #[cfg(test)]
-    fn extract_id_from_response(response: &str) -> String {
-        // Parse "Item created with ID: <id> (type: ...)"
-        if let Some(start) = response.find("ID: ") {
-            let id_part = &response[start + 4..];
-            if let Some(end) = id_part.find(" (") {
-                return id_part[..end].trim().to_string();
-            }
-        }
-        // Fallback: try to get last whitespace-separated token without parentheses
-        response
-            .split_whitespace()
-            .last()
-            .unwrap_or("")
-            .trim_end_matches(')')
-            .to_string()
-    }
-
-    // ============================================================================
-    // List Function Helper Methods
-    // ============================================================================
-
-    /// Parse and validate status filter parameter
-    ///
-    /// # Arguments
-    /// * `status_str` - Status string to parse
-    ///
-    /// # Returns
-    /// Result containing parsed NotaStatus or error
-    fn parse_status_filter(status_str: &str) -> McpResult<NotaStatus> {
-        status_str.parse::<NotaStatus>().map_err(|_| {
-            mcp_attr::Error::new(mcp_attr::ErrorCode::INVALID_PARAMS).with_message(
-                format!(
-                    "Invalid status '{}'. Valid statuses: inbox, next_action, waiting_for, later, calendar, someday, done, reference, trash, project, context",
-                    status_str
-                ),
-                true,
-            )
-        })
-    }
-
-    /// Parse and validate date filter parameter
-    ///
-    /// # Arguments
-    /// * `date_str` - Date string in YYYY-MM-DD format
-    ///
-    /// # Returns
-    /// Result containing parsed NaiveDate or error
-    fn parse_date_filter(date_str: &str) -> McpResult<NaiveDate> {
-        NaiveDate::parse_from_str(date_str, "%Y-%m-%d").map_err(|_| {
-            mcp_attr::Error::new(mcp_attr::ErrorCode::INVALID_PARAMS).with_message(
-                format!(
-                    "Invalid date format '{}'. Use YYYY-MM-DD (e.g., '2025-03-15')",
-                    date_str
-                ),
-                true,
-            )
-        })
-    }
-
-    /// Apply date filtering to notas (only affects calendar status items)
-    ///
-    /// # Arguments
-    /// * `notas` - Mutable slice of notas to filter
-    /// * `filter_date` - Date to filter by
-    ///
-    /// # Description
-    /// Filters calendar status items to only show those with start_date <= filter_date.
-    /// Non-calendar items are not affected by date filtering.
-    fn apply_date_filter(notas: &mut Vec<Nota>, filter_date: NaiveDate) {
-        notas.retain(|nota| {
-            // Only apply date filtering to calendar status tasks
-            if nota.status == NotaStatus::calendar {
-                // Keep tasks where start_date is not set OR start_date <= filter_date
-                // This hides tasks scheduled for future dates
-                nota.start_date
-                    .is_none_or(|task_date| task_date <= filter_date)
-            } else {
-                // For non-calendar tasks, keep all
-                true
-            }
-        });
-    }
-
-    /// Apply keyword filtering (case-insensitive search in id, title, and notes)
-    ///
-    /// # Arguments
-    /// * `notas` - Mutable slice of notas to filter
-    /// * `keyword` - Keyword to search for (case-insensitive)
-    fn apply_keyword_filter(notas: &mut Vec<Nota>, keyword: &str) {
-        let keyword_lower = keyword.to_lowercase();
-        notas.retain(|nota| {
-            // Search in id
-            let id_matches = nota.id.to_lowercase().contains(&keyword_lower);
-
-            // Search in title
-            let title_matches = nota.title.to_lowercase().contains(&keyword_lower);
-
-            // Search in notes if present
-            let notes_matches = nota
-                .notes
-                .as_ref()
-                .map(|n| n.to_lowercase().contains(&keyword_lower))
-                .unwrap_or(false);
-
-            id_matches || title_matches || notes_matches
-        });
-    }
-
-    /// Apply project filtering
-    ///
-    /// # Arguments
-    /// * `notas` - Mutable slice of notas to filter
-    /// * `project_id` - Project ID to filter by
-    fn apply_project_filter(notas: &mut Vec<Nota>, project_id: &str) {
-        notas.retain(|nota| {
-            nota.project
-                .as_ref()
-                .map(|p| p == project_id)
-                .unwrap_or(false)
-        });
-    }
-
-    /// Apply context filtering
-    ///
-    /// # Arguments
-    /// * `notas` - Mutable slice of notas to filter
-    /// * `context_name` - Context name to filter by
-    fn apply_context_filter(notas: &mut Vec<Nota>, context_name: &str) {
-        notas.retain(|nota| {
-            nota.context
-                .as_ref()
-                .map(|c| c == context_name)
-                .unwrap_or(false)
-        });
-    }
-
-    /// Format notas into a display string
-    ///
-    /// # Arguments
-    /// * `notas` - Vector of notas to format
-    /// * `exclude_notes` - Whether to exclude notes from output
-    ///
-    /// # Returns
-    /// Formatted string representation of the notas
-    fn format_notas(notas: Vec<Nota>, exclude_notes: bool) -> String {
-        if notas.is_empty() {
-            return "No items found".to_string();
-        }
-
-        let mut result = format!("Found {} item(s):\n\n", notas.len());
-        for nota in notas {
-            let nota_type = if nota.is_context() {
-                "context"
-            } else if nota.is_project() {
-                "project"
-            } else {
-                "task"
-            };
-
-            result.push_str(&format!(
-                "- [{}] {} (status: {:?}, type: {})\n",
-                nota.id, nota.title, nota.status, nota_type
-            ));
-
-            if let Some(ref proj) = nota.project {
-                result.push_str(&format!("  Project: {}\n", proj));
-            }
-            if let Some(ref ctx) = nota.context {
-                result.push_str(&format!("  Context: {}\n", ctx));
-            }
-            if !exclude_notes && let Some(ref n) = nota.notes {
-                result.push_str(&format!("  Notes: {}\n", n));
-            }
-            if let Some(ref date) = nota.start_date {
-                result.push_str(&format!("  Start date: {}\n", date));
-            }
-            // Display timestamps
-            result.push_str(&format!("  Created: {}\n", nota.created_at));
-            result.push_str(&format!("  Updated: {}\n", nota.updated_at));
-        }
-
-        result
     }
 }
 
@@ -384,27 +119,7 @@ impl McpServer for GtdServerHandler {
     /// **Safety**: Checks references to prevent broken links.
     #[tool]
     async fn empty_trash(&self) -> McpResult<String> {
-        let mut data = self.data.lock().unwrap();
-
-        // Count and remove all trash notas
-        let count = data
-            .notas
-            .iter()
-            .filter(|n| n.status == NotaStatus::trash)
-            .count();
-        data.notas.retain(|n| n.status != NotaStatus::trash);
-
-        // Update nota_map
-        data.nota_map
-            .retain(|_, status| *status != NotaStatus::trash);
-
-        drop(data);
-
-        if let Err(e) = self.save_data_with_message("Empty trash") {
-            bail_public!(_, "Failed to save: {}", e);
-        }
-
-        Ok(format!("Deleted {} task(s) from trash", count))
+        self.handle_empty_trash().await
     }
 
     /// **Capture**: Quickly capture anything needing attention. First GTD step - all items start here.
@@ -443,161 +158,18 @@ impl McpServer for GtdServerHandler {
         /// - yearly: month-day pairs (e.g., "1-1,12-25" for Jan 1 and Dec 25)
         recurrence_config: Option<String>,
     ) -> McpResult<String> {
-        let mut data = self.data.lock().unwrap();
-
-        // Check for duplicate ID across all notas
-        if data.nota_map.contains_key(&id) {
-            let existing_status = data.nota_map[&id].clone();
-            drop(data);
-            bail_public!(
-                _,
-                "Duplicate ID error: ID '{}' already exists (status: {:?}). Each item must have a unique ID. Please choose a different ID.",
-                id,
-                existing_status
-            );
-        }
-
-        // Parse status
-        let nota_status: NotaStatus = match status.parse() {
-            Ok(s) => s,
-            Err(_) => {
-                drop(data);
-                bail_public!(
-                    _,
-                    "Invalid status '{}'. Valid statuses: inbox, next_action, waiting_for, later, calendar, someday, done, reference, trash, project, context",
-                    status
-                );
-            }
-        };
-
-        // Validate calendar status has start_date
-        if nota_status == NotaStatus::calendar && start_date.is_none() {
-            drop(data);
-            bail_public!(
-                _,
-                "Calendar status validation failed: status=calendar requires start_date parameter. Please provide a date in YYYY-MM-DD format."
-            );
-        }
-
-        // Parse start_date if provided
-        let parsed_start_date = if let Some(ref date_str) = start_date {
-            match NaiveDate::parse_from_str(date_str, "%Y-%m-%d") {
-                Ok(d) => Some(d),
-                Err(_) => {
-                    drop(data);
-                    bail_public!(
-                        _,
-                        "Invalid date format '{}'. Use YYYY-MM-DD (e.g., '2025-03-15')",
-                        date_str
-                    );
-                }
-            }
-        } else {
-            None
-        };
-
-        // Validate project reference if provided
-        if let Some(ref proj_id) = project
-            && data.find_project_by_id(proj_id).is_none()
-        {
-            let error_msg = Self::format_invalid_project_error(proj_id, &data);
-            drop(data);
-            bail_public!(_, "{}", error_msg);
-        }
-
-        // Validate context reference if provided
-        if let Some(ref ctx_name) = context
-            && data.find_context_by_name(ctx_name).is_none()
-        {
-            let error_msg = Self::format_invalid_context_error(ctx_name, &data);
-            drop(data);
-            bail_public!(_, "{}", error_msg);
-        }
-
-        // Parse recurrence pattern if provided
-        let recurrence_pattern = if let Some(ref recurrence_str) = recurrence {
-            match recurrence_str.as_str() {
-                "daily" => Some(gtd::RecurrencePattern::daily),
-                "weekly" => Some(gtd::RecurrencePattern::weekly),
-                "monthly" => Some(gtd::RecurrencePattern::monthly),
-                "yearly" => Some(gtd::RecurrencePattern::yearly),
-                _ => {
-                    drop(data);
-                    bail_public!(
-                        _,
-                        "Invalid recurrence pattern '{}'. Valid patterns: daily, weekly, monthly, yearly",
-                        recurrence_str
-                    );
-                }
-            }
-        } else {
-            None
-        };
-
-        // Validate recurrence configuration if recurrence pattern is provided
-        if let Some(ref pattern) = recurrence_pattern
-            && recurrence_config.is_none()
-        {
-            // Only weekly, monthly, and yearly require config
-            match pattern {
-                gtd::RecurrencePattern::weekly => {
-                    drop(data);
-                    bail_public!(
-                        _,
-                        "Recurrence pattern 'weekly' requires recurrence_config with weekday names (e.g., \"Monday,Wednesday,Friday\")"
-                    );
-                }
-                gtd::RecurrencePattern::monthly => {
-                    drop(data);
-                    bail_public!(
-                        _,
-                        "Recurrence pattern 'monthly' requires recurrence_config with day numbers (e.g., \"1,15,25\")"
-                    );
-                }
-                gtd::RecurrencePattern::yearly => {
-                    drop(data);
-                    bail_public!(
-                        _,
-                        "Recurrence pattern 'yearly' requires recurrence_config with month-day pairs (e.g., \"1-1,12-25\")"
-                    );
-                }
-                gtd::RecurrencePattern::daily => {} // Daily doesn't need config
-            }
-        }
-
-        let today = gtd::local_date_today();
-        let nota = gtd::Nota {
-            id: id.clone(),
-            title: title.clone(),
-            status: nota_status.clone(),
+        self.handle_inbox(
+            id,
+            title,
+            status,
             project,
             context,
             notes,
-            start_date: parsed_start_date,
-            created_at: today,
-            updated_at: today,
-            recurrence_pattern,
+            start_date,
+            recurrence,
             recurrence_config,
-        };
-
-        data.add(nota);
-        drop(data);
-
-        if let Err(e) = self.save_data_with_message(&format!("Add item {}", id)) {
-            bail_public!(_, "Failed to save: {}", e);
-        }
-
-        Ok(format!(
-            "Item created with ID: {} (type: {})",
-            id,
-            if nota_status == NotaStatus::context {
-                "context"
-            } else if nota_status == NotaStatus::project {
-                "project"
-            } else {
-                "task"
-            }
-        ))
+        )
+        .await
     }
 
     /// **Review**: List/filter all items. Essential for daily/weekly reviews.
@@ -619,45 +191,8 @@ impl McpServer for GtdServerHandler {
         /// Optional: Filter by context name
         context: Option<String>,
     ) -> McpResult<String> {
-        // Parse and validate status filter
-        let status_filter = if let Some(ref status_str) = status {
-            Some(Self::parse_status_filter(status_str)?)
-        } else {
-            None
-        };
-
-        // Parse and validate date filter
-        let date_filter = if let Some(ref date_str) = date {
-            Some(Self::parse_date_filter(date_str)?)
-        } else {
-            None
-        };
-
-        // Get initial list of notas filtered by status
-        let data = self.data.lock().unwrap();
-        let mut notas = data.list_all(status_filter);
-        drop(data);
-
-        // Apply additional filters in sequence
-        if let Some(filter_date) = date_filter {
-            Self::apply_date_filter(&mut notas, filter_date);
-        }
-
-        if let Some(ref keyword_filter) = keyword {
-            Self::apply_keyword_filter(&mut notas, keyword_filter);
-        }
-
-        if let Some(ref project_filter) = project {
-            Self::apply_project_filter(&mut notas, project_filter);
-        }
-
-        if let Some(ref context_filter) = context {
-            Self::apply_context_filter(&mut notas, context_filter);
-        }
-
-        // Format and return results
-        let exclude_notes_flag = exclude_notes.unwrap_or(false);
-        Ok(Self::format_notas(notas, exclude_notes_flag))
+        self.handle_list(status, date, exclude_notes, keyword, project, context)
+            .await
     }
 
     /// **Clarify**: Update item details. Add context, notes, project links after capturing.
@@ -683,115 +218,8 @@ impl McpServer for GtdServerHandler {
         /// Optional: Start date YYYY-MM-DD, ""=clear
         start_date: Option<String>,
     ) -> McpResult<String> {
-        let mut data = self.data.lock().unwrap();
-
-        // Find existing nota
-        let mut nota = match data.find_by_id(&id) {
-            Some(n) => n,
-            None => {
-                drop(data);
-                bail_public!(
-                    _,
-                    "Item not found: Item '{}' does not exist. Use list() to see available items.",
-                    id
-                );
-            }
-        };
-
-        // Update fields if provided
-        if let Some(new_title) = title {
-            nota.title = new_title;
-        }
-
-        if let Some(new_status_str) = status {
-            let new_status: NotaStatus = match new_status_str.parse() {
-                Ok(s) => s,
-                Err(_) => {
-                    drop(data);
-                    bail_public!(
-                        _,
-                        "Invalid status '{}'. Valid statuses: inbox, next_action, waiting_for, later, calendar, someday, done, reference, trash, project, context",
-                        new_status_str
-                    );
-                }
-            };
-            nota.status = new_status;
-        }
-
-        // Handle optional reference fields (empty string means clear)
-        if let Some(proj) = project {
-            nota.project = if proj.is_empty() {
-                None
-            } else {
-                // Validate project exists
-                if data.find_project_by_id(&proj).is_none() {
-                    let error_msg = Self::format_invalid_project_error(&proj, &data);
-                    drop(data);
-                    bail_public!(_, "{}", error_msg);
-                }
-                Some(proj)
-            };
-        }
-
-        if let Some(ctx) = context {
-            nota.context = if ctx.is_empty() {
-                None
-            } else {
-                // Validate context exists
-                if data.find_context_by_name(&ctx).is_none() {
-                    let error_msg = Self::format_invalid_context_error(&ctx, &data);
-                    drop(data);
-                    bail_public!(_, "{}", error_msg);
-                }
-                Some(ctx)
-            };
-        }
-
-        if let Some(n) = notes {
-            nota.notes = if n.is_empty() { None } else { Some(n) };
-        }
-
-        if let Some(date_str) = start_date {
-            nota.start_date = if date_str.is_empty() {
-                None
-            } else {
-                match NaiveDate::parse_from_str(&date_str, "%Y-%m-%d") {
-                    Ok(d) => Some(d),
-                    Err(_) => {
-                        drop(data);
-                        bail_public!(
-                            _,
-                            "Invalid date format '{}'. Use YYYY-MM-DD (e.g., '2025-03-15')",
-                            date_str
-                        );
-                    }
-                }
-            };
-        }
-
-        // Validate calendar status has start_date
-        if nota.status == NotaStatus::calendar && nota.start_date.is_none() {
-            drop(data);
-            bail_public!(
-                _,
-                "Calendar status validation failed: status=calendar requires start_date. Please provide a start_date or change to a different status."
-            );
-        }
-
-        nota.updated_at = gtd::local_date_today();
-
-        // Update the nota
-        if data.update(&id, nota).is_none() {
-            drop(data);
-            bail_public!(_, "Failed to update item '{}'", id);
-        }
-        drop(data);
-
-        if let Err(e) = self.save_data_with_message(&format!("Update item {}", id)) {
-            bail_public!(_, "Failed to save: {}", e);
-        }
-
-        Ok(format!("Item {} updated successfully", id))
+        self.handle_update(id, title, status, project, context, notes, start_date)
+            .await
     }
 
     /// **Organize/Do**: Move items through workflow stages as you process them.
@@ -808,201 +236,7 @@ impl McpServer for GtdServerHandler {
         /// Optional: Start date YYYY-MM-DD (required for calendar)
         start_date: Option<String>,
     ) -> McpResult<String> {
-        // Validate we have at least one ID
-        if ids.is_empty() {
-            bail_public!(_, "No IDs provided. Please specify at least one item ID.");
-        }
-
-        let mut data = self.data.lock().unwrap();
-
-        // Parse new status once
-        let nota_status: NotaStatus = match new_status.parse() {
-            Ok(s) => s,
-            Err(_) => {
-                drop(data);
-                bail_public!(
-                    _,
-                    "Invalid status '{}'. Valid statuses: inbox, next_action, waiting_for, later, calendar, someday, done, reference, trash, project, context",
-                    new_status
-                );
-            }
-        };
-
-        let is_trash = nota_status == NotaStatus::trash;
-
-        // Parse start_date once if provided
-        let parsed_start_date = if let Some(date_str) = &start_date {
-            match NaiveDate::parse_from_str(date_str, "%Y-%m-%d") {
-                Ok(d) => Some(d),
-                Err(_) => {
-                    drop(data);
-                    bail_public!(
-                        _,
-                        "Invalid date format '{}'. Use YYYY-MM-DD (e.g., '2025-03-15')",
-                        date_str
-                    );
-                }
-            }
-        } else {
-            None
-        };
-
-        // Track successes and failures
-        let mut successes = Vec::new();
-        let mut failures = Vec::new();
-
-        // Normalize all IDs upfront for efficiency
-        let normalized_ids: Vec<String> =
-            ids.iter().map(|id| Self::normalize_task_id(id)).collect();
-
-        // Process each ID
-        for normalized_id in normalized_ids {
-            // Find existing nota
-            let mut nota = match data.find_by_id(&normalized_id) {
-                Some(n) => n,
-                None => {
-                    failures.push(format!("{}: not found", normalized_id));
-                    continue;
-                }
-            };
-
-            // Store old status for reporting
-            let old_status = nota.status.clone();
-
-            // Validate calendar status has start_date
-            if nota_status == NotaStatus::calendar
-                && parsed_start_date.is_none()
-                && nota.start_date.is_none()
-            {
-                failures.push(format!(
-                    "{}: calendar status requires a start_date",
-                    normalized_id
-                ));
-                continue;
-            }
-
-            // Check if moving to trash and if nota is still referenced
-            if is_trash && data.is_referenced(&normalized_id) {
-                failures.push(format!(
-                    "{}: still referenced by other items",
-                    normalized_id
-                ));
-                continue;
-            }
-
-            // Update status
-            nota.status = nota_status.clone();
-
-            // Update start_date if provided
-            if let Some(date) = parsed_start_date {
-                nota.start_date = Some(date);
-            }
-
-            nota.updated_at = gtd::local_date_today();
-
-            // Handle recurrence if moving to done status
-            let mut next_occurrence_info: Option<String> = None;
-            if nota_status == NotaStatus::done && nota.is_recurring() {
-                // Calculate next occurrence date
-                let from_date = nota.start_date.unwrap_or_else(gtd::local_date_today);
-                if let Some(next_date) = nota.calculate_next_occurrence(from_date) {
-                    // Create a new task for the next occurrence
-                    let mut next_nota = nota.clone();
-                    next_nota.id = format!("{}-{}", normalized_id, next_date.format("%Y%m%d"));
-                    next_nota.start_date = Some(next_date);
-                    next_nota.status = old_status.clone(); // Use the original status, not done
-                    next_nota.created_at = gtd::local_date_today();
-                    next_nota.updated_at = gtd::local_date_today();
-
-                    // Check if next occurrence ID already exists
-                    if !data.nota_map.contains_key(&next_nota.id) {
-                        data.add(next_nota.clone());
-                        next_occurrence_info = Some(format!(
-                            "Next occurrence created: {} on {}",
-                            next_nota.id, next_date
-                        ));
-                    }
-                }
-            }
-
-            // Update the nota
-            if data.update(&normalized_id, nota).is_none() {
-                failures.push(format!("{}: failed to update", normalized_id));
-                continue;
-            }
-
-            successes.push((normalized_id, old_status, next_occurrence_info));
-        }
-
-        drop(data);
-
-        // Save data if any changes were made
-        if !successes.is_empty() {
-            let ids_str = if successes.len() == 1 {
-                successes[0].0.clone()
-            } else {
-                format!("{} items", successes.len())
-            };
-
-            if let Err(e) =
-                self.save_data_with_message(&format!("Change {} status to {}", ids_str, new_status))
-            {
-                bail_public!(_, "Failed to save: {}", e);
-            }
-        }
-
-        // Build response message
-        let mut response = String::new();
-
-        if !successes.is_empty() {
-            let action = if is_trash {
-                "deleted"
-            } else {
-                "changed status"
-            };
-            response.push_str(&format!(
-                "Successfully {} for {} item{}:\n",
-                action,
-                successes.len(),
-                if successes.len() == 1 { "" } else { "s" }
-            ));
-            for (id, old_status, next_info) in &successes {
-                if is_trash {
-                    response.push_str(&format!("- {} (moved to trash)\n", id));
-                } else {
-                    response.push_str(&format!(
-                        "- {}: {} → {}\n",
-                        id,
-                        format!("{:?}", old_status).to_lowercase(),
-                        new_status
-                    ));
-                    if let Some(info) = next_info {
-                        response.push_str(&format!("  {}\n", info));
-                    }
-                }
-            }
-        }
-
-        if !failures.is_empty() {
-            if !response.is_empty() {
-                response.push('\n');
-            }
-            response.push_str(&format!(
-                "Failed to change status for {} item{}:\n",
-                failures.len(),
-                if failures.len() == 1 { "" } else { "s" }
-            ));
-            for failure in &failures {
-                response.push_str(&format!("- {}\n", failure));
-            }
-        }
-
-        // If all failed, return error
-        if successes.is_empty() {
-            bail_public!(_, "{}", response.trim());
-        }
-
-        Ok(response.trim().to_string())
+        self.handle_change_status(ids, new_status, start_date).await
     }
 }
 #[cfg(test)]
@@ -1011,6 +245,7 @@ mod tests {
     use crate::gtd::{Nota, local_date_today};
     use crate::migration::Task;
     use chrono::NaiveDate;
+    use mcp_attr::bail_public;
     use tempfile::NamedTempFile;
 
     fn get_test_handler() -> (GtdServerHandler, NamedTempFile) {
@@ -1064,26 +299,23 @@ mod tests {
     #[test]
     fn test_normalize_task_id() {
         // Test with arbitrary task IDs - normalize should just trim
-        assert_eq!(GtdServerHandler::normalize_task_id("task-1"), "task-1");
+        assert_eq!(validation::normalize_task_id("task-1"), "task-1");
         assert_eq!(
-            GtdServerHandler::normalize_task_id("meeting-prep"),
+            validation::normalize_task_id("meeting-prep"),
             "meeting-prep"
         );
-        assert_eq!(
-            GtdServerHandler::normalize_task_id("call-sarah"),
-            "call-sarah"
-        );
+        assert_eq!(validation::normalize_task_id("call-sarah"), "call-sarah");
 
         // Test with whitespace - should be trimmed
-        assert_eq!(GtdServerHandler::normalize_task_id(" task-1 "), "task-1");
+        assert_eq!(validation::normalize_task_id(" task-1 "), "task-1");
         assert_eq!(
-            GtdServerHandler::normalize_task_id("  meeting-prep  "),
+            validation::normalize_task_id("  meeting-prep  "),
             "meeting-prep"
         );
 
         // Old-style IDs with # are also valid
-        assert_eq!(GtdServerHandler::normalize_task_id("#1"), "#1");
-        assert_eq!(GtdServerHandler::normalize_task_id(" #42 "), "#42");
+        assert_eq!(validation::normalize_task_id("#1"), "#1");
+        assert_eq!(validation::normalize_task_id(" #42 "), "#42");
     }
 
     #[tokio::test]
@@ -1105,7 +337,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
+        let task_id = validation::extract_id_from_response(&result.unwrap());
 
         // Test moving to next_action
         let result = handler
@@ -1166,7 +398,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
+        let task_id = validation::extract_id_from_response(&result.unwrap());
 
         // Test moving to calendar with date
         let result = handler
@@ -1207,7 +439,7 @@ mod tests {
                 )
                 .await;
             assert!(result.is_ok());
-            let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
+            let task_id = validation::extract_id_from_response(&result.unwrap());
             task_ids.push(task_id);
         }
 
@@ -1249,7 +481,7 @@ mod tests {
                 )
                 .await;
             assert!(result.is_ok());
-            let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
+            let task_id = validation::extract_id_from_response(&result.unwrap());
             task_ids.push(task_id);
         }
 
@@ -1373,7 +605,7 @@ mod tests {
                 )
                 .await;
             assert!(result.is_ok());
-            let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
+            let task_id = validation::extract_id_from_response(&result.unwrap());
             task_ids.push(task_id);
         }
 
@@ -1414,7 +646,7 @@ mod tests {
             )
             .await;
         assert!(result1.is_ok());
-        let task_id1 = GtdServerHandler::extract_id_from_response(&result1.unwrap());
+        let task_id1 = validation::extract_id_from_response(&result1.unwrap());
 
         let result2 = handler
             .inbox(
@@ -1430,7 +662,7 @@ mod tests {
             )
             .await;
         assert!(result2.is_ok());
-        let task_id2 = GtdServerHandler::extract_id_from_response(&result2.unwrap());
+        let task_id2 = validation::extract_id_from_response(&result2.unwrap());
 
         // Change status using both IDs
         let result = handler
@@ -1616,7 +848,7 @@ mod tests {
         assert!(result.is_ok());
 
         // Extract task ID from result
-        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
+        let task_id = validation::extract_id_from_response(&result.unwrap());
 
         // Update title
         let result = handler
@@ -1657,7 +889,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
+        let task_id = validation::extract_id_from_response(&result.unwrap());
 
         // Verify initial status is inbox
         {
@@ -1703,7 +935,7 @@ mod tests {
             )
             .await;
         assert!(project_result.is_ok());
-        let project_id = GtdServerHandler::extract_id_from_response(&project_result.unwrap());
+        let project_id = validation::extract_id_from_response(&project_result.unwrap());
 
         {
             let mut data = handler.data.lock().unwrap();
@@ -1737,7 +969,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
+        let task_id = validation::extract_id_from_response(&result.unwrap());
 
         // Update project and context
         let result = handler
@@ -1779,7 +1011,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
+        let task_id = validation::extract_id_from_response(&result.unwrap());
 
         // Verify initial state
         {
@@ -1829,7 +1061,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
+        let task_id = validation::extract_id_from_response(&result.unwrap());
 
         // Try to update with invalid date
         let result = handler
@@ -1865,7 +1097,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
+        let task_id = validation::extract_id_from_response(&result.unwrap());
 
         // Try to update with non-existent project
         let result = handler
@@ -1901,7 +1133,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
+        let task_id = validation::extract_id_from_response(&result.unwrap());
 
         // Try to update with non-existent context
         let result = handler
@@ -1956,7 +1188,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
+        let task_id = validation::extract_id_from_response(&result.unwrap());
 
         // Get initial timestamps
         let (created_at, _updated_at) = {
@@ -2006,7 +1238,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let project_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
+        let project_id = validation::extract_id_from_response(&result.unwrap());
 
         // Update name
         let result = handler
@@ -2047,7 +1279,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let project_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
+        let project_id = validation::extract_id_from_response(&result.unwrap());
 
         // Add description
         let result = handler
@@ -2108,7 +1340,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let project_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
+        let project_id = validation::extract_id_from_response(&result.unwrap());
 
         // Try to update with invalid status
         let result = handler
@@ -2330,7 +1562,7 @@ mod tests {
             )
             .await;
         assert!(project_result.is_ok());
-        let project_id = GtdServerHandler::extract_id_from_response(&project_result.unwrap());
+        let project_id = validation::extract_id_from_response(&project_result.unwrap());
 
         // Add a context
         {
@@ -2365,7 +1597,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
+        let task_id = validation::extract_id_from_response(&result.unwrap());
 
         // Update multiple fields at once
         let result = handler
@@ -2422,7 +1654,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
+        let task_id = validation::extract_id_from_response(&result.unwrap());
 
         // Move to next_action first
         let result = handler
@@ -2473,7 +1705,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
+        let task_id = validation::extract_id_from_response(&result.unwrap());
 
         let result = handler
             .change_status(vec![task_id.clone()], "next_action".to_string(), None)
@@ -2505,7 +1737,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
+        let task_id = validation::extract_id_from_response(&result.unwrap());
 
         let result = handler
             .change_status(vec![task_id.clone()], "waiting_for".to_string(), None)
@@ -2537,7 +1769,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
+        let task_id = validation::extract_id_from_response(&result.unwrap());
 
         let result = handler
             .change_status(vec![task_id.clone()], "someday".to_string(), None)
@@ -2569,7 +1801,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
+        let task_id = validation::extract_id_from_response(&result.unwrap());
 
         let result = handler
             .change_status(vec![task_id.clone()], "later".to_string(), None)
@@ -2601,7 +1833,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
+        let task_id = validation::extract_id_from_response(&result.unwrap());
 
         let result = handler
             .change_status(vec![task_id.clone()], "done".to_string(), None)
@@ -2633,7 +1865,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
+        let task_id = validation::extract_id_from_response(&result.unwrap());
 
         let result = handler
             .change_status(vec![task_id.clone()], "trash".to_string(), None)
@@ -2666,7 +1898,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id_1 = GtdServerHandler::extract_id_from_response(&result.unwrap());
+        let task_id_1 = validation::extract_id_from_response(&result.unwrap());
 
         let result = handler
             .change_status(vec![task_id_1.clone()], "trash".to_string(), None)
@@ -2688,7 +1920,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id_2 = GtdServerHandler::extract_id_from_response(&result.unwrap());
+        let task_id_2 = validation::extract_id_from_response(&result.unwrap());
 
         let result = handler
             .change_status(vec![task_id_2.clone()], "done".to_string(), None)
@@ -2748,7 +1980,7 @@ mod tests {
                 )
                 .await;
             assert!(result.is_ok());
-            let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
+            let task_id = validation::extract_id_from_response(&result.unwrap());
             task_ids.push(task_id);
         }
 
@@ -2797,7 +2029,7 @@ mod tests {
                 )
                 .await;
             assert!(result.is_ok());
-            let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
+            let task_id = validation::extract_id_from_response(&result.unwrap());
             task_ids.push(task_id);
         }
 
@@ -2868,7 +2100,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let inbox_task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
+        let inbox_task_id = validation::extract_id_from_response(&result.unwrap());
 
         // next_actionに移動
         let result = handler
@@ -2885,7 +2117,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let next_action_task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
+        let next_action_task_id = validation::extract_id_from_response(&result.unwrap());
         handler
             .change_status(
                 vec![next_action_task_id.clone()],
@@ -2910,7 +2142,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let done_task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
+        let done_task_id = validation::extract_id_from_response(&result.unwrap());
         handler
             .change_status(vec![done_task_id.clone()], "done".to_string(), None)
             .await
@@ -2963,7 +2195,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
+        let task_id = validation::extract_id_from_response(&result.unwrap());
 
         let result = handler
             .change_status(
@@ -3005,7 +2237,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
+        let task_id = validation::extract_id_from_response(&result.unwrap());
 
         // start_dateを指定せずにcalendarに移動しようとするとエラー
         let result = handler
@@ -3033,7 +2265,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
+        let task_id = validation::extract_id_from_response(&result.unwrap());
 
         // start_dateパラメータなしでcalendarに移動（既存のstart_dateを使用）
         let result = handler
@@ -3070,7 +2302,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
+        let task_id = validation::extract_id_from_response(&result.unwrap());
 
         // 新しいstart_dateを指定してcalendarに移動（既存のstart_dateを上書き）
         let result = handler
@@ -3109,7 +2341,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
+        let task_id = validation::extract_id_from_response(&result.unwrap());
 
         // 無効な日付形式
         let result = handler
@@ -3140,7 +2372,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
+        let task_id = validation::extract_id_from_response(&result.unwrap());
 
         let created_at = {
             let data = handler.data.lock().unwrap();
@@ -3632,7 +2864,7 @@ mod tests {
             .unwrap();
 
         // Extract task ID from the response
-        let task_id = GtdServerHandler::extract_id_from_response(&response);
+        let task_id = validation::extract_id_from_response(&response);
 
         // Remove the context reference from the task
         handler
@@ -3875,7 +3107,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let project_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
+        let project_id = validation::extract_id_from_response(&result.unwrap());
 
         // Update project with context
         let result = handler
@@ -3931,7 +3163,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let project_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
+        let project_id = validation::extract_id_from_response(&result.unwrap());
 
         // Remove context using empty string
         let result = handler
@@ -4662,7 +3894,7 @@ mod tests {
                 )
                 .await;
             assert!(result.is_ok());
-            let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
+            let task_id = validation::extract_id_from_response(&result.unwrap());
             // Move to next_action first
             let _ = handler
                 .change_status(vec![task_id.clone()], "next_action".to_string(), None)
@@ -4715,7 +3947,7 @@ mod tests {
                 )
                 .await;
             assert!(result.is_ok());
-            let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
+            let task_id = validation::extract_id_from_response(&result.unwrap());
             task_ids.push(task_id);
         }
 
@@ -4764,7 +3996,7 @@ mod tests {
                 )
                 .await;
             assert!(result.is_ok());
-            let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
+            let task_id = validation::extract_id_from_response(&result.unwrap());
             task_ids.push(task_id);
         }
 
@@ -4813,7 +4045,7 @@ mod tests {
                 )
                 .await;
             assert!(result.is_ok());
-            let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
+            let task_id = validation::extract_id_from_response(&result.unwrap());
             task_ids.push(task_id);
         }
 
@@ -4862,7 +4094,7 @@ mod tests {
                 )
                 .await;
             assert!(result.is_ok());
-            let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
+            let task_id = validation::extract_id_from_response(&result.unwrap());
             task_ids.push(task_id);
         }
 
@@ -4911,7 +4143,7 @@ mod tests {
                 )
                 .await;
             assert!(result.is_ok());
-            let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
+            let task_id = validation::extract_id_from_response(&result.unwrap());
             task_ids.push(task_id);
         }
 
@@ -4960,7 +4192,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
+        let task_id = validation::extract_id_from_response(&result.unwrap());
 
         // 無効なステータス "in_progress" でエラーをテスト（問題として報告されたもの）
         let result = handler
@@ -4998,7 +4230,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
+        let task_id = validation::extract_id_from_response(&result.unwrap());
 
         // 様々な無効なステータスをテスト
         let invalid_statuses = vec![
@@ -5104,7 +4336,7 @@ mod tests {
                 )
                 .await;
             assert!(result.is_ok());
-            let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
+            let task_id = validation::extract_id_from_response(&result.unwrap());
             task_ids.push(task_id);
         }
 
@@ -5160,7 +4392,7 @@ mod tests {
                 )
                 .await;
             assert!(result.is_ok());
-            let task_id = GtdServerHandler::extract_id_from_response(&result.unwrap());
+            let task_id = validation::extract_id_from_response(&result.unwrap());
             task_ids.push(task_id);
         }
 
@@ -5211,7 +4443,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        task_ids.push(GtdServerHandler::extract_id_from_response(&result.unwrap()));
+        task_ids.push(validation::extract_id_from_response(&result.unwrap()));
 
         // start_dateを持たないタスク
         let result = handler
@@ -5228,7 +4460,7 @@ mod tests {
             )
             .await;
         assert!(result.is_ok());
-        task_ids.push(GtdServerHandler::extract_id_from_response(&result.unwrap()));
+        task_ids.push(validation::extract_id_from_response(&result.unwrap()));
 
         // start_dateを指定せずに移動を試みる（部分的な失敗）
         // First task has date, should succeed
