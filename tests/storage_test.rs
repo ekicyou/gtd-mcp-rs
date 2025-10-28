@@ -3,10 +3,10 @@
 //! These tests verify the file-based TOML storage functionality,
 //! including save/load operations and data integrity.
 
-use gtd_mcp::{GtdData, NotaStatus, Storage};
+use chrono::NaiveDate;
 use gtd_mcp::gtd::local_date_today;
 use gtd_mcp::migration::{Context, Project, Task};
-use chrono::NaiveDate;
+use gtd_mcp::{GtdData, NotaStatus, Storage};
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};

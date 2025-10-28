@@ -3,8 +3,8 @@
 //! These tests verify the Git integration functionality,
 //! including commit and sync operations.
 
-use gtd_mcp::GitOps;
 use git2::{Repository, Signature, Time};
+use gtd_mcp::GitOps;
 use std::fs;
 use std::path::Path;
 use tempfile::TempDir;

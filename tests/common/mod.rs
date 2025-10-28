@@ -1,10 +1,10 @@
 //! Common test utilities for integration tests
 
-use gtd_mcp::{GtdServerHandler, Nota, NotaStatus};
+use chrono::NaiveDate;
 use gtd_mcp::gtd::local_date_today;
 use gtd_mcp::migration::Task;
+use gtd_mcp::{GtdServerHandler, Nota, NotaStatus};
 use tempfile::NamedTempFile;
-use chrono::NaiveDate;
 
 /// Create a test handler with temporary storage
 pub fn get_test_handler() -> (GtdServerHandler, NamedTempFile) {
