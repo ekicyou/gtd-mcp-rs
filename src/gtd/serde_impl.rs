@@ -7,9 +7,9 @@
 use super::gtd_data::GtdData;
 use super::nota::{Nota, NotaStatus};
 use crate::migration::{
-    normalize_context_line_endings, normalize_project_line_endings, normalize_task_line_endings,
-    populate_context_names, populate_project_ids, GtdDataMigrationHelper,
-    migrate_projects_to_latest,
+    GtdDataMigrationHelper, migrate_projects_to_latest, normalize_context_line_endings,
+    normalize_project_line_endings, normalize_task_line_endings, populate_context_names,
+    populate_project_ids,
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashMap;
