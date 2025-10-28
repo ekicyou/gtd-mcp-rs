@@ -18,7 +18,6 @@ gtd-mcp is an MCP server that implements the Getting Things Done (GTD) workflow.
 - ✅ Batch operations for efficient task management
 - ✅ TOML-based storage (human-readable, Git-friendly)
 - ✅ Optional Git synchronization
-- ✅ Built-in workflow prompts for LLM guidance
 
 ## Quick Start
 
@@ -88,7 +87,7 @@ Once configured, you can ask your LLM assistant to help you manage tasks using t
 - "Change status of call-sarah to done"
 - "Create a project called website-redesign"
 - "What's in my inbox?"
-- "Help me process my inbox" (uses built-in GTD workflow prompt)
+- "Help me process my inbox"
 
 ## MCP Tools
 
@@ -150,16 +149,6 @@ The system supports the following status categories according to GTD methodology
 - No parameters required
 - Irreversible operation - run weekly as part of GTD review
 - Automatically checks for references to prevent broken links
-
-## MCP Prompts
-
-The server includes built-in prompts to guide LLM assistants through GTD workflows:
-
-- **gtd_overview** - Complete overview of the GTD system
-- **process_inbox** - Step-by-step inbox processing guide
-- **weekly_review** - GTD weekly review workflow
-- **next_actions** - Guide for identifying and managing next actions
-- **add_task_guide** - Best practices for creating tasks
 
 ## Data Storage
 
