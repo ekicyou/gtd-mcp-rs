@@ -204,6 +204,7 @@ git remote add origin https://github.com/yourusername/gtd-data.git
 
 ## Documentation
 
+- **[FEATURES_JA.md](FEATURES_JA.md)** - Detailed technical specification (Japanese)
 - **[IMPLEMENTATION.md](doc/IMPLEMENTATION.md)** - Technical implementation details and architecture
 - **[GTD_ASSESSMENT.md](doc/GTD_ASSESSMENT.md)** - Feature assessment and enhancement roadmap
 - **[RELEASE.md](RELEASE.md)** - Release notes for all versions (newest first)
