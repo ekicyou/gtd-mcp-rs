@@ -164,8 +164,16 @@ cargo test
 
 ## テスト規約
 
+**重要**: /src/配下にテストコードを含めてはならない。全てのテストは/tests/ディレクトリに配置すること。
+
 ### テストの構成
-- 各ファイルの最後に`#[cfg(test)]`モジュール内にテストを配置
+- 統合テスト（integration tests）: `/tests/`ディレクトリに配置
+  - 例: `tests/integration_test.rs` - MCP server handlerの統合テスト
+  - 例: `tests/storage_test.rs` - Storage APIのテスト
+  - 例: `tests/migration_test.rs` - Migration関数のテスト
+  - 例: `tests/git_ops_test.rs` - Git操作のテスト
+- ユニットテスト（unit tests）: プライベートフィールドやメソッドにアクセスする必要がある場合のみ、各ファイルの最後に`#[cfg(test)]`モジュール内に配置
+  - 例: `src/gtd/gtd_data.rs` - GtdDataの内部実装テスト（nota_mapなどのprivateフィールドにアクセス）
 - 日本語コメントでテストの目的を説明（例：`// 既存ファイルの上書きテスト`）
 - テスト名は説明的に：`test_storage_save_and_load_comprehensive`
 

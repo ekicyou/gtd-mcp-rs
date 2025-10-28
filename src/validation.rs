@@ -143,3 +143,4 @@ pub fn extract_id_from_response(response: &str) -> String {
         .trim_end_matches(')')
         .to_string()
 }
+
