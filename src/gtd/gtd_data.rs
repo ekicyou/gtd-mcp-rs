@@ -1,4 +1,4 @@
-use super::nota::{Nota, NotaStatus, local_date_today};
+use crate::gtd::nota::{Nota, NotaStatus, local_date_today};
 use crate::migration::{Context, Project, Task};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashMap;

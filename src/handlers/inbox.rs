@@ -7,16 +7,7 @@ use chrono::NaiveDate;
 use mcp_attr::{Result as McpResult, bail_public};
 
 impl GtdServerHandler {
-    /// **Capture**: Quickly capture anything needing attention. First GTD step - all items start here.
-    /// **When**: Something crosses your mind? Capture immediately without thinking.
-    /// **Next**: Use list(status="inbox") to review, then update/change_status to organize.
-    ///
-    /// **ID Naming Guidelines**:
-    /// - Use kebab-case (lowercase with hyphens): "fix-io-button", "review-q3-sales"
-    /// - Start with verb when possible: "update-", "fix-", "create-", "review-"
-    /// - Keep concise but meaningful (3-5 words max)
-    /// - Use project prefix for clarity: "eci-fix-button", "fft-level-cloud"
-    /// - IDs are immutable - choose carefully as they cannot be changed later
+    /// Handles inbox item creation - validates ID, parses status, and creates new nota.
     #[allow(clippy::too_many_arguments)]
     pub async fn handle_inbox(
         &self,

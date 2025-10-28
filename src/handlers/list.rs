@@ -6,9 +6,7 @@ use crate::validation;
 use mcp_attr::Result as McpResult;
 
 impl GtdServerHandler {
-    /// **Review**: List/filter all items. Essential for daily/weekly reviews.
-    /// **When**: Daily - check next_action. Weekly - review all. Use filters to focus.
-    /// **Filters**: No filter=all | status="inbox"=unprocessed | status="next_action"=ready | status="calendar"+date=today's tasks | keyword="text"=search | project="id"=by project | context="name"=by context.
+    /// Handles list/filter operations - applies filters and formats results for display.
     pub async fn handle_list(
         &self,
         status: Option<String>,

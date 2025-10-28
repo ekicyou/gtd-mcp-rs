@@ -7,10 +7,7 @@ use chrono::NaiveDate;
 use mcp_attr::{Result as McpResult, bail_public};
 
 impl GtdServerHandler {
-    /// **Clarify**: Update item details. Add context, notes, project links after capturing.
-    /// **When**: After inbox capture, clarify what it is, why it matters, what's needed.
-    /// **Tip**: Use ""(empty string) to clear optional fields.
-    /// **Note**: Item ID cannot be changed - IDs are immutable. To "rename", create new item and delete old one.
+    /// Updates item fields if provided. Returns error if item not found or status invalid.
     #[allow(clippy::too_many_arguments)]
     pub async fn handle_update(
         &self,
