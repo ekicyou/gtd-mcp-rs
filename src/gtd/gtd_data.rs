@@ -63,7 +63,6 @@ impl GtdData {
     }
 
     /// Count total number of task notas across all task statuses
-    #[allow(dead_code)]
     pub fn task_count(&self) -> usize {
         self.notas.iter().filter(|n| n.is_task()).count()
     }
@@ -75,7 +74,6 @@ impl GtdData {
     ///
     /// # Returns
     /// An optional reference to the nota if found
-    #[allow(dead_code)]
     fn find_nota_by_id(&self, id: &str) -> Option<&Nota> {
         self.notas.iter().find(|n| n.id == id)
     }
@@ -98,7 +96,6 @@ impl GtdData {
     ///
     /// # Returns
     /// An optional Nota reference if found and it's a task
-    #[allow(dead_code)]
     pub fn find_task_by_id(&self, id: &str) -> Option<&Nota> {
         self.notas.iter().find(|n| n.id == id && n.is_task())
     }
@@ -136,7 +133,6 @@ impl GtdData {
     ///
     /// # Returns
     /// The removed nota if found
-    #[allow(dead_code)]
     pub fn remove_nota(&mut self, id: &str) -> Option<Nota> {
         // Find and remove nota
         if let Some(pos) = self.notas.iter().position(|n| n.id == id) {
@@ -176,7 +172,6 @@ impl GtdData {
     ///
     /// # Returns
     /// An optional reference to the nota if found and it's a project
-    #[allow(dead_code)]
     pub fn find_project_by_id(&self, id: &str) -> Option<&Nota> {
         self.notas
             .iter()
@@ -190,7 +185,6 @@ impl GtdData {
     ///
     /// # Returns
     /// An optional reference to the nota if found and it's a context
-    #[allow(dead_code)]
     pub fn find_context_by_name(&self, name: &str) -> Option<&Nota> {
         self.notas
             .iter()
@@ -237,7 +231,6 @@ impl GtdData {
     ///
     /// # Arguments
     /// * `nota` - The nota to add
-    #[allow(dead_code)]
     pub fn add(&mut self, nota: Nota) {
         self.add_nota(nota);
     }
@@ -251,7 +244,6 @@ impl GtdData {
     ///
     /// # Returns
     /// An optional Nota if found
-    #[allow(dead_code)]
     pub fn find_by_id(&self, id: &str) -> Option<Nota> {
         self.find_nota_by_id(id).cloned()
     }
@@ -282,7 +274,6 @@ impl GtdData {
     ///
     /// # Returns
     /// Vector of Nota objects matching the filter
-    #[allow(dead_code)]
     pub fn list_all(&self, status_filter: Option<NotaStatus>) -> Vec<Nota> {
         if let Some(status) = status_filter {
             self.notas
@@ -304,7 +295,6 @@ impl GtdData {
     ///
     /// # Returns
     /// True if the ID is referenced by other notas
-    #[allow(dead_code)]
     pub fn is_referenced(&self, id: &str) -> bool {
         self.notas
             .iter()

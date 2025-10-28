@@ -87,7 +87,6 @@ impl GtdServerHandler {
     /// defined in `Storage::save()`, which is "Update GTD data".
     /// This is typically called by handler modules after modifying GTD data,
     /// following the MCP tool implementation pattern.
-    #[allow(dead_code)]
     pub fn save_data(&self) -> Result<()> {
         let data = self.data.lock().unwrap();
         self.storage.save(&data)?;
