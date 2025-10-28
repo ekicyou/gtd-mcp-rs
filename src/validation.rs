@@ -112,7 +112,6 @@ pub fn format_invalid_context_error(context_name: &str, data: &GtdData) -> Strin
 /// // normalize_task_id("task-1") -> "task-1"
 /// // normalize_task_id("meeting-prep") -> "meeting-prep"
 /// ```
-#[allow(dead_code)]
 pub fn normalize_task_id(task_id: &str) -> String {
     task_id.trim().to_string()
 }

@@ -5,9 +5,7 @@ use crate::gtd::NotaStatus;
 use mcp_attr::{Result as McpResult, bail_public};
 
 impl GtdServerHandler {
-    /// **Purge**: Permanently delete all trashed items. Run weekly.
-    /// **When**: Part of weekly review - trash items first with change_status, then purge.
-    /// **Safety**: Checks references to prevent broken links.
+    /// Removes all notas with status == trash and updates nota_map.
     pub async fn handle_empty_trash(&self) -> McpResult<String> {
         let mut data = self.data.lock().unwrap();
 

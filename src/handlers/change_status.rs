@@ -7,10 +7,7 @@ use chrono::NaiveDate;
 use mcp_attr::{Result as McpResult, bail_public};
 
 impl GtdServerHandler {
-    /// **Organize/Do**: Move items through workflow stages as you process them.
-    /// **When**: inbox→next_action(ready) | →waiting_for(blocked) | →done(complete) | →trash(discard).
-    /// **Tip**: Use change_status to trash before empty_trash to permanently delete.
-    /// **Batch**: Supports multiple IDs for efficient batch operations (e.g., weekly review).
+    /// Changes status for multiple items - validates status and updates nota_map.
     pub async fn handle_change_status(
         &self,
         ids: Vec<String>,
