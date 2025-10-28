@@ -234,7 +234,7 @@ When marked done, creates next year's occurrence.
 #### Enhanced List Functionality
 
 **Keyword Search** (PR #210):
-- Full-text search across ID, title, notes, project, and context fields
+- Full-text search across ID, title, and notes fields
 - Case-insensitive matching
 - Supports filtering by multiple criteria simultaneously
 - Example: `list(keyword="meeting")` finds all items mentioning "meeting"
