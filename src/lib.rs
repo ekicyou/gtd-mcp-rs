@@ -193,6 +193,173 @@ impl GtdServerHandler {
             .trim_end_matches(')')
             .to_string()
     }
+
+    // ============================================================================
+    // List Function Helper Methods
+    // ============================================================================
+
+    /// Parse and validate status filter parameter
+    ///
+    /// # Arguments
+    /// * `status_str` - Status string to parse
+    ///
+    /// # Returns
+    /// Result containing parsed NotaStatus or error
+    fn parse_status_filter(status_str: &str) -> McpResult<NotaStatus> {
+        status_str.parse::<NotaStatus>().map_err(|_| {
+            mcp_attr::Error::new(mcp_attr::ErrorCode::INVALID_PARAMS).with_message(
+                format!(
+                    "Invalid status '{}'. Valid statuses: inbox, next_action, waiting_for, later, calendar, someday, done, reference, trash, project, context",
+                    status_str
+                ),
+                true,
+            )
+        })
+    }
+
+    /// Parse and validate date filter parameter
+    ///
+    /// # Arguments
+    /// * `date_str` - Date string in YYYY-MM-DD format
+    ///
+    /// # Returns
+    /// Result containing parsed NaiveDate or error
+    fn parse_date_filter(date_str: &str) -> McpResult<NaiveDate> {
+        NaiveDate::parse_from_str(date_str, "%Y-%m-%d").map_err(|_| {
+            mcp_attr::Error::new(mcp_attr::ErrorCode::INVALID_PARAMS).with_message(
+                format!(
+                    "Invalid date format '{}'. Use YYYY-MM-DD (e.g., '2025-03-15')",
+                    date_str
+                ),
+                true,
+            )
+        })
+    }
+
+    /// Apply date filtering to notas (only affects calendar status items)
+    ///
+    /// # Arguments
+    /// * `notas` - Mutable slice of notas to filter
+    /// * `filter_date` - Date to filter by
+    ///
+    /// # Description
+    /// Filters calendar status items to only show those with start_date <= filter_date.
+    /// Non-calendar items are not affected by date filtering.
+    fn apply_date_filter(notas: &mut Vec<Nota>, filter_date: NaiveDate) {
+        notas.retain(|nota| {
+            // Only apply date filtering to calendar status tasks
+            if nota.status == NotaStatus::calendar {
+                // Keep tasks where start_date is not set OR start_date <= filter_date
+                // This hides tasks scheduled for future dates
+                nota.start_date
+                    .is_none_or(|task_date| task_date <= filter_date)
+            } else {
+                // For non-calendar tasks, keep all
+                true
+            }
+        });
+    }
+
+    /// Apply keyword filtering (case-insensitive search in id, title, and notes)
+    ///
+    /// # Arguments
+    /// * `notas` - Mutable slice of notas to filter
+    /// * `keyword` - Keyword to search for (case-insensitive)
+    fn apply_keyword_filter(notas: &mut Vec<Nota>, keyword: &str) {
+        let keyword_lower = keyword.to_lowercase();
+        notas.retain(|nota| {
+            // Search in id
+            let id_matches = nota.id.to_lowercase().contains(&keyword_lower);
+
+            // Search in title
+            let title_matches = nota.title.to_lowercase().contains(&keyword_lower);
+
+            // Search in notes if present
+            let notes_matches = nota
+                .notes
+                .as_ref()
+                .map(|n| n.to_lowercase().contains(&keyword_lower))
+                .unwrap_or(false);
+
+            id_matches || title_matches || notes_matches
+        });
+    }
+
+    /// Apply project filtering
+    ///
+    /// # Arguments
+    /// * `notas` - Mutable slice of notas to filter
+    /// * `project_id` - Project ID to filter by
+    fn apply_project_filter(notas: &mut Vec<Nota>, project_id: &str) {
+        notas.retain(|nota| {
+            nota.project
+                .as_ref()
+                .map(|p| p == project_id)
+                .unwrap_or(false)
+        });
+    }
+
+    /// Apply context filtering
+    ///
+    /// # Arguments
+    /// * `notas` - Mutable slice of notas to filter
+    /// * `context_name` - Context name to filter by
+    fn apply_context_filter(notas: &mut Vec<Nota>, context_name: &str) {
+        notas.retain(|nota| {
+            nota.context
+                .as_ref()
+                .map(|c| c == context_name)
+                .unwrap_or(false)
+        });
+    }
+
+    /// Format notas into a display string
+    ///
+    /// # Arguments
+    /// * `notas` - Vector of notas to format
+    /// * `exclude_notes` - Whether to exclude notes from output
+    ///
+    /// # Returns
+    /// Formatted string representation of the notas
+    fn format_notas(notas: Vec<Nota>, exclude_notes: bool) -> String {
+        if notas.is_empty() {
+            return "No items found".to_string();
+        }
+
+        let mut result = format!("Found {} item(s):\n\n", notas.len());
+        for nota in notas {
+            let nota_type = if nota.is_context() {
+                "context"
+            } else if nota.is_project() {
+                "project"
+            } else {
+                "task"
+            };
+
+            result.push_str(&format!(
+                "- [{}] {} (status: {:?}, type: {})\n",
+                nota.id, nota.title, nota.status, nota_type
+            ));
+
+            if let Some(ref proj) = nota.project {
+                result.push_str(&format!("  Project: {}\n", proj));
+            }
+            if let Some(ref ctx) = nota.context {
+                result.push_str(&format!("  Context: {}\n", ctx));
+            }
+            if !exclude_notes && let Some(ref n) = nota.notes {
+                result.push_str(&format!("  Notes: {}\n", n));
+            }
+            if let Some(ref date) = nota.start_date {
+                result.push_str(&format!("  Start date: {}\n", date));
+            }
+            // Display timestamps
+            result.push_str(&format!("  Created: {}\n", nota.created_at));
+            result.push_str(&format!("  Updated: {}\n", nota.updated_at));
+        }
+
+        result
+    }
 }
 
 impl Drop for GtdServerHandler {
@@ -452,141 +619,45 @@ impl McpServer for GtdServerHandler {
         /// Optional: Filter by context name
         context: Option<String>,
     ) -> McpResult<String> {
-        let data = self.data.lock().unwrap();
-
-        // Parse status filter if provided
+        // Parse and validate status filter
         let status_filter = if let Some(ref status_str) = status {
-            match status_str.parse::<NotaStatus>() {
-                Ok(s) => Some(s),
-                Err(_) => {
-                    drop(data);
-                    bail_public!(
-                        _,
-                        "Invalid status '{}'. Valid statuses: inbox, next_action, waiting_for, later, calendar, someday, done, reference, trash, project, context",
-                        status_str
-                    );
-                }
-            }
+            Some(Self::parse_status_filter(status_str)?)
         } else {
             None
         };
 
-        // Parse date filter if provided
+        // Parse and validate date filter
         let date_filter = if let Some(ref date_str) = date {
-            match NaiveDate::parse_from_str(date_str, "%Y-%m-%d") {
-                Ok(d) => Some(d),
-                Err(_) => {
-                    drop(data);
-                    bail_public!(
-                        _,
-                        "Invalid date format '{}'. Use YYYY-MM-DD (e.g., '2025-03-15')",
-                        date_str
-                    );
-                }
-            }
+            Some(Self::parse_date_filter(date_str)?)
         } else {
             None
         };
 
-        let exclude_notes_flag = exclude_notes.unwrap_or(false);
-
+        // Get initial list of notas filtered by status
+        let data = self.data.lock().unwrap();
         let mut notas = data.list_all(status_filter);
         drop(data);
 
-        // Apply date filtering for calendar tasks
+        // Apply additional filters in sequence
         if let Some(filter_date) = date_filter {
-            notas.retain(|nota| {
-                // Only apply date filtering to calendar status tasks
-                if nota.status == NotaStatus::calendar {
-                    // Keep tasks where start_date is not set OR start_date <= filter_date
-                    // This hides tasks scheduled for future dates
-                    nota.start_date
-                        .is_none_or(|task_date| task_date <= filter_date)
-                } else {
-                    // For non-calendar tasks, keep all
-                    true
-                }
-            });
+            Self::apply_date_filter(&mut notas, filter_date);
         }
 
-        // Apply keyword filtering (case-insensitive search in id, title and notes)
         if let Some(ref keyword_filter) = keyword {
-            let keyword_lower = keyword_filter.to_lowercase();
-            notas.retain(|nota| {
-                // Search in id
-                let id_matches = nota.id.to_lowercase().contains(&keyword_lower);
-
-                // Search in title
-                let title_matches = nota.title.to_lowercase().contains(&keyword_lower);
-
-                // Search in notes if present
-                let notes_matches = nota
-                    .notes
-                    .as_ref()
-                    .map(|n| n.to_lowercase().contains(&keyword_lower))
-                    .unwrap_or(false);
-
-                id_matches || title_matches || notes_matches
-            });
+            Self::apply_keyword_filter(&mut notas, keyword_filter);
         }
 
-        // Apply project filtering
         if let Some(ref project_filter) = project {
-            notas.retain(|nota| {
-                nota.project
-                    .as_ref()
-                    .map(|p| p == project_filter)
-                    .unwrap_or(false)
-            });
+            Self::apply_project_filter(&mut notas, project_filter);
         }
 
-        // Apply context filtering
         if let Some(ref context_filter) = context {
-            notas.retain(|nota| {
-                nota.context
-                    .as_ref()
-                    .map(|c| c == context_filter)
-                    .unwrap_or(false)
-            });
+            Self::apply_context_filter(&mut notas, context_filter);
         }
 
-        if notas.is_empty() {
-            return Ok("No items found".to_string());
-        }
-
-        let mut result = format!("Found {} item(s):\n\n", notas.len());
-        for nota in notas {
-            let nota_type = if nota.is_context() {
-                "context"
-            } else if nota.is_project() {
-                "project"
-            } else {
-                "task"
-            };
-
-            result.push_str(&format!(
-                "- [{}] {} (status: {:?}, type: {})\n",
-                nota.id, nota.title, nota.status, nota_type
-            ));
-
-            if let Some(ref proj) = nota.project {
-                result.push_str(&format!("  Project: {}\n", proj));
-            }
-            if let Some(ref ctx) = nota.context {
-                result.push_str(&format!("  Context: {}\n", ctx));
-            }
-            if !exclude_notes_flag && let Some(ref n) = nota.notes {
-                result.push_str(&format!("  Notes: {}\n", n));
-            }
-            if let Some(ref date) = nota.start_date {
-                result.push_str(&format!("  Start date: {}\n", date));
-            }
-            // Display timestamps
-            result.push_str(&format!("  Created: {}\n", nota.created_at));
-            result.push_str(&format!("  Updated: {}\n", nota.updated_at));
-        }
-
-        Ok(result)
+        // Format and return results
+        let exclude_notes_flag = exclude_notes.unwrap_or(false);
+        Ok(Self::format_notas(notas, exclude_notes_flag))
     }
 
     /// **Clarify**: Update item details. Add context, notes, project links after capturing.
