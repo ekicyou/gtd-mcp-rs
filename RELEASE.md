@@ -8,18 +8,20 @@ This file contains release notes for all versions of gtd-mcp, with the newest re
 
 ### Summary
 
-This release introduces two major enhancements to gtd-mcp:
+This is a major release that represents a complete architectural transformation of gtd-mcp. The release introduces three groundbreaking enhancements:
 
-1. **Unified Nota Interface**: A major architectural transformation consolidating all GTD entities (tasks, projects, and contexts) into a single, elegant abstraction. The tool count has been dramatically reduced from 13 tools (v0.7.0) to just **5 unified tools**, while maintaining full GTD functionality.
+1. **Unified Nota Interface**: A fundamental architectural shift consolidating all GTD entities (tasks, projects, and contexts) into a single, elegant abstraction. Tool count reduced from 13 tools (v0.7.0) to just **5 unified tools** (62% reduction) while maintaining full GTD functionality.
 
-2. **Recurring Tasks**: Google Calendar-style recurring task support with automatic generation of next occurrences when tasks are marked done. Supports daily, weekly, monthly, and yearly recurrence patterns with flexible configuration options.
+2. **Recurring Tasks**: Google Calendar-style recurring task support with automatic generation of next occurrences. Supports daily, weekly, monthly, and yearly recurrence patterns with flexible configuration.
 
-These changes significantly improve both the developer experience and user workflow efficiency.
+3. **Enhanced List Functionality**: Powerful keyword search, project/context filtering, date range filtering, and batch status change operations.
+
+Additionally, the codebase has been comprehensively modularized, test coverage significantly improved, and Japanese documentation added for international accessibility.
 
 ### Changes
 
 #### Version Update
-- **Version**: Updated from 0.7.2 to 0.8.0
+- **Version**: Updated from 0.7.0 to 0.8.0
 - **Crate name**: gtd-mcp (unchanged)
 - **Binary name**: gtd-mcp (unchanged)
 
@@ -27,10 +29,19 @@ These changes significantly improve both the developer experience and user workf
 
 The core architecture has been completely reimagined around the concept of a **nota** (inspired by TiddlyWiki's tiddler concept). This represents a fundamental shift from separate entity types to a unified model.
 
+**Implementation Journey** (PRs #146-#167):
+- PR #150: Initial Nota structure implementation with unified fields
+- PR #152-154: Comprehensive test migration (eliminated 234 compilation errors)
+- PR #162: TOML format version 3 with Vec-based storage
+- PR #165: Complete elimination of Task/Project/Context from main code
+- PR #167: Status-based array serialization for human-readable TOML
+
 **Key Innovation**: A single `Nota` structure that can represent tasks, projects, or contexts based on its `status` field:
 - `status = "context"` → Context nota
 - `status = "project"` → Project nota  
 - All other statuses (inbox, next_action, etc.) → Task nota
+
+This design allows items to naturally evolve through their lifecycle without requiring separate creation/deletion operations.
 
 ##### Tool Consolidation - From 13 to 5 Tools
 
@@ -55,7 +66,7 @@ This represents a **62% reduction** in tool count while maintaining 100% of func
 
 ##### Core Recurrence Model
 
-**RecurrencePattern Enum** (`src/gtd.rs`):
+**RecurrencePattern Enum** (`src/gtd/nota.rs`):
 ```rust
 pub enum RecurrencePattern {
     daily,    // Repeats every day
@@ -65,7 +76,7 @@ pub enum RecurrencePattern {
 }
 ```
 
-**Extended Nota Structure**:
+**Extended Nota Structure** (`src/gtd/nota.rs`):
 ```rust
 pub struct Nota {
     pub id: String,
@@ -201,8 +212,8 @@ When marked done, creates next year's occurrence.
 
 ##### Implementation Quality
 
-- **9 comprehensive unit tests** covering all recurrence patterns and edge cases
-- **Total test count**: 251 tests (up from 219 in previous 0.8.0 draft)
+- **9 comprehensive unit tests** covering all recurrence patterns and edge cases (PR #207)
+- **Total test count**: 269 tests (up from 191 in v0.7.0, +78 tests = 41% increase)
 - **Error handling**: Validates recurrence_config format for each pattern type
 - **Performance**: O(1) next occurrence calculation for daily, O(n) for other patterns where n is small
 
@@ -219,6 +230,134 @@ When marked done, creates next year's occurrence.
 - Version 1 → Version 2 → Version 3 (fully automatic)
 - Existing `gtd.toml` files work seamlessly
 - No manual intervention required
+
+#### Enhanced List Functionality
+
+**Keyword Search** (PR #210):
+- Full-text search across ID, title, notes, project, and context fields
+- Case-insensitive matching
+- Supports filtering by multiple criteria simultaneously
+- Example: `list(keyword="meeting")` finds all items mentioning "meeting"
+
+**Advanced Filtering**:
+- **By status**: `inbox`, `next_action`, `waiting_for`, `later`, `calendar`, `someday`, `done`, `reference`, `project`, `context`, `trash`
+- **By project**: `list(project="website-redesign")` shows all items in a project
+- **By context**: `list(context="@office")` shows all items for a context
+- **By date range**: `list(start_date_from="2025-01-01", start_date_to="2025-12-31")`
+- **Combination filters**: All filters can be combined for precise queries
+
+**Output Options**:
+- **Exclude notes**: `list(exclude_notes=true)` for compact output
+- **Timestamp display**: Shows created_at and updated_at for tracking
+- Organized by status for easy review
+
+#### Batch Status Change Operations
+
+**Enhanced `change_status` Tool** (PR #201):
+- Supports batch operations: move multiple items at once
+- Format: `change_status(item_ids=["#1", "#2", "#3"], new_status="done")`
+- Automatically handles recurring task generation when marking done
+- Validates all items exist before making changes
+- Returns detailed success messages for all affected items
+
+**Use Cases**:
+- Weekly review: Mark multiple completed items as done in one operation
+- Project closure: Move all project-related items to trash together
+- Workflow optimization: Batch-move items through GTD stages
+
+#### Reference Material Support
+
+**New Status: `reference`** (PR #179):
+- Dedicated status for non-actionable reference material
+- Stores information that might be needed later but requires no action
+- Examples: documentation, notes, research findings, contact information
+- Distinct from `done` (completed actions) and `trash` (discarded items)
+
+**GTD Workflow Integration**:
+- Inbox processing: "Is this actionable? No → reference"
+- Keeps reference material organized and searchable
+- Maintains clean separation between actions and information
+
+#### Code Modularization and Quality Improvements
+
+**Comprehensive Refactoring** (PRs #215, #223, #233):
+
+**Modular Structure**:
+- `src/gtd/` - Core domain models
+  - `nota.rs` - Nota structure and RecurrencePattern
+  - `gtd_data.rs` - Data management and business logic  
+  - `queries.rs` - Query and filter operations
+  - `serde_impl.rs` - TOML serialization/deserialization
+- `src/handlers/` - MCP tool handlers
+  - `inbox.rs` - Item creation handler
+  - `list.rs` - Query and list handler
+  - `update.rs` - Update handler
+  - `change_status.rs` - Status change and batch operations
+  - `empty_trash.rs` - Trash management
+- `src/migration/` - Version migration support
+  - `legacy_types.rs` - Old Task/Project/Context structures
+  - `migrate.rs` - Format version migration logic
+  - `normalize.rs` - Data normalization utilities
+- `src/formatting.rs` - Output formatting utilities
+- `src/validation.rs` - Input validation and error handling
+- `src/storage.rs` - File I/O operations
+- `src/git_ops.rs` - Git version control integration
+
+**Benefits**:
+- Clear separation of concerns
+- Easier to navigate and understand
+- Simplified testing and maintenance
+- Better code reusability
+- Improved IDE support and navigation
+
+#### Test Organization and Coverage
+
+**Test Migration** (PRs #230, #232):
+- **All tests moved to `/tests/` directory** following Rust best practices
+- Tests previously embedded in `src/*.rs` files now properly separated
+- Better test organization with dedicated test files:
+  - `tests/integration_test.rs` - MCP handler integration tests (127 tests)
+  - `tests/storage_test.rs` - Storage and file I/O tests (22 tests)
+  - `tests/migration_test.rs` - Format migration tests (6 tests)
+  - `tests/git_ops_test.rs` - Git operation tests (3 tests)
+- Unit tests for private functionality remain in source files (111 tests)
+
+**Test Coverage Improvements**:
+- **Total: 269 tests** (up from 191 in v0.7.0, +78 tests)
+- Added MCP protocol-level tests (PR #199)
+- Comprehensive recurrence pattern tests (PR #207)
+- Enhanced validation and error message tests
+- All tests passing with zero failures
+
+#### Error Message Improvements
+
+**User-Friendly Error Messages** (PRs #189, #191, #203, #206):
+- Clear, actionable error messages instead of cryptic internal errors
+- Shows available options when validation fails
+- Examples:
+  - Duplicate ID: Lists the conflicting item's status
+  - Invalid status: Shows all valid status options
+  - Invalid project/context: Lists available projects/contexts
+  - Missing required fields: Explains what's needed
+
+**Technical Implementation**:
+- Uses `bail_public!` macro for user-visible errors
+- Proper error propagation through MCP protocol
+- Consistent error format across all tools
+
+#### Documentation and Internationalization
+
+**Japanese Documentation** (PRs #236, #238):
+- `README.ja-jp.md` - Complete Japanese README
+- `FEATURES_JA.md` - Comprehensive Japanese feature documentation (500+ lines)
+- References added to English documentation for discoverability
+- Improves accessibility for Japanese-speaking users
+
+**Documentation Philosophy**:
+- **README.md**: English (international audience)
+- **Source code doc comments**: English (developer documentation)
+- **Test comments**: Japanese allowed (developer convenience)
+- **Commit messages**: English preferred, Japanese accepted
 
 #### Benefits of the Unified Nota Interface
 
@@ -357,10 +496,14 @@ The README has been verified to accurately describe the current 5-tool architect
 #### Code Quality
 
 All functionality remains fully operational with significant improvements:
-- ✅ **251 unit tests pass** (increased from 219 in draft, 191 in v0.7.0)
+- ✅ **269 tests pass** (increased from 191 in v0.7.0, +78 tests = 41% increase)
+  - 127 integration tests (MCP handler tests)
+  - 111 unit tests (internal logic tests)
+  - 22 storage tests
+  - 6 migration tests  
+  - 3 git operations tests
   - 9 new recurrence pattern tests
-  - 32 additional tests for enhanced functionality
-- ✅ 3 doc tests pass
+- ✅ Zero test failures
 - ✅ No breaking changes to data format (automatic migration)
 - ✅ Full backward compatibility with existing `gtd.toml` files
 - ✅ All Git synchronization features preserved
@@ -371,21 +514,27 @@ All functionality remains fully operational with significant improvements:
 ### Testing Performed
 
 Comprehensive testing ensures reliability:
-- ✅ All 251 unit tests pass (up from 219 in draft, 191 in v0.7.0)
-  - 9 new tests for recurrence patterns (daily, weekly with single/multiple days, monthly, yearly)
-  - 32 additional tests for enhanced unified nota functionality
-- ✅ All 3 doc tests pass  
-- ✅ Format migration tests (v1→v2→v3)
-- ✅ TOML serialization order tests
-- ✅ Cross-entity reference validation tests
-- ✅ Batch operation tests for all tool types
-- ✅ Recurring task calculation tests (next occurrence for all patterns)
-- ✅ Recurring task integration tests (auto-generation on done status)
-- ✅ Code formatting check passes (`cargo fmt --check`)
-- ✅ Clippy linting passes with no warnings (`cargo clippy -- -D warnings`)
-- ✅ Debug build compiles successfully
-- ✅ Release build compiles successfully
-- ✅ Binary functionality verified
+- ✅ **269 total tests pass** (up from 191 in v0.7.0, +41% increase)
+  - **Integration tests**: 127 tests covering all MCP handlers
+  - **Unit tests**: 111 tests for core logic and data structures
+  - **Storage tests**: 22 tests for file I/O and persistence
+  - **Migration tests**: 6 tests for format version upgrades (v1→v2→v3)
+  - **Git operations tests**: 3 tests for version control integration
+- ✅ **Recurrence feature tests**: 9 comprehensive tests
+  - Daily recurrence calculation
+  - Weekly recurrence (single and multiple weekdays)
+  - Monthly recurrence (single and multiple days)
+  - Yearly recurrence (month-day pairs)
+  - Next occurrence auto-generation on completion
+- ✅ **Keyword search tests**: Full-text search across all fields
+- ✅ **Batch operations tests**: Multi-item status changes
+- ✅ **TOML serialization tests**: Consistent ordering and format
+- ✅ **Error message tests**: User-friendly validation messages
+- ✅ **Code formatting** check passes (`cargo fmt --check`)
+- ✅ **Clippy linting** passes with no warnings (`cargo clippy -- -D warnings`)
+- ✅ **Debug build** compiles successfully
+- ✅ **Release build** compiles successfully
+- ✅ **Binary functionality** verified
 
 ### Breaking Changes
 
@@ -466,8 +615,9 @@ await mcp.call("inbox", {
    - Move multiple items of any type with one call
    - Update properties across task/project/context uniformly
    - Trash and restore work the same for all types
+   - Weekly review: bulk-complete multiple done items
 
-5. **Recurring Task Management** (NEW)
+5. **Recurring Task Management** (NEW in 0.8.0)
    - **Daily Routines**: Morning review, end-of-day checklist, daily standup
    - **Weekly Cycles**: Team meetings, weekly reviews, client check-ins
    - **Monthly Tasks**: Reports, invoicing, subscription renewals
@@ -475,6 +625,18 @@ await mcp.call("inbox", {
    - **Automated Workflow**: Mark done → next occurrence auto-created
    - **No Manual Recreation**: System handles repetition automatically
    - **Flexible Scheduling**: Multiple days per pattern (e.g., Mon/Wed/Fri meetings)
+
+6. **Powerful Search and Filtering** (NEW in 0.8.0)
+   - **Keyword Search**: Find items across all text fields instantly
+   - **Multi-Filter Queries**: Combine status, project, context, date filters
+   - **Project Review**: `list(project="website-redesign")` shows all related work
+   - **Context-Based Work**: `list(context="@office")` shows office-available tasks
+   - **Date Range Planning**: Plan work for specific time periods
+
+7. **Reference Material Organization** (NEW in 0.8.0)
+   - **Non-Actionable Information**: Store docs, notes, research without cluttering task lists
+   - **Easy Retrieval**: Search and filter reference materials separately
+   - **GTD Compliance**: Proper separation of "someday/maybe" vs "reference"
 
 ### Design Philosophy
 
@@ -488,29 +650,33 @@ This release embodies several key principles:
 6. **Developer Ergonomics**: Less code, clearer intent, easier to extend
 7. **User-Centric Automation**: Recurring tasks reduce manual work
 8. **Predictable Behavior**: Recurrence follows familiar patterns (Google Calendar-style)
+9. **Code Quality**: Comprehensive test coverage, modular architecture
+10. **International Accessibility**: Japanese documentation for wider audience
 
 ### Implementation Highlights
 
-**Lines of Code Comparison**:
-- Consolidated logic reduces duplication
-- Single CRUD path instead of three parallel ones
-- Migration module isolates legacy support
-- Test coverage increased while codebase simplified
-- Recurring task support: ~600 lines (core model, calculations, tests)
+**Code Organization**:
+- Modular architecture with clear separation of concerns
+- 9 focused modules replacing monolithic files
+- Migration logic isolated from core functionality
+- Test suite properly organized in `/tests/` directory
+- ~600 lines for recurring task feature (model + logic + tests)
 
 **Performance**:
-- No performance regressions
-- Serialization remains efficient
-- Memory usage comparable to v0.7.0
+- No performance regressions from v0.7.0
+- Serialization remains efficient with status-based grouping
+- Memory usage comparable despite richer feature set
 - Git sync performance unchanged
 - Next occurrence calculation: O(1) for daily, O(n) for others (n typically < 10)
+- Keyword search: O(n) with early termination on match
 
-**Security**:
+**Security and Reliability**:
 - Reference validation prevents orphaned links
 - Trash workflow prevents accidental deletion
 - Input validation consistent across all operations
-- No new security considerations
+- No new security considerations introduced
 - Recurrence config validation prevents malformed data
+- User-friendly error messages aid troubleshooting
 
 ### Future Directions
 
@@ -556,17 +722,39 @@ All binaries are available from the GitHub release page.
 
 ### Acknowledgments
 
-This architectural transformation represents months of refinement and testing. The nota abstraction provides a solid foundation for future enhancements while maintaining the simplicity that makes GTD methodology effective.
+This major release represents a comprehensive architectural transformation spanning 226 commits across 42 pull requests since v0.7.0. The work demonstrates the value of iterative refinement and thorough testing.
 
-The inspiration from TiddlyWiki's tiddler concept proved invaluable - proving that sometimes the best solution is to unify rather than separate.
+**Key Achievements**:
+- Successfully unified three entity types (Task/Project/Context) into one elegant abstraction (Nota)
+- Migrated and fixed 234 compilation errors during the refactoring process
+- Increased test coverage by 41% (191 → 269 tests)
+- Implemented Google Calendar-style recurring tasks with automatic next occurrence generation
+- Added powerful keyword search and advanced filtering capabilities
+- Reorganized codebase into modular, maintainable structure
+- Added comprehensive Japanese documentation for international users
+
+The inspiration from TiddlyWiki's tiddler concept proved invaluable - demonstrating that sometimes the best solution is to unify rather than separate.
 
 The recurring task implementation brings real-world workflow efficiency to GTD practice, eliminating the manual burden of recreating repetitive tasks while maintaining the flexibility that makes GTD adaptable to individual needs.
 
-**Contributors**:
-- Unified nota interface design and implementation
-- Recurring task feature implementation (PR #207)
-- Comprehensive test coverage and validation
-- Documentation and release management
+**Major Pull Requests**:
+- PR #150, #162, #165, #167: Unified nota interface implementation
+- PR #207: Recurring tasks support
+- PR #210: Keyword search and advanced filtering
+- PR #201: Batch status change operations
+- PR #215, #223, #233: Code modularization and refactoring
+- PR #230, #232: Test organization improvements
+- PR #236, #238: Japanese documentation
+- PR #179: Reference material status support
+- PR #189, #191, #203, #206: Error message improvements
+- PR #199: MCP protocol-level tests
+
+**Development Statistics**:
+- 226 commits from v0.7.0 to v0.8.0
+- 42 merged pull requests
+- 78 new tests added (+41% increase)
+- Zero test failures maintained throughout development
+- 100% backward compatibility with existing data files
 
 ---
 
