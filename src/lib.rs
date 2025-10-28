@@ -435,7 +435,7 @@ impl McpServer for GtdServerHandler {
 
     /// **Review**: List/filter all items. Essential for daily/weekly reviews.
     /// **When**: Daily - check next_action. Weekly - review all. Use filters to focus.
-    /// **Filters**: No filter=all | status="inbox"=unprocessed | status="next_action"=ready | status="calendar"+date=today's tasks.
+    /// **Filters**: No filter=all | status="inbox"=unprocessed | status="next_action"=ready | status="calendar"+date=today's tasks | keyword="text"=search | project="id"=by project | context="name"=by context.
     #[tool]
     async fn list(
         &self,
@@ -445,6 +445,12 @@ impl McpServer for GtdServerHandler {
         date: Option<String>,
         /// Optional: True to exclude notes and reduce token usage
         exclude_notes: Option<bool>,
+        /// Optional: Search keyword in id, title and notes (case-insensitive)
+        keyword: Option<String>,
+        /// Optional: Filter by project ID - use meaningful abbreviation (e.g., "website-redesign", "q1-budget")
+        project: Option<String>,
+        /// Optional: Filter by context name
+        context: Option<String>,
     ) -> McpResult<String> {
         let data = self.data.lock().unwrap();
 
@@ -500,6 +506,47 @@ impl McpServer for GtdServerHandler {
                     // For non-calendar tasks, keep all
                     true
                 }
+            });
+        }
+
+        // Apply keyword filtering (case-insensitive search in id, title and notes)
+        if let Some(ref keyword_filter) = keyword {
+            let keyword_lower = keyword_filter.to_lowercase();
+            notas.retain(|nota| {
+                // Search in id
+                let id_matches = nota.id.to_lowercase().contains(&keyword_lower);
+
+                // Search in title
+                let title_matches = nota.title.to_lowercase().contains(&keyword_lower);
+
+                // Search in notes if present
+                let notes_matches = nota
+                    .notes
+                    .as_ref()
+                    .map(|n| n.to_lowercase().contains(&keyword_lower))
+                    .unwrap_or(false);
+
+                id_matches || title_matches || notes_matches
+            });
+        }
+
+        // Apply project filtering
+        if let Some(ref project_filter) = project {
+            notas.retain(|nota| {
+                nota.project
+                    .as_ref()
+                    .map(|p| p == project_filter)
+                    .unwrap_or(false)
+            });
+        }
+
+        // Apply context filtering
+        if let Some(ref context_filter) = context {
+            notas.retain(|nota| {
+                nota.context
+                    .as_ref()
+                    .map(|c| c == context_filter)
+                    .unwrap_or(false)
             });
         }
 
@@ -3139,7 +3186,7 @@ mod tests {
     async fn test_list_contexts_empty() {
         let (handler, _temp_file) = get_test_handler();
 
-        let result = handler.list(None, None, None).await;
+        let result = handler.list(None, None, None, None, None, None).await;
         assert!(result.is_ok());
         assert!(result.unwrap().contains("No items found")); // list() returns generic message
     }
@@ -3177,7 +3224,7 @@ mod tests {
             .await
             .unwrap();
 
-        let result = handler.list(None, None, None).await;
+        let result = handler.list(None, None, None, None, None, None).await;
         assert!(result.is_ok());
         let output = result.unwrap();
         assert!(output.contains("Office"));
@@ -4265,7 +4312,7 @@ mod tests {
         assert!(result.is_ok());
 
         // 日付フィルタなしで一覧取得
-        let result = handler.list(None, None, None).await;
+        let result = handler.list(None, None, None, None, None, None).await;
         assert!(result.is_ok());
         let list = result.unwrap();
 
@@ -4295,7 +4342,7 @@ mod tests {
         assert!(result.is_ok());
 
         // 同じ日付でフィルタリング
-        let result = handler.list(None, None, None).await;
+        let result = handler.list(None, None, None, None, None, None).await;
         assert!(result.is_ok());
         let list = result.unwrap();
 
@@ -4341,7 +4388,7 @@ mod tests {
         assert!(result.is_ok());
 
         // デフォルト（exclude_notes=None）で一覧取得
-        let result = handler.list(None, None, None).await;
+        let result = handler.list(None, None, None, None, None, None).await;
         assert!(result.is_ok());
         let list = result.unwrap();
 
@@ -4380,7 +4427,7 @@ mod tests {
         assert!(result.is_ok());
 
         // exclude_notes=falseで明示的に一覧取得
-        let result = handler.list(None, None, None).await;
+        let result = handler.list(None, None, None, None, None, None).await;
         assert!(result.is_ok());
         let list = result.unwrap();
 
@@ -4411,7 +4458,7 @@ mod tests {
         assert!(result.is_ok());
 
         // デフォルトで一覧取得
-        let result = handler.list(None, None, None).await;
+        let result = handler.list(None, None, None, None, None, None).await;
         assert!(result.is_ok());
         let list = result.unwrap();
 
@@ -4442,7 +4489,7 @@ mod tests {
         assert!(result.is_ok());
 
         // 一覧取得
-        let result = handler.list(None, None, None).await;
+        let result = handler.list(None, None, None, None, None, None).await;
         assert!(result.is_ok());
         let list = result.unwrap();
 
@@ -4500,7 +4547,9 @@ mod tests {
         assert!(result.is_ok());
 
         // 一覧取得（status=doneでフィルタ）
-        let result = handler.list(Some("done".to_string()), None, None).await;
+        let result = handler
+            .list(Some("done".to_string()), None, None, None, None, None)
+            .await;
         assert!(result.is_ok());
         let list = result.unwrap();
 
@@ -4917,7 +4966,14 @@ mod tests {
 
         // 無効なステータスでリストを取得しようとする
         let result = handler
-            .list(Some("in_progress".to_string()), None, None)
+            .list(
+                Some("in_progress".to_string()),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
             .await;
         assert!(result.is_err());
         let err_msg = format!("{:?}", result.unwrap_err());
@@ -4934,7 +4990,14 @@ mod tests {
 
         for invalid_status in invalid_statuses {
             let result = handler
-                .list(Some(invalid_status.to_string()), None, None)
+                .list(
+                    Some(invalid_status.to_string()),
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                )
                 .await;
             assert!(
                 result.is_err(),
@@ -5175,6 +5238,9 @@ mod tests {
                 Some("calendar".to_string()),
                 Some("2024-06-15".to_string()),
                 None,
+                None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -5240,7 +5306,7 @@ mod tests {
 
         // 現在の日付でフィルタリング（2024-06-15）
         let result = handler
-            .list(None, Some("2024-06-15".to_string()), None)
+            .list(None, Some("2024-06-15".to_string()), None, None, None, None)
             .await
             .unwrap();
 
@@ -5289,6 +5355,9 @@ mod tests {
                 Some("calendar".to_string()),
                 Some("2024-06-15".to_string()),
                 None,
+                None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -5304,7 +5373,7 @@ mod tests {
 
         // 無効な日付フォーマット
         let result = handler
-            .list(None, Some("2024/06/15".to_string()), None)
+            .list(None, Some("2024/06/15".to_string()), None, None, None, None)
             .await;
         assert!(result.is_err());
         let err_msg = format!("{:?}", result.unwrap_err());
@@ -5313,7 +5382,7 @@ mod tests {
 
         // もう一つの無効なフォーマット
         let result = handler
-            .list(None, Some("15-06-2024".to_string()), None)
+            .list(None, Some("15-06-2024".to_string()), None, None, None, None)
             .await;
         assert!(result.is_err());
     }
@@ -5340,16 +5409,25 @@ mod tests {
             .unwrap();
 
         // ノートを含めてリスト（デフォルト）
-        let result_with_notes = handler.list(None, None, None).await.unwrap();
+        let result_with_notes = handler
+            .list(None, None, None, None, None, None)
+            .await
+            .unwrap();
         assert!(result_with_notes.contains("These are detailed notes"));
 
         // ノートを除外してリスト
-        let result_without_notes = handler.list(None, None, Some(true)).await.unwrap();
+        let result_without_notes = handler
+            .list(None, None, Some(true), None, None, None)
+            .await
+            .unwrap();
         assert!(!result_without_notes.contains("These are detailed notes"));
         assert!(result_without_notes.contains("task-with-notes"));
 
         // 明示的に false を指定してノートを含める
-        let result_with_notes_explicit = handler.list(None, None, Some(false)).await.unwrap();
+        let result_with_notes_explicit = handler
+            .list(None, None, Some(false), None, None, None)
+            .await
+            .unwrap();
         assert!(result_with_notes_explicit.contains("These are detailed notes"));
     }
 
@@ -5410,6 +5488,9 @@ mod tests {
                 Some("calendar".to_string()),
                 Some("2024-06-15".to_string()),
                 None,
+                None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -5462,6 +5543,9 @@ mod tests {
                 Some("calendar".to_string()),
                 Some("2024-06-15".to_string()),
                 Some(true),
+                None,
+                None,
+                None,
             )
             .await
             .unwrap();
@@ -6005,5 +6089,791 @@ mod tests {
             bail_public_is_public,
             "bail_public! should set message_is_public to true"
         );
+    }
+
+    // ============================================================================
+    // Tests for New Filtering Features (keyword, project, context)
+    // ============================================================================
+
+    // テスト: keyword フィルタ - タイトルで検索
+    #[tokio::test]
+    async fn test_list_with_keyword_filter_in_title() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // タスクを追加
+        handler
+            .inbox(
+                "task-1".to_string(),
+                "Buy groceries".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        handler
+            .inbox(
+                "task-2".to_string(),
+                "Read book about TRITON".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        handler
+            .inbox(
+                "task-3".to_string(),
+                "Meeting with client".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        // "TRITON"で検索
+        let result = handler
+            .list(None, None, None, Some("TRITON".to_string()), None, None)
+            .await
+            .unwrap();
+
+        assert!(result.contains("Read book about TRITON"));
+        assert!(!result.contains("Buy groceries"));
+        assert!(!result.contains("Meeting with client"));
+        assert!(result.contains("Found 1 item(s)"));
+    }
+
+    // テスト: keyword フィルタ - ノートで検索
+    #[tokio::test]
+    async fn test_list_with_keyword_filter_in_notes() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // タスクを追加（ノート付き）
+        handler
+            .inbox(
+                "task-1".to_string(),
+                "Task 1".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
+                Some("Contains FFT algorithm details".to_string()),
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        handler
+            .inbox(
+                "task-2".to_string(),
+                "Task 2".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
+                Some("Regular notes".to_string()),
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        // "FFT"で検索（ノート内を検索）
+        let result = handler
+            .list(None, None, None, Some("FFT".to_string()), None, None)
+            .await
+            .unwrap();
+
+        assert!(result.contains("Task 1"));
+        assert!(!result.contains("Task 2"));
+        assert!(result.contains("Found 1 item(s)"));
+    }
+
+    // テスト: keyword フィルタ - 大文字小文字を区別しない
+    #[tokio::test]
+    async fn test_list_with_keyword_filter_case_insensitive() {
+        let (handler, _temp_file) = get_test_handler();
+
+        handler
+            .inbox(
+                "task-1".to_string(),
+                "Study TRITON paper".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        // 小文字で検索
+        let result = handler
+            .list(None, None, None, Some("triton".to_string()), None, None)
+            .await
+            .unwrap();
+
+        assert!(result.contains("Study TRITON paper"));
+        assert!(result.contains("Found 1 item(s)"));
+    }
+
+    // テスト: keyword フィルタ - タイトルとノートの両方をチェック
+    #[tokio::test]
+    async fn test_list_with_keyword_filter_checks_both_title_and_notes() {
+        let (handler, _temp_file) = get_test_handler();
+
+        handler
+            .inbox(
+                "task-1".to_string(),
+                "Task with keyword in title".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
+                Some("Regular notes".to_string()),
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        handler
+            .inbox(
+                "task-2".to_string(),
+                "Regular title".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
+                Some("Notes with keyword here".to_string()),
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        handler
+            .inbox(
+                "task-3".to_string(),
+                "Unrelated task".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
+                Some("Other notes".to_string()),
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        // "keyword"で検索
+        let result = handler
+            .list(None, None, None, Some("keyword".to_string()), None, None)
+            .await
+            .unwrap();
+
+        assert!(result.contains("Task with keyword in title"));
+        assert!(result.contains("Regular title"));
+        assert!(!result.contains("Unrelated task"));
+        assert!(result.contains("Found 2 item(s)"));
+    }
+
+    // テスト: keyword フィルタ - IDで検索
+    #[tokio::test]
+    async fn test_list_with_keyword_filter_in_id() {
+        let (handler, _temp_file) = get_test_handler();
+
+        handler
+            .inbox(
+                "fft-algorithm".to_string(),
+                "Implement algorithm".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        handler
+            .inbox(
+                "web-redesign".to_string(),
+                "Redesign website".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        handler
+            .inbox(
+                "meeting-notes".to_string(),
+                "Take notes".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        // "fft"で検索（ID内を検索）
+        let result = handler
+            .list(None, None, None, Some("fft".to_string()), None, None)
+            .await
+            .unwrap();
+
+        assert!(result.contains("fft-algorithm"));
+        assert!(!result.contains("web-redesign"));
+        assert!(!result.contains("meeting-notes"));
+        assert!(result.contains("Found 1 item(s)"));
+    }
+
+    // テスト: project フィルタ
+    #[tokio::test]
+    async fn test_list_with_project_filter() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // プロジェクトを作成
+        handler
+            .inbox(
+                "FFT".to_string(),
+                "FFT Project".to_string(),
+                "project".to_string(),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        handler
+            .inbox(
+                "website".to_string(),
+                "Website Project".to_string(),
+                "project".to_string(),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        // タスクを追加（プロジェクト付き）
+        handler
+            .inbox(
+                "task-1".to_string(),
+                "Task 1".to_string(),
+                "inbox".to_string(),
+                Some("FFT".to_string()),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        handler
+            .inbox(
+                "task-2".to_string(),
+                "Task 2".to_string(),
+                "inbox".to_string(),
+                Some("FFT".to_string()),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        handler
+            .inbox(
+                "task-3".to_string(),
+                "Task 3".to_string(),
+                "inbox".to_string(),
+                Some("website".to_string()),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        handler
+            .inbox(
+                "task-4".to_string(),
+                "Task 4".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        // "FFT"プロジェクトでフィルタ
+        let result = handler
+            .list(None, None, None, None, Some("FFT".to_string()), None)
+            .await
+            .unwrap();
+
+        assert!(result.contains("Task 1"));
+        assert!(result.contains("Task 2"));
+        assert!(!result.contains("Task 3"));
+        assert!(!result.contains("Task 4"));
+        assert!(result.contains("Found 2 item(s)"));
+    }
+
+    // テスト: context フィルタ
+    #[tokio::test]
+    async fn test_list_with_context_filter() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // コンテキストを作成
+        handler
+            .inbox(
+                "仕事".to_string(),
+                "Work context".to_string(),
+                "context".to_string(),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        handler
+            .inbox(
+                "家".to_string(),
+                "Home context".to_string(),
+                "context".to_string(),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        // タスクを追加（コンテキスト付き）
+        handler
+            .inbox(
+                "task-1".to_string(),
+                "Task 1".to_string(),
+                "inbox".to_string(),
+                None,
+                Some("仕事".to_string()),
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        handler
+            .inbox(
+                "task-2".to_string(),
+                "Task 2".to_string(),
+                "inbox".to_string(),
+                None,
+                Some("仕事".to_string()),
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        handler
+            .inbox(
+                "task-3".to_string(),
+                "Task 3".to_string(),
+                "inbox".to_string(),
+                None,
+                Some("家".to_string()),
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        handler
+            .inbox(
+                "task-4".to_string(),
+                "Task 4".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        // "仕事"コンテキストでフィルタ
+        let result = handler
+            .list(None, None, None, None, None, Some("仕事".to_string()))
+            .await
+            .unwrap();
+
+        assert!(result.contains("Task 1"));
+        assert!(result.contains("Task 2"));
+        assert!(!result.contains("Task 3"));
+        assert!(!result.contains("Task 4"));
+        assert!(result.contains("Found 2 item(s)"));
+    }
+
+    // テスト: 複数フィルタの組み合わせ (status + keyword)
+    #[tokio::test]
+    async fn test_list_with_status_and_keyword_filters() {
+        let (handler, _temp_file) = get_test_handler();
+
+        handler
+            .inbox(
+                "task-1".to_string(),
+                "TRITON task in inbox".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        handler
+            .inbox(
+                "task-2".to_string(),
+                "Other task in inbox".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        handler
+            .inbox(
+                "task-3".to_string(),
+                "TRITON task for next".to_string(),
+                "next_action".to_string(),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        // status="inbox" かつ keyword="TRITON"
+        let result = handler
+            .list(
+                Some("inbox".to_string()),
+                None,
+                None,
+                Some("TRITON".to_string()),
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        assert!(result.contains("TRITON task in inbox"));
+        assert!(!result.contains("Other task in inbox"));
+        assert!(!result.contains("TRITON task for next"));
+        assert!(result.contains("Found 1 item(s)"));
+    }
+
+    // テスト: 複数フィルタの組み合わせ (project + context)
+    #[tokio::test]
+    async fn test_list_with_project_and_context_filters() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // プロジェクトとコンテキストを作成
+        handler
+            .inbox(
+                "FFT".to_string(),
+                "FFT Project".to_string(),
+                "project".to_string(),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        handler
+            .inbox(
+                "仕事".to_string(),
+                "仕事".to_string(),
+                "context".to_string(),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        handler
+            .inbox(
+                "家".to_string(),
+                "家".to_string(),
+                "context".to_string(),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        // タスクを追加
+        handler
+            .inbox(
+                "task-1".to_string(),
+                "Task 1".to_string(),
+                "inbox".to_string(),
+                Some("FFT".to_string()),
+                Some("仕事".to_string()),
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        handler
+            .inbox(
+                "task-2".to_string(),
+                "Task 2".to_string(),
+                "inbox".to_string(),
+                Some("FFT".to_string()),
+                Some("家".to_string()),
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        handler
+            .inbox(
+                "task-3".to_string(),
+                "Task 3".to_string(),
+                "inbox".to_string(),
+                None,
+                Some("仕事".to_string()),
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        // project="FFT" かつ context="仕事"
+        let result = handler
+            .list(
+                None,
+                None,
+                None,
+                None,
+                Some("FFT".to_string()),
+                Some("仕事".to_string()),
+            )
+            .await
+            .unwrap();
+
+        assert!(result.contains("Task 1"));
+        assert!(!result.contains("Task 2"));
+        assert!(!result.contains("Task 3"));
+        assert!(result.contains("Found 1 item(s)"));
+    }
+
+    // テスト: すべてのフィルタの組み合わせ (status + keyword + project + context)
+    #[tokio::test]
+    async fn test_list_with_all_filters_combined() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // プロジェクトとコンテキストを作成
+        handler
+            .inbox(
+                "FFT".to_string(),
+                "FFT Project".to_string(),
+                "project".to_string(),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        handler
+            .inbox(
+                "仕事".to_string(),
+                "仕事".to_string(),
+                "context".to_string(),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        // タスクを追加
+        handler
+            .inbox(
+                "task-1".to_string(),
+                "TRITON task 1".to_string(),
+                "next_action".to_string(),
+                Some("FFT".to_string()),
+                Some("仕事".to_string()),
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        handler
+            .inbox(
+                "task-2".to_string(),
+                "TRITON task 2".to_string(),
+                "next_action".to_string(),
+                Some("FFT".to_string()),
+                Some("仕事".to_string()),
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        handler
+            .inbox(
+                "task-3".to_string(),
+                "Other task".to_string(),
+                "inbox".to_string(),
+                Some("FFT".to_string()),
+                Some("仕事".to_string()),
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        // すべてのフィルタを適用: status="next_action", keyword="TRITON", project="FFT", context="仕事"
+        let result = handler
+            .list(
+                Some("next_action".to_string()),
+                None,
+                None,
+                Some("TRITON".to_string()),
+                Some("FFT".to_string()),
+                Some("仕事".to_string()),
+            )
+            .await
+            .unwrap();
+
+        assert!(result.contains("TRITON task 1"));
+        assert!(result.contains("TRITON task 2"));
+        assert!(!result.contains("Other task"));
+        assert!(result.contains("Found 2 item(s)"));
+    }
+
+    // テスト: フィルタに一致するアイテムがない場合
+    #[tokio::test]
+    async fn test_list_with_filters_no_matches() {
+        let (handler, _temp_file) = get_test_handler();
+
+        handler
+            .inbox(
+                "task-1".to_string(),
+                "Task 1".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        // 存在しないキーワードで検索
+        let result = handler
+            .list(
+                None,
+                None,
+                None,
+                Some("nonexistent".to_string()),
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(result, "No items found");
     }
 }
