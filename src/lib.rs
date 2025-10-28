@@ -3984,6 +3984,162 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_inbox_duplicate_id_error() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Create first task
+        let result = handler
+            .inbox(
+                "dup-test".to_string(),
+                "First Task".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await;
+        assert!(result.is_ok());
+
+        // Try to create second task with same ID - should fail
+        let result = handler
+            .inbox(
+                "dup-test".to_string(),
+                "Second Task".to_string(),
+                "inbox".to_string(),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await;
+        assert!(result.is_err());
+        let error_msg = format!("{:?}", result.unwrap_err());
+        assert!(error_msg.contains("Duplicate ID"));
+        assert!(error_msg.contains("dup-test"));
+    }
+
+    #[tokio::test]
+    async fn test_inbox_invalid_status_error() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Try to create task with invalid status
+        let result = handler
+            .inbox(
+                "test-inv-status".to_string(),
+                "Test Task".to_string(),
+                "invalid_status_name".to_string(),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await;
+        assert!(result.is_err());
+        let error_msg = format!("{:?}", result.unwrap_err());
+        assert!(error_msg.contains("Invalid status"));
+    }
+
+    #[tokio::test]
+    async fn test_inbox_calendar_without_date_error() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Try to create calendar item without start_date
+        let result = handler
+            .inbox(
+                "test-cal".to_string(),
+                "Calendar Task".to_string(),
+                "calendar".to_string(),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await;
+        assert!(result.is_err());
+        let error_msg = format!("{:?}", result.unwrap_err());
+        assert!(error_msg.contains("calendar"));
+        assert!(error_msg.contains("start_date"));
+    }
+
+    #[tokio::test]
+    async fn test_inbox_invalid_date_format() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Try to create task with invalid date format
+        let result = handler
+            .inbox(
+                "test-date".to_string(),
+                "Test Task".to_string(),
+                "calendar".to_string(),
+                None,
+                None,
+                None,
+                Some("2024/03/15".to_string()), // Wrong format
+                None,
+                None,
+            )
+            .await;
+        assert!(result.is_err());
+        let error_msg = format!("{:?}", result.unwrap_err());
+        assert!(error_msg.contains("Invalid date format"));
+    }
+
+    #[tokio::test]
+    async fn test_inbox_invalid_project_reference() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Try to create task with non-existent project reference
+        let result = handler
+            .inbox(
+                "test-proj".to_string(),
+                "Test Task".to_string(),
+                "inbox".to_string(),
+                Some("nonexistent-project".to_string()),
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+            .await;
+        assert!(result.is_err());
+        let error_msg = format!("{:?}", result.unwrap_err());
+        assert!(error_msg.contains("Project") || error_msg.contains("project"));
+    }
+
+    #[tokio::test]
+    async fn test_inbox_invalid_context_reference() {
+        let (handler, _temp_file) = get_test_handler();
+
+        // Try to create task with non-existent context reference
+        let result = handler
+            .inbox(
+                "test-ctx".to_string(),
+                "Test Task".to_string(),
+                "inbox".to_string(),
+                None,
+                Some("nonexistent-context".to_string()),
+                None,
+                None,
+                None,
+                None,
+            )
+            .await;
+        assert!(result.is_err());
+        let error_msg = format!("{:?}", result.unwrap_err());
+        assert!(error_msg.contains("Context") || error_msg.contains("context"));
+    }
+
+    #[tokio::test]
 
     // ==================== CHANGE STATUS TESTS ====================
     async fn test_next_action_tasks_multiple_tasks() {
