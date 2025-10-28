@@ -315,10 +315,8 @@ impl GtdData {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::gtd::RecurrencePattern;
-    use crate::migration::{Context, Project, Task};
-    use chrono::{Datelike, NaiveDate};
-    use std::str::FromStr;
+    use crate::migration::Task;
+    use chrono::NaiveDate;
 
     // Tests for task_map HashMap functionality
     #[test]
