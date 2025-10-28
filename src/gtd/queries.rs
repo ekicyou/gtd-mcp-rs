@@ -12,7 +12,6 @@ use std::collections::HashMap;
 impl GtdData {
     // Query methods by status
     /// Get inbox notas (for compatibility)
-    #[allow(dead_code)]
     pub fn inbox(&self) -> Vec<&Nota> {
         self.notas
             .iter()
@@ -21,7 +20,6 @@ impl GtdData {
     }
 
     /// Get next_action notas (for compatibility)
-    #[allow(dead_code)]
     pub fn next_action(&self) -> Vec<&Nota> {
         self.notas
             .iter()
@@ -30,7 +28,6 @@ impl GtdData {
     }
 
     /// Get waiting_for notas (for compatibility)
-    #[allow(dead_code)]
     pub fn waiting_for(&self) -> Vec<&Nota> {
         self.notas
             .iter()
@@ -39,7 +36,6 @@ impl GtdData {
     }
 
     /// Get later notas (for compatibility)
-    #[allow(dead_code)]
     pub fn later(&self) -> Vec<&Nota> {
         self.notas
             .iter()
@@ -48,7 +44,6 @@ impl GtdData {
     }
 
     /// Get calendar notas (for compatibility)
-    #[allow(dead_code)]
     pub fn calendar(&self) -> Vec<&Nota> {
         self.notas
             .iter()
@@ -57,7 +52,6 @@ impl GtdData {
     }
 
     /// Get someday notas (for compatibility)
-    #[allow(dead_code)]
     pub fn someday(&self) -> Vec<&Nota> {
         self.notas
             .iter()
@@ -66,7 +60,6 @@ impl GtdData {
     }
 
     /// Get done notas (for compatibility)
-    #[allow(dead_code)]
     pub fn done(&self) -> Vec<&Nota> {
         self.notas
             .iter()
@@ -75,7 +68,6 @@ impl GtdData {
     }
 
     /// Get reference notas (for compatibility)
-    #[allow(dead_code)]
     pub fn reference(&self) -> Vec<&Nota> {
         self.notas
             .iter()
@@ -84,7 +76,6 @@ impl GtdData {
     }
 
     /// Get trash notas (for compatibility)
-    #[allow(dead_code)]
     pub fn trash(&self) -> Vec<&Nota> {
         self.notas
             .iter()
@@ -93,7 +84,6 @@ impl GtdData {
     }
 
     /// Get projects map (for compatibility)
-    #[allow(dead_code)]
     pub fn projects(&self) -> HashMap<String, &Nota> {
         self.notas
             .iter()
@@ -103,7 +93,6 @@ impl GtdData {
     }
 
     /// Get contexts map (for compatibility)
-    #[allow(dead_code)]
     pub fn contexts(&self) -> HashMap<String, &Nota> {
         self.notas
             .iter()
@@ -114,25 +103,21 @@ impl GtdData {
 
     // Legacy type compatibility methods
     /// Add a task (for compatibility with tests)
-    #[allow(dead_code)]
     pub fn add_task(&mut self, task: Task) {
         self.add(Nota::from_task(task));
     }
 
     /// Remove a task (for compatibility with tests)
-    #[allow(dead_code)]
     pub fn remove_task(&mut self, id: &str) -> Option<Task> {
         self.remove_nota(id).and_then(|n| n.to_task())
     }
 
     /// Add a project (for compatibility with tests)
-    #[allow(dead_code)]
     pub fn add_project(&mut self, project: Project) {
         self.add(Nota::from_project(project));
     }
 
     /// Add a context (for compatibility with tests)
-    #[allow(dead_code)]
     pub fn add_context(&mut self, context: Context) {
         self.add(Nota::from_context(context));
     }

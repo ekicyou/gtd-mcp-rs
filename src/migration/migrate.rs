@@ -11,7 +11,9 @@ use std::collections::HashMap;
 #[derive(Deserialize)]
 pub struct GtdDataMigrationHelper {
     #[serde(default)]
-    #[allow(dead_code)] // Used for format detection during deserialization
+    // Used for format detection during deserialization (read from TOML but not directly referenced, causing warning)
+    // デシリアライズ時のフォーマット検出に使用（TOMLから読み込まれるが、直接参照されないため警告が出る）
+    #[allow(dead_code)]
     pub(crate) format_version: u32,
     // Version 2/3 format fields (separate arrays by status)
     #[serde(default)]
@@ -139,7 +141,7 @@ pub fn populate_context_names(contexts: &mut HashMap<String, Context>) {
 /// * `trash` - Output vector for trash tasks
 /// * `projects` - Output HashMap for projects
 /// * `contexts` - Output HashMap for contexts
-#[allow(dead_code, clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments)]
 pub fn migrate_notas_v3_to_internal(
     notas: Vec<Nota>,
     inbox: &mut Vec<Task>,

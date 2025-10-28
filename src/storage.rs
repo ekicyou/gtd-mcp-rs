@@ -97,7 +97,6 @@ impl Storage {
     ///
     /// # Returns
     /// Result indicating success or an error
-    #[allow(dead_code)]
     pub fn save(&self, data: &GtdData) -> Result<()> {
         self.save_with_message(data, "Update GTD data")
     }

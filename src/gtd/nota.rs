@@ -91,7 +91,6 @@ impl FromStr for NotaStatus {
 /// - other statuses (inbox, next_action, etc.): represents a Task
 ///
 /// This design is inspired by TiddlyWiki's tiddler concept.
-#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Nota {
@@ -143,7 +142,6 @@ impl Default for Nota {
     }
 }
 
-#[allow(dead_code)]
 impl Nota {
     /// Create a Nota from a Task
     pub fn from_task(task: Task) -> Self {
