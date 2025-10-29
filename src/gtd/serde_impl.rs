@@ -15,6 +15,10 @@ use crate::migration::{
     normalize_context_line_endings,
     normalize_project_line_endings,
     normalize_task_line_endings,
+    // Conversion functions
+    nota_from_context,
+    nota_from_project,
+    nota_from_task,
     // Populate functions
     populate_context_names,
     populate_project_ids,
@@ -107,37 +111,37 @@ impl<'de> Deserialize<'de> for GtdData {
 
             // Convert all old structures to Nota
             for task in inbox {
-                notas.push(Nota::from_task(task));
+                notas.push(nota_from_task(task));
             }
             for task in next_action {
-                notas.push(Nota::from_task(task));
+                notas.push(nota_from_task(task));
             }
             for task in waiting_for {
-                notas.push(Nota::from_task(task));
+                notas.push(nota_from_task(task));
             }
             for task in later {
-                notas.push(Nota::from_task(task));
+                notas.push(nota_from_task(task));
             }
             for task in calendar {
-                notas.push(Nota::from_task(task));
+                notas.push(nota_from_task(task));
             }
             for task in someday {
-                notas.push(Nota::from_task(task));
+                notas.push(nota_from_task(task));
             }
             for task in done {
-                notas.push(Nota::from_task(task));
+                notas.push(nota_from_task(task));
             }
             for task in reference {
-                notas.push(Nota::from_task(task));
+                notas.push(nota_from_task(task));
             }
             for task in trash {
-                notas.push(Nota::from_task(task));
+                notas.push(nota_from_task(task));
             }
             for project in projects.into_values() {
-                notas.push(Nota::from_project(project));
+                notas.push(nota_from_project(project));
             }
             for context in contexts.into_values() {
-                notas.push(Nota::from_context(context));
+                notas.push(nota_from_context(context));
             }
         }
 

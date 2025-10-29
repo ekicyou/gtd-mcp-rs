@@ -7,6 +7,7 @@
 use super::gtd_data::GtdData;
 use super::nota::{Nota, NotaStatus};
 use crate::migration::{Context, Project, Task};
+use crate::migration::{nota_from_context, nota_from_project, nota_from_task, nota_to_task};
 use std::collections::HashMap;
 
 impl GtdData {
@@ -104,22 +105,22 @@ impl GtdData {
     // Legacy type compatibility methods
     /// Add a task (for compatibility with tests)
     pub fn add_task(&mut self, task: Task) {
-        self.add(Nota::from_task(task));
+        self.add(nota_from_task(task));
     }
 
     /// Remove a task (for compatibility with tests)
     pub fn remove_task(&mut self, id: &str) -> Option<Task> {
-        self.remove_nota(id).and_then(|n| n.to_task())
+        self.remove_nota(id).and_then(|n| nota_to_task(&n))
     }
 
     /// Add a project (for compatibility with tests)
     pub fn add_project(&mut self, project: Project) {
-        self.add(Nota::from_project(project));
+        self.add(nota_from_project(project));
     }
 
     /// Add a context (for compatibility with tests)
     pub fn add_context(&mut self, context: Context) {
-        self.add(Nota::from_context(context));
+        self.add(nota_from_context(context));
     }
 
     /// Validate task project (for compatibility)

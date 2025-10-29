@@ -17,11 +17,16 @@
 //! - **Version 2**: Projects stored as `HashMap<String, Project>` (TOML: `[projects.id]`), separate arrays for each status
 //! - **Version 3**: Internal storage uses `Vec<Nota>`, serializes as separate status arrays (`[[inbox]]`, `[[next_action]]`, etc.)
 
+mod conversions;
 mod legacy_types;
 mod migrate;
 mod normalize;
 
 // Re-export public types and functions
+pub use conversions::{
+    nota_from_context, nota_from_project, nota_from_task, nota_to_context, nota_to_project,
+    nota_to_task,
+};
 pub use legacy_types::{Context, Project, ProjectsFormat, Task};
 pub use migrate::{
     GtdDataMigrationHelper, migrate_notas_v3_to_internal, migrate_projects_to_latest,

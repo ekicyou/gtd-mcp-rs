@@ -7,8 +7,8 @@ mod common;
 
 use chrono::NaiveDate;
 use gtd_mcp::gtd::{self, local_date_today};
-use gtd_mcp::migration::{self, Task};
-use gtd_mcp::{GtdServerHandler, Nota, NotaStatus};
+use gtd_mcp::migration::{self, Task, nota_from_context, nota_from_task};
+use gtd_mcp::{GtdServerHandler, NotaStatus};
 use mcp_attr::{Result as McpResult, bail_public};
 use tempfile::NamedTempFile;
 
@@ -44,7 +44,7 @@ fn test_custom_file_path() {
         created_at: local_date_today(),
         updated_at: local_date_today(),
     };
-    data.add(Nota::from_task(task));
+    data.add(nota_from_task(task));
     drop(data);
 
     // 保存
@@ -714,7 +714,7 @@ async fn test_update_task_project_and_context() {
 
     {
         let mut data = handler.data.lock().unwrap();
-        data.add(Nota::from_context(migration::Context {
+        data.add(nota_from_context(migration::Context {
             name: "Office".to_string(),
             notes: None,
             title: None,
@@ -1346,7 +1346,7 @@ async fn test_update_multiple_fields_simultaneously() {
     // Add a context
     {
         let mut data = handler.data.lock().unwrap();
-        data.add(Nota::from_context(migration::Context {
+        data.add(nota_from_context(migration::Context {
             name: "Office".to_string(),
             notes: None,
             title: None,
