@@ -1,6 +1,9 @@
 use chrono::{Datelike, NaiveDate};
 use gtd_mcp::gtd::{GtdData, Nota, NotaStatus, RecurrencePattern, local_date_today};
-use gtd_mcp::migration::{Context, Project, Task};
+use gtd_mcp::migration::{
+    Context, Project, Task, nota_from_context, nota_from_project, nota_from_task, nota_to_context,
+    nota_to_project, nota_to_task,
+};
 use std::str::FromStr;
 
 // GtdDataの新規作成テスト
@@ -2267,7 +2270,7 @@ fn test_nota_from_task() {
         updated_at: NaiveDate::from_ymd_opt(2024, 1, 2).unwrap(),
     };
 
-    let nota = Nota::from_task(task.clone());
+    let nota = nota_from_task(task.clone());
 
     assert_eq!(nota.id, task.id);
     assert_eq!(nota.title, task.title);
@@ -2294,7 +2297,7 @@ fn test_nota_from_project() {
         updated_at: local_date_today(),
     };
 
-    let nota = Nota::from_project(project.clone());
+    let nota = nota_from_project(project.clone());
 
     assert_eq!(nota.id, project.id);
     assert_eq!(nota.title, project.title);
@@ -2320,7 +2323,7 @@ fn test_nota_from_context() {
         updated_at: Some(NaiveDate::from_ymd_opt(2024, 1, 2).unwrap()),
     };
 
-    let nota = Nota::from_context(context.clone());
+    let nota = nota_from_context(context.clone());
 
     assert_eq!(nota.id, context.name);
     assert_eq!(nota.title, "Office Context");
@@ -2346,7 +2349,7 @@ fn test_nota_to_task() {
         ..Default::default()
     };
 
-    let task = nota.to_task().unwrap();
+    let task = nota_to_task(&nota).unwrap();
 
     assert_eq!(task.id, nota.id);
     assert_eq!(task.title, nota.title);
@@ -2368,7 +2371,7 @@ fn test_nota_to_task_fails_for_project() {
         ..Default::default()
     };
 
-    assert!(nota.to_task().is_none());
+    assert!(nota_to_task(&nota).is_none());
 }
 
 #[test]
@@ -2386,7 +2389,7 @@ fn test_nota_to_project() {
         ..Default::default()
     };
 
-    let project = nota.to_project().unwrap();
+    let project = nota_to_project(&nota).unwrap();
 
     assert_eq!(project.id, nota.id);
     assert_eq!(project.title, nota.title);
@@ -2408,7 +2411,7 @@ fn test_nota_to_context() {
         ..Default::default()
     };
 
-    let context = nota.to_context().unwrap();
+    let context = nota_to_context(&nota).unwrap();
 
     assert_eq!(context.name, nota.id);
     assert_eq!(context.title, Some(nota.title));

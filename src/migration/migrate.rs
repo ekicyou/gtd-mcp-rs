@@ -2,6 +2,7 @@
 //!
 //! This module handles migrations between different versions of the GTD data format.
 
+use super::conversions::{nota_to_context, nota_to_project, nota_to_task};
 use super::legacy_types::{Context, Project, ProjectsFormat, Task};
 use crate::gtd::{Nota, NotaStatus};
 use serde::Deserialize;
@@ -159,57 +160,57 @@ pub fn migrate_notas_v3_to_internal(
     for nota in notas {
         match nota.status {
             NotaStatus::inbox => {
-                if let Some(task) = nota.to_task() {
+                if let Some(task) = nota_to_task(&nota) {
                     inbox.push(task);
                 }
             }
             NotaStatus::next_action => {
-                if let Some(task) = nota.to_task() {
+                if let Some(task) = nota_to_task(&nota) {
                     next_action.push(task);
                 }
             }
             NotaStatus::waiting_for => {
-                if let Some(task) = nota.to_task() {
+                if let Some(task) = nota_to_task(&nota) {
                     waiting_for.push(task);
                 }
             }
             NotaStatus::later => {
-                if let Some(task) = nota.to_task() {
+                if let Some(task) = nota_to_task(&nota) {
                     later.push(task);
                 }
             }
             NotaStatus::calendar => {
-                if let Some(task) = nota.to_task() {
+                if let Some(task) = nota_to_task(&nota) {
                     calendar.push(task);
                 }
             }
             NotaStatus::someday => {
-                if let Some(task) = nota.to_task() {
+                if let Some(task) = nota_to_task(&nota) {
                     someday.push(task);
                 }
             }
             NotaStatus::done => {
-                if let Some(task) = nota.to_task() {
+                if let Some(task) = nota_to_task(&nota) {
                     done.push(task);
                 }
             }
             NotaStatus::reference => {
-                if let Some(task) = nota.to_task() {
+                if let Some(task) = nota_to_task(&nota) {
                     reference.push(task);
                 }
             }
             NotaStatus::trash => {
-                if let Some(task) = nota.to_task() {
+                if let Some(task) = nota_to_task(&nota) {
                     trash.push(task);
                 }
             }
             NotaStatus::project => {
-                if let Some(project) = nota.to_project() {
+                if let Some(project) = nota_to_project(&nota) {
                     projects.insert(project.id.clone(), project);
                 }
             }
             NotaStatus::context => {
-                if let Some(context) = nota.to_context() {
+                if let Some(context) = nota_to_context(&nota) {
                     contexts.insert(context.name.clone(), context);
                 }
             }

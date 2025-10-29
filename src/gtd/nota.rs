@@ -2,9 +2,6 @@ use chrono::{Local, NaiveDate};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 
-// Import legacy types from migration module (for backward compatibility only)
-use crate::migration::{Context, Project, Task};
-
 /// Get the current date in local timezone
 pub fn local_date_today() -> NaiveDate {
     Local::now().date_naive()
@@ -143,109 +140,6 @@ impl Default for Nota {
 }
 
 impl Nota {
-    /// Create a Nota from a Task
-    pub fn from_task(task: Task) -> Self {
-        Self {
-            id: task.id,
-            title: task.title,
-            status: task.status,
-            project: task.project,
-            context: task.context,
-            notes: task.notes,
-            start_date: task.start_date,
-            created_at: task.created_at,
-            updated_at: task.updated_at,
-            ..Default::default()
-        }
-    }
-
-    /// Create a Nota from a Project
-    pub fn from_project(project: Project) -> Self {
-        Self {
-            id: project.id,
-            title: project.title,
-            status: NotaStatus::project,
-            project: project.project,
-            context: project.context,
-            notes: project.notes,
-            start_date: project.start_date,
-            created_at: project.created_at,
-            updated_at: project.updated_at,
-            ..Default::default()
-        }
-    }
-
-    /// Create a Nota from a Context
-    pub fn from_context(context: Context) -> Self {
-        Self {
-            id: context.name.clone(),
-            title: context.title.unwrap_or(context.name),
-            status: NotaStatus::context,
-            project: context.project,
-            context: context.context,
-            notes: context.notes,
-            start_date: context.start_date,
-            created_at: context.created_at.unwrap_or_else(local_date_today),
-            updated_at: context.updated_at.unwrap_or_else(local_date_today),
-            ..Default::default()
-        }
-    }
-
-    /// Convert this Nota to a Task (if status is task-related)
-    pub fn to_task(&self) -> Option<Task> {
-        match self.status {
-            NotaStatus::context | NotaStatus::project => None,
-            _ => Some(Task {
-                id: self.id.clone(),
-                title: self.title.clone(),
-                status: self.status.clone(),
-                project: self.project.clone(),
-                context: self.context.clone(),
-                notes: self.notes.clone(),
-                start_date: self.start_date,
-                created_at: self.created_at,
-                updated_at: self.updated_at,
-            }),
-        }
-    }
-
-    /// Convert this Nota to a Project (if status is project)
-    pub fn to_project(&self) -> Option<Project> {
-        if self.status == NotaStatus::project {
-            Some(Project::new(
-                self.id.clone(),
-                self.title.clone(),
-                self.notes.clone(),
-                self.project.clone(),
-                self.context.clone(),
-                self.start_date,
-                self.created_at,
-                self.updated_at,
-            ))
-        } else {
-            None
-        }
-    }
-
-    /// Convert this Nota to a Context (if status is context)
-    pub fn to_context(&self) -> Option<Context> {
-        if self.status == NotaStatus::context {
-            Some(Context {
-                name: self.id.clone(),
-                title: Some(self.title.clone()),
-                notes: self.notes.clone(),
-                status: NotaStatus::context,
-                project: self.project.clone(),
-                context: self.context.clone(),
-                start_date: self.start_date,
-                created_at: Some(self.created_at),
-                updated_at: Some(self.updated_at),
-            })
-        } else {
-            None
-        }
-    }
-
     /// Check if this nota is a task
     pub fn is_task(&self) -> bool {
         !matches!(self.status, NotaStatus::context | NotaStatus::project)
