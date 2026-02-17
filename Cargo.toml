@@ -1,6 +1,6 @@
 [package]
 name = "gtd-mcp"
-version = "0.8.0"
+version = "0.8.1"
 edition = "2024"
 description = "A Model Context Protocol (MCP) server for GTD (Getting Things Done) task management"
 license = "MIT"
@@ -21,7 +21,7 @@ path = "src/main.rs"
 mcp-attr = "~0.0.7"
 tokio = { version = "~1", features = ["full"] }
 serde = { version = "~1", features = ["derive"] }
-toml = "~0.9"
+toml = "~1"
 anyhow = "~1"
 chrono = { version = "~0.4", features = ["serde"] }
 git2 = "~0.20"
