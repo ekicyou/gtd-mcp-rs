@@ -140,6 +140,21 @@
 - **Alternatives Considered**: ubuntu-latest＋bash／windows-latest＋pwsh。
 - **Selected Approach**: 未決。
 
+### Decision: 見どころの参照の書き方（PR 番号の無い変更）
+- **Context**: 要件 14.3。main には PR 番号の無い直接コミット（`fe9dcab`・`dbe9713` 等）が混ざる。areka の「見出しの末尾に `(#N)` 必須」はそのままでは当てはまらない。
+- **Alternatives Considered**: 1. PR 番号が在れば `(#N)`、無ければ短いコミット SHA で参照する、2. PR 番号の在る変更だけを見どころにする。
+- **Selected Approach**: 未決（設計で決め、Highlights Guide に書く）。
+
+### Decision: 公開の走りの特定と待ち方
+- **Context**: 要件 7.1・7.2。
+- **Alternatives Considered**: `gh run list --workflow crates-io.yml --event push` を `headBranch`＝`v{版}`・`headSha`＝squash のコミットで絞る（areka と同じ）／`gh run watch --exit-status` で待つ。
+- **Selected Approach**: 未決（Research Needed の結果で決める）。
+
+### Decision: 初回の変更一覧の起点
+- **Context**: 要件 3.3（OQ-1 の決定に従う）。
+- **Alternatives Considered**: 5 節の (i)〜(iii)。
+- **Selected Approach**: OQ-1 の確定後に設計で決める。
+
 ## Implementation Complexity & Risk
 - **Effort: M（3〜7 日）** — 新設が 4 ファイル＋スキル 2 ファイルで、どれも雛形（areka）が在る。ただし手順書（`procedure.md`）の縮約と再開の表の作り直し、初回の扱いの分岐、見どころの形の決まりの英語化に手間がかかる。
 - **Risk: Low〜Medium** — Trusted Publishing の形は同じオーナーの areka で本番運用中（Low）。一方、取り消せない操作（タグ・公開）を承認待ち無しで回す手順であり、初回は前のタグ不在・Trusted Publisher 未登録・包みの中身の問題が重なる（Medium 寄り）。実装後の最初の `/release` が実地の検証になる。
