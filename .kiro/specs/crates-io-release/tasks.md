@@ -1,6 +1,6 @@
 # Implementation Plan
 
-- [ ] 1. crates.io に上がる包みの中身を絞る
+- [x] 1. crates.io に上がる包みの中身を絞る
   - `Cargo.toml` の `[package]` に、設計判断 6 の 5 種（ソースの `.rs`・`Cargo.toml`・`Cargo.lock`・`README.md`・`LICENSE`）だけを許す包みの範囲を 1 行足し、他の行は変えない
   - 包みの一覧を公開せずに出し、5 種と cargo が足す物だけが在り、`.claude/`・`.kiro/`・`.github/`・`CLAUDE.md`・`doc/`・`tests/` が無いことを確かめる
   - 公開前の確かめ（`--dry-run --locked --allow-dirty`）が終了コード 0 で終わり、包んだ中身からビルドできる
@@ -100,3 +100,6 @@
   - 初回の分岐で、前のタグ `v0.8.3` が無く、`chore(release): v0.8.3` のマージ済み PR が無く、公開済み判定が `present` になり、起点のコマンドが `fe9dcab` を返すことを確かめる
   - 完了の状態: 合わなかった判定があれば手順書を直し、全部の判定コマンドが想定どおりの出力を返す
   - _Requirements: 2.5, 2.8, 3.3, 4.3, 4.4_
+
+## Implementation Notes
+- Windows では `cargo package --list` の区切りが `\`（例 `src\lib.rs`）になる。包みの一覧を grep で確かめる手順は `[/\]` の両方を受ける形にする
