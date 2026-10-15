@@ -51,7 +51,7 @@
   - _Requirements: 13.1, 13.2, 13.3, 13.4, 13.5, 13.6, 13.7_
 
 - [ ] 4. `/release` スキル
-- [ ] 4.1 スキルの約束を書く
+- [x] 4.1 スキルの約束を書く
   - `.claude/skills/release/SKILL.md` を新設し、frontmatter で明示実行だけ・引数のヒント `[X.Y.Z]` を置く
   - Core Task・段の要約・Rules（してはいけない事・止まり方・外へ出るコマンドは単独の 1 行・印字の禁止・書き換えの禁止・進み具合のファイルを作らない）を書き、段・コマンド・してはいけない事・止まり方の正本は `procedure.md` で、`SKILL.md` はその要約だけと明記する
   - 完了の状態: frontmatter に `disable-model-invocation: true` が在り、本文の段の要約が設計の段 0〜7 と一致する
