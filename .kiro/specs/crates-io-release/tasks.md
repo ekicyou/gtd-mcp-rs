@@ -103,4 +103,4 @@
 
 ## Implementation Notes
 - Windows では `cargo package --list` の区切りが `\`（例 `src\lib.rs`）になる。包みの一覧を grep で確かめる手順は `[/\]` の両方を受ける形にする
-- 手順書・文書の公開済み判定は jq を使わず `curl -fsS https://index.crates.io/gt/d-/gtd-mcp | grep -cF '"vers":"{版}"'` に揃える（手元の Windows に jq が無い）。sed で `` を書くと制御文字に化けることがあるので、編集後に制御文字の grep で確かめる
+- 手順書・文書の公開済み判定は jq を使わず `curl -fsS https://index.crates.io/gt/d-/gtd-mcp | grep -cF '"vers":"{版}"'` に揃える（手元の Windows に jq が無い）。sed の置換で後方参照（バックスラッシュ 1）を書くと制御文字に化けることがあるので、編集後に制御文字の grep で確かめる
