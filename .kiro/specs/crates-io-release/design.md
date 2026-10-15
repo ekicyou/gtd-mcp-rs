@@ -314,7 +314,7 @@ graph TB
 | 1.3 旧版と前のタグ | `git show HEAD:Cargo.toml` の `[package] version` を `{旧版}` とする。`git ls-remote --quiet --tags {remote} refs/tags/v{旧版}` を読む。1 行なら `{起点}`＝`v{旧版}`。0 行なら `gh pr list --state merged --search "chore(release): v{旧版} in:title" --json number,title,mergeCommit` と公開済み判定（`{旧版}`）を読み、下の 3 分岐に当てはめる | 下の分岐表 | 2.7, 2.8, 2.9 |
 | 1.4 次の版 | 引数なしは `{旧版}` の 3 つ目 +1。引数は先頭の `v` を除く。形 `^[0-9]+\.[0-9]+\.[0-9]+$`。`{版}` > `{旧版}`（数 3 つを数として比べる）。`git ls-remote --quiet --tags {remote} refs/tags/v{版}` が 0 行 | 全部が当たる。形の外れは受け付ける形を、版の外れは 2 つの版を示す。何も変更していない | 1.1, 1.2, 1.3, 1.4, 2.6 |
 | 2.1 版上げ | `Cargo.toml` の `version = "{旧版}"` 1 行を Edit で `{版}` に直し、`cargo update --workspace` で `Cargo.lock` の 1 行を揃える | `Cargo.toml` の版が `{版}`。範囲の判定は 3.1 が持つ | 3.1 |
-| 2.2 見どころ | `git log --first-parent --format="%h %s" {起点}..{確かめた main}` で変更の一覧を読み、Highlights Guide に従って `doc/release-notes/v{版}.md` を新しく書き、「Must include」を読み直す | ファイルが在り、読み直しで漏れが無い | 3.2, 3.3, 3.4, 3.5 |
+| 2.2 見どころ | `{起点}` がタグ `v{旧版}` のときは先に `git fetch --quiet {remote} refs/tags/v{旧版}:refs/tags/v{旧版}` で手元に取る。`git log --first-parent --format="%h %s" {起点}..{確かめた main}` で変更の一覧を読み、Highlights Guide に従って `doc/release-notes/v{版}.md` を新しく書き、「Must include」を読み直す | ファイルが在り、読み直しで漏れが無い | 3.2, 3.3, 3.4, 3.5 |
 | 3.1 差分の範囲 | `git diff --numstat HEAD`・`git diff -U0 HEAD -- Cargo.toml`・`git diff -U0 HEAD -- Cargo.lock`・`git status --porcelain` | 変更は `Cargo.toml`・`Cargo.lock` だけで、各々 消 1 行 `version = "{旧版}"`・足 1 行 `version = "{版}"`。新しいファイルは `doc/release-notes/v{版}.md` の 1 行だけ | 4.3, 3.4 |
 | 3.2 見どころの形 | 見どころの形の契約を `grep` で確かめる（`### ` 行が 1 以上・`^#{1,2} ` 行が 0・`### ` 行がすべて参照の正規表現に合う・非 ASCII の行が 0） | 4 つとも当たる。外れた項目と行番号を示す | 4.4 |
 | 3.3 CI と同じ確かめ | steering `tech.md` の 5 コマンド（`cargo fmt --all -- --check`・`cargo clippy --all-targets --all-features -- -D warnings`・`cargo build --verbose`・`cargo test --verbose`・`cargo build --release --verbose`）を 1 つずつ順に | 5 つとも終了コード 0。整形の自動修正（`cargo fmt --all`）はしない | 4.1, 4.6 |
@@ -455,7 +455,7 @@ graph TB
 - **Must include**: 利用者が設定・使い方・MCP クライアント設定・データファイルを変える必要のある変更（何がどう変わるか → 何をすればよいか → しないとどうなるか の順で事実の文で書く）。修正だけの版では利用者に効く修正を 1 つ以上。利用者に見える変更が無い版は内部の保守を 1 つの見どころにまとめる（14.4）。
 - **Do not write**: kiro の spec 名・内部だけの作業（CI・スキル・steering・spec）の個別の列挙・詳しいリリースノートへのリンク・コミットの題の写し（Conventional Commits の接頭辞は外して言い換える）（14.4）。
 - **Number of highlights**: 3〜5 を目安、最低 1。
-- **Source of material**: `git log --first-parent --format="%h %s" v{previous}..main`（squash の題の末尾の `(#N)` が PR 番号。無いものは直接のコミット）。
+- **Source of material**: `git log --first-parent --format="%h %s" v{previous}..main`（squash の題の末尾の `(#N)` が PR 番号。無いものは直接のコミット）。前のタグ `v{previous}` が無い初回は、`git log --first-parent -S'version = "{previous}"' --format=%h main -- Cargo.toml` の 1 行目（版を {previous} にしたコミット）を `v{previous}` の代わりに使う（要件 3.3 と同じ起点）。
 - **Format check**: Release Skill 段 3.2 と同じ 4 つの確かめ（grep の形）を、書く人が手で回せる形で示す（14.5）。
 
 #### Release History Note（`RELEASE.md`・`README.md`・`README.ja-jp.md`）
