@@ -145,11 +145,11 @@ git ls-remote --quiet --tags {remote} refs/tags/v{旧版} 2>/dev/null
 - 0 行（タグが無い）なら次の 2 つを読み、下の分岐表に当てはめる。
 
 ```bash
-gh pr list --state merged --search "chore(release): v{旧版} in:title" --json number,title,mergeCommit --jq '.[] | select(.title == "chore(release): v{旧版}") | "\(.number)\t\(.mergeCommit.oid)\t\(.title)"'
+gh pr list --state merged --search '"chore(release): v{旧版}" in:title' --json number,title,mergeCommit --jq '.[] | select(.title == "chore(release): v{旧版}") | "\(.number)\t\(.mergeCommit.oid)\t\(.title)"'
 curl -fsS https://index.crates.io/gt/d-/gtd-mcp | grep -cF '"vers":"{旧版}"'
 ```
 
-- `gh pr list` は題が字のとおり `chore(release): v{旧版}` の PR だけを残す。1 行以上なら「在る」、0 行なら「無い」。
+- `gh pr list` は題が字のとおり `chore(release): v{旧版}` の PR だけを残す。1 行以上なら「在る」、0 行なら「無い」。`--search` の題の語は二重引用符で囲んだまま回す（囲まないと括弧のために、在る PR も 1 件も当たらない）。
 - 2 つ目は公開済み判定（公開済み判定の契約と同じ情報源・同じ `vers` の字のとおりの一致）。`curl` がエラーを出したら、数に関わらず `unreadable`。エラーが無く 1 以上なら `present`、0 なら `absent`。
 
 | マージ済みの `chore(release): v{旧版}` | 公開済み判定（`{旧版}`） | 扱い | 要件 |
@@ -239,6 +239,8 @@ git status --porcelain
 1. `git diff --numstat HEAD` がちょうど 2 行で、`1	1	Cargo.lock` と `1	1	Cargo.toml`（列はタブ区切り。足 1 行・消 1 行）（4.3）。
 2. `git diff -U0 HEAD -- Cargo.toml` と `git diff -U0 HEAD -- Cargo.lock` のどちらも、`---`・`+++` の行を除いた `-`・`+` の行が `-version = "{旧版}"` と `+version = "{版}"` の 2 行だけ（4.3, 3.1）。
 3. `git status --porcelain` がちょうど 3 行で、` M Cargo.toml`・` M Cargo.lock`・`?? doc/release-notes/v{版}.md`。新しいファイルは見どころの 1 つだけで、他の版の見どころファイルと `RELEASE.md` は出ない（4.3, 3.4）。
+
+- Windows（`core.autocrlf=true`）では、`cargo update` が `Cargo.lock` を LF で書き直すため、`git diff` が標準エラーに `warning: in the working copy of '…', LF will be replaced by CRLF …` を出す。この警告の行は判定の行に数えない（標準出力の行だけで判定する）。
 
 ### 3.2 見どころの形
 
