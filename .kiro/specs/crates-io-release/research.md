@@ -6,7 +6,7 @@
 
 ## Summary
 - **Feature**: `crates-io-release`
-- **Discovery Scope**: New Feature（リポジトリ運用の新設。Rust のソースコードには触れない）＋ 既存の CI・文書との境界調整
+- **Discovery Scope**: New Feature（リポジトリ運用の新設。Rust のソースコードには触れない）＋ 既存の CI・文書との境界調整（設計フェーズ: Light discovery。結果は「Design Phase Discovery」以下）
 - **Key Findings**:
   - リリース用のスキル・crates.io 公開の CI・見どころの置き場は**すべて未整備**（Missing）。移植元の areka には本番運用中の同等物があり、形の大部分は流用できる。
   - **crates.io に上がる包みの中身が絞られていない**: `Cargo.toml` に `include`/`exclude` が無く、現状の `cargo package --list` には `.claude/`（54 ファイル）・`.kiro/`（23）・`.github/`・`CLAUDE.md`・`doc/` 等が入る。この spec で `.claude/skills/release/` 等を足すと、さらに公開物に混ざる。
@@ -92,6 +92,120 @@
   - 起点の候補: (i) 版を {旧版} にしたコミット（`git log -S'version = "0.8.3"' -- Cargo.toml` → `fe9dcab`）、(ii) 最後に在るタグ `v0.8.0`（0.8.1〜0.8.3 の変更も一覧に混ざる）、(iii) crates.io の公開物に入っている `.cargo_vcs_info.json` の `git.sha1`（公開時の正確なコミット。取得には crate のダウンロードが要る）。
 - **Implications**: 案 B は手順の分岐が 1 つ増えるだけで副作用が無い。起点は (i) が最も軽い。決定は要件ディスカッションへ。
 
+## Design Phase Discovery（設計フェーズの追加調査）
+
+- **Discovery Type**: Light（統合に寄せた調査）。移植元 areka の本番運用中の形が在り、外部依存（Trusted Publishing・`crates-io-auth-action@v1`・sparse index）は areka で実証済みのため、Web 調査は行わず移植元の読み取りとリポジトリの実測で判断した。
+- **Consulted skills / rules**: `kiro-spec-design`（`rules/design-principles.md`・`design-discovery-light.md`・`design-synthesis.md`・`design-review-gate.md`）、テンプレート `.kiro/settings/templates/specs/design.md`・`research.md`。steering `product.md`・`tech.md`・`structure.md`（CI チェック 5 種を手元の確かめの基準に採用、言語の使い分け）。
+
+### 6. 移植元のワークフローと手順の再読（設計用）
+- **Sources Consulted**: `areka/.github/workflows/crates-io.yml`（181 行）、`areka/.claude/skills/release/SKILL.md`・`procedure.md`（286 行）、`areka/doc/crates-io-publish.md`、`areka/doc/release-notes/README.md`、`areka/tools/crates-io.ps1`（冒頭）。
+- **Findings**:
+  - areka の公開の段は「版の形 → release を待つ → 取り出し → Release の確認 → 道具 → 公開前の確認 → 残りの判定 → 鍵 → 公開 → 記録」。gtd-mcp では「release を待つ」「Release の確認」を落とし（待ち合わせない）、「タグの確かめ」（手動起動のみ。要件 11.5）を足し、残りの判定を単一クレートの 3 値（present/absent/unreadable）に縮める。
+  - areka は「公開前の確認」を「残りの判定」の前に置くが、要件 12.1〜12.3 は「公開済みなら鍵を取らずに成功」「無いときに包む確かめ → 鍵 → 公開」の順を求めるため、gtd-mcp では公開済み判定を先に置く（公開済みの版の起動し直しが組み立て無しで終わる利点もある）。
+  - タグ名・入力は `env:` で受けてから正規表現で確かめる（要件 11.6）。areka の形をそのまま使う。
+  - areka の「記録」は索引の反映を待たず、反映待ちは文書の切り分け（Re-run）に任せている。
+  - areka の手順は「判定は主文脈が出力を読む・スクリプトを足さない」で、道具（`tools/*.ps1`）は既存の物だけを使う。gtd-mcp には道具が無いので、`cargo`・`git`・`gh`・`curl`・`grep` のコマンドを直接書く。
+- **Implications**: スクリプト無しで全判定を書ける。areka の段の名前の流儀（日本語の短い名前）を保つと、Publishing Guide の切り分け表と 1 対 1 にできる。
+
+### 7. gtd-mcp の実測（設計用）
+- **Sources Consulted**: `Cargo.toml`、`git ls-files`、`src/` の `include_str!` の有無、`.github/dependabot.yml`、`.github/workflows/ci.yml`、`git log --first-parent -S'version = "0.8.3"' origin/main -- Cargo.toml`、`gh pr list --state open`。
+- **Findings**:
+  - `src/` に `include_str!`・`include_bytes!` は無い。包みは `src/**/*.rs`・`Cargo.toml`・`Cargo.lock`・`README.md`・`LICENSE` で足りる（`[lib]`・`[[bin]]` は `src/` 内）。
+  - `git log --first-parent -S'version = "0.8.3"' origin/main -- Cargo.toml` は `fe9dcab` 1 行を返す。初回の起点をこのコマンドで機械的に見つけられる（要件 3.3）。
+  - `dependabot.yml` は cargo の週次更新を設定しており、`Cargo.toml`・`Cargo.lock` を触る PR が開きうる（調査時点で開いているのは `chore(ci)` の 2 本だけで、版の置き場には当たらない）。要件 2.5 により、cargo の更新 PR が開いている間は `/release` が段 1.2 で止まる。
+  - 既存 `ci.yml` は `actions/checkout@v5` と `dtolnay/rust-toolchain` を使う。公開の走りは checkout の版を揃え、ツールチェーンはランナーの `rustup update stable --no-self-update`（areka と同じ。第三者のアクションを増やさない）にする。
+  - タグ `v0.8.0` のコミットには `Cargo.lock` が無い（`dbe9713` で追跡開始）。手動起動で `0.8.0` を渡す公開を伴わない確かめを成り立たせるため、版の一致の段は `--locked` を付けない `cargo metadata --no-deps` で版を読む。
+
+## Synthesis（設計の統合）
+
+- **Generalization**: 「crates.io に `gtd-mcp` {版} が在るか」は、スキルの初回判定（要件 2.8）・緑の判定（7.3）、ワークフローの公開済み判定（12.1, 12.2）と記録（12.5）、文書の確かめ方（13.3）の 5 か所で同じ問いである。1 つの契約（sparse index・`vers` の字のとおりの一致・`yanked` は問わない・3 値）として design.md に定義し、各所はそれを使う。同様に「見どころの形」は Highlights Guide が定め、スキルの段 3.2 と見どころの直しが同じ確かめを使う。
+- **Build vs. Adopt**: 公開の認証は `rust-lang/crates-io-auth-action@v1`（採用）。版上げは `cargo-edit` を使わず `Cargo.toml` の 1 行の Edit＋`cargo update --workspace`（単一クレートで 1 行だけのため、道具の有無の分岐を無くす）。release-plz 等の外部ツールは brief で退け済み。判定用のスクリプトは作らない（brief の優先、判定が小さい）。
+- **Simplification**: areka の段のうち、申し送り・`dist/README.txt`・`THIRD-PARTY-NOTICES.md`・起動確認・Release の走りと本文の比較・winget・複数クレートの残りの判定・`release.yml` の待ち合わせ・`actions: read` を落とした。版上げのやり方は 1 通りにした。見どころの形の機械の確かめは道具を作らず `grep` 4 つにした。
+
+## Design Decisions
+
+### Decision: 判定ロジックの置き場
+- **Context**: 要件 4.2・4.4・11.3・11.4・12.1。
+- **Alternatives Considered**:
+  1. ワークフローの `run:` と `procedure.md` のコマンドに直接書く。
+  2. 小さなスクリプト 1 本に集め、手元と CI の両方から呼ぶ。
+- **Selected Approach**: 1（仮置き。design.md OPEN QUESTION 3）。
+- **Rationale**: 単一クレートで判定は「正規表現・`cargo metadata` の 1 欄・索引の 1 行の一致」だけ。スクリプトにすると Windows（手元）と Linux（CI）の両方で動く言語の選択と保守が増える。
+- **Trade-offs**: 手元と CI の判定は「同じ契約を別の場所に書く」形になり、契約の変更時は 2 か所を直す（Revalidation Triggers に記載）。
+
+### Decision: `release.yml` との並走
+- **Context**: 要件 12.9、境界の隣接期待。
+- **Alternatives Considered**: 1. 待ち合わせない（brief の基本方針）、2. areka と同様に `release.yml` の緑を待つ。
+- **Selected Approach**: 1（仮置き。OPEN QUESTION 2）。`release.yml` が赤でも crates.io には出ることを Publishing Guide 3 節に明記する。
+- **Rationale**: 開発者の指示は「crates.io に登録できれば良い」。`release.yml` は非推奨アクションを使い範囲外で、その赤に公開を巻き込まない。権限も `actions: read` を足さずに済む。
+- **Trade-offs**: GitHub Release とバイナリが欠けたまま crates.io だけが進む状態があり得る。
+
+### Decision: 公開ワークフローの runner と手元の確かめの道具
+- **Context**: 開発環境は Windows（pwsh / Git Bash）、既存 CI は ubuntu 中心。
+- **Alternatives Considered**: ubuntu-latest＋bash／windows-latest＋pwsh。
+- **Selected Approach**: `ubuntu-latest`＋bash（仮置き。OPEN QUESTION 1）。手元の確かめは steering の CI チェック 5 種＋`cargo publish --dry-run --locked --allow-dirty`（OPEN QUESTION 10）と `git`・`gh`・`curl`・`grep`。
+- **Rationale**: 公開に OS 依存が無く、Linux ランナーは起動が速い。既存 CI と揃う。`curl`・`jq` がランナーに在る。
+- **Trade-offs**: areka の pwsh の行をそのままは写せず、bash に書き直す手間が要る。
+
+### Decision: 見どころの参照の書き方（PR 番号の無い変更）
+- **Context**: 要件 14.3。main には PR 番号の無い直接コミットが混ざる。
+- **Alternatives Considered**: 1. PR 番号が在れば `(#N)`、無ければ 7 桁の短い SHA、2. PR 番号の在る変更だけを見出しにする。
+- **Selected Approach**: 1（仮置き。OPEN QUESTION 4）。正規表現 `^### .+ \((#[0-9]+|[0-9a-f]{7})(, (#[0-9]+|[0-9a-f]{7}))*\)$`。
+- **Rationale**: 直接コミットで入った利用者向けの修正（例: `fe9dcab` の `--sync-git` の修正）を見出しにできないと「必ず載せるもの」と衝突する。
+- **Trade-offs**: リポジトリのファイル表示では `#N` も SHA も自動リンクにならない（参照は文字として読む）。
+
+### Decision: 見どころの形の機械の確かめ
+- **Context**: 要件 4.4・14.5。areka の `release-notes.ps1 -Check` は移植しない。
+- **Selected Approach**: `grep` で 4 つ（`### ` 行が 1 以上・`^#{1,2} ` が 0・見出し末尾の参照・非 ASCII が 0）（仮置き。OPEN QUESTION 5）。英語・普通の文体・「必ず載せるもの」は読み直しで確かめる。
+- **Trade-offs**: ASCII のみの決まりは記号（en dash・矢印など）の自由度を失う代わりに、日本語の混入を機械で検出できる。
+
+### Decision: 公開の走りの特定と待ち方
+- **Context**: 要件 7.1・7.2・7.3。
+- **Selected Approach**: `gh run list --workflow crates-io.yml --event push --json databaseId,headSha,headBranch,status,conclusion` を `headBranch`＝`v{版}`・`headSha`＝`{sha}` で絞る（areka と同じ。タグの push の走りの `headBranch` はタグ名）。30 秒ごと最長 5 分で見つからなければ止まる。`gh run watch {id} --exit-status --interval 30` を裏で回して待つ。緑は `conclusion`＝`success` かつ公開済み判定 `present`（`absent` は 30 秒ごと最長 5 分読み直す。OPEN QUESTION 8）。
+- **Trade-offs**: Re-run は同じ `databaseId` の新しい試行になるので再開時も同じ走りを読める。手動起動の走りは `--event push` に出ないため、手動起動で回復した版は「push の走りは赤・crates.io は present」と見え、開発者の判断（7.4）に回る。
+
+### Decision: 初回の変更一覧の起点
+- **Context**: 要件 3.3（OQ-1 で (i) に確定）。
+- **Selected Approach**: `git log --first-parent -S'version = "{旧版}"' --format=%H {確かめた main} -- Cargo.toml` の 1 行目（最も新しいコミット）を `{起点}` とし、`{起点}..{確かめた main}` を読む。実測で `fe9dcab` を返す。
+
+### Decision: 包みの範囲
+- **Context**: 要件 16（OQ-7 で「絞る」に確定。一覧は設計で決める）。
+- **Alternatives Considered**: 1. `include`（許す一覧）、2. `exclude`（外す一覧）。
+- **Selected Approach**: 1、`include = ["src/**/*.rs", "Cargo.toml", "Cargo.lock", "README.md", "LICENSE"]`（仮置き。OPEN QUESTION 6）。
+- **Rationale**: 今後 `.claude/` 等に何が足されても包みに混ざらない。`tests/` は利用に要らない。
+- **Trade-offs**: 新しい種類のファイル（`build.rs`・`include_str!` の対象）を足すときは `include` も直す必要がある（Revalidation Triggers）。
+
+### Decision: 版上げのやり方
+- **Context**: 要件 3.1。
+- **Selected Approach**: `Cargo.toml` の `version = "{旧版}"` 1 行を Edit で直し、`cargo update --workspace` で `Cargo.lock` を揃える（仮置き。OPEN QUESTION 7）。正しく上がったかは差分の範囲の判定（段 3.1）が持つ。
+- **Rationale**: 単一クレートで 1 行だけ。`cargo-edit` の有無による分岐を無くす。
+
+### Decision: 公開済みの判定順と「記録」の待ち
+- **Context**: 要件 12.1〜12.5。
+- **Selected Approach**: 版の一致の直後に公開済み判定を置き、`present` なら包む確かめ・鍵・公開を飛ばす。「記録」は `always()` で公開済み判定を行い、「公開」が成功した回だけ 30 秒ごと最長 5 分読み直す（OPEN QUESTION 8）。
+- **Rationale**: 要件の順序（公開済みなら鍵を取らない）に従う。反映の遅れによる偽の赤を減らす。
+
+## Implementation Complexity & Risk
+- **Effort: M（3〜7 日）** — 新設が 4 ファイル＋スキル 2 ファイルで、どれも雛形（areka）が在る。ただし手順書（`procedure.md`）の縮約と再開の表の作り直し、初回の扱いの分岐、見どころの形の決まりの英語化に手間がかかる。
+- **Risk: Low〜Medium** — Trusted Publishing の形は同じオーナーの areka で本番運用中（Low）。一方、取り消せない操作（タグ・公開）を承認待ち無しで回す手順であり、初回は前のタグ不在・Trusted Publisher 未登録・包みの中身の問題が重なる（Medium 寄り）。実装後の最初の `/release` が実地の検証になる。
+
+## Risks & Mitigations
+- Trusted Publisher 未登録のままタグを押す — 鍵の受け取りで止まり何も公開されない（安全側）。crates.io の Trusted Publisher の設定は手元から確かめる手段が無い（設計判断: スキルの前提に入れず、Publishing Guide 2 節で順序を案内し、Re-run で回復）。
+- 初回の前タグ不在で手順が止まる — 要件 2.8 の分岐で回避（起点は `git log -S` で求める）。
+- 包みに開発用ファイルが入る — `include` で絞る（要件 16）。
+- `release.yml`（非推奨アクション）が赤になる — 範囲外。待ち合わせないので公開には影響しない。
+- 版上げ PR を CI 未完了でマージ — OQ-2 で「待たない」に確定。Linux・macOS だけの失敗は公開前に検出されないリスクを受け入れる。
+- dependabot の cargo 更新 PR が開いていると段 1.2 で止まる — 要件 2.5 のとおり。運用で先に片づける（緩めるなら要件の変更。design.md OPEN QUESTION 9）。
+- `concurrency` は待ちを 1 本しか保てない — 冪等なので Run workflow で回復できる。
+
+## Research Needed（設計フェーズでの結論）
+- 見どころの形の検査を道具無しで行えるか → `grep` 4 つで行う（上の Decision）。
+- `cargo publish --dry-run --locked` と `cargo package --locked` → 手元・CI とも `cargo publish --dry-run --locked`（手元は作業木が汚れているので `--allow-dirty`）。包みの範囲の確かめには `cargo package --list` を使う。
+- 走りを特定する条件 → `headBranch`＝`v{版}`・`headSha`＝`{sha}`（上の Decision）。
+- Trusted Publisher の登録状態を手元から確かめる手段 → 前提に入れない（Risks & Mitigations）。
+- 初回の起点 → `fe9dcab`（`git log -S` で機械的に求める。`.cargo_vcs_info.json` は使わない）。
+- `include` を足した後の包みの中身 → 実装時に `cargo package --list` で確かめる（design.md Testing Strategy）。
+
 ## Requirement-to-Asset Map
 
 | 要件 | 既存の資産 | ギャップ | 種別 |
@@ -120,59 +234,7 @@
 | B: 新設のみ（brief の方針） | `crates-io.yml`・`.claude/skills/release/`・`doc/crates-io-publish.md`・`doc/release-notes/README.md` を新設し、既存は `RELEASE.md` の注記だけ | 既存 CI と完全に独立。areka の本番の形を流用できる | 判定ロジックの置き場を決める必要。`release.yml` とタグで並走する | 推奨の基本線 |
 | C: ハイブリッド | B に加えて、判定（版の形・版の一致・公開済み判定・見どころの形の検査）を 1 本の小さなスクリプトに集め、手元と CI で同じ物を使う | 手元と CI の判定が一致。areka の `crates-io.ps1` の考え方に近い | brief の「スクリプトは設計で必要と判断した場合だけ」に照らして要否の説明が要る。pwsh 前提だと CI の runner が Windows に寄る | 見どころの形の検査を機械化したい場合の候補 |
 
-## Design Decisions（設計フェーズへの持ち越し）
-
-### Decision: 判定ロジックの置き場
-- **Context**: 要件 4.2・4.4・11.3・11.4・12.1。
-- **Alternatives Considered**:
-  1. ワークフローの YAML の中に直接書く（版の形は正規表現、版の一致は `cargo metadata` か `Cargo.toml` の読み取り、公開済みは索引を `curl` で読む）。手元の確かめは `cargo` コマンドと主文脈の読み取りだけ。
-  2. 小さなスクリプト 1 本に集め、手元と CI の両方から呼ぶ。
-- **Selected Approach**: 未決（設計で決める）。brief は 1 を優先。
-- **Follow-up**: 見どころの形の検査（要件 4.4）を機械で行うか、主文脈の読み取りだけで行うか。
-
-### Decision: `release.yml` との並走
-- **Context**: 要件 12.9、境界の隣接期待。
-- **Alternatives Considered**: 1. 待ち合わせない（brief の基本方針）、2. areka と同様に `release.yml` の緑を待つ。
-- **Selected Approach**: 未決。待ち合わせない場合、`release.yml` が赤でも crates.io には出る（Release とバイナリが欠けたまま crates.io だけ進む状態があり得る）ことを手順書に書く必要がある。
-
-### Decision: 公開ワークフローの runner と手元の確かめの道具
-- **Context**: 開発環境は Windows（pwsh / Git Bash）、既存 CI は ubuntu 中心。
-- **Alternatives Considered**: ubuntu-latest＋bash／windows-latest＋pwsh。
-- **Selected Approach**: 未決。
-
-### Decision: 見どころの参照の書き方（PR 番号の無い変更）
-- **Context**: 要件 14.3。main には PR 番号の無い直接コミット（`fe9dcab`・`dbe9713` 等）が混ざる。areka の「見出しの末尾に `(#N)` 必須」はそのままでは当てはまらない。
-- **Alternatives Considered**: 1. PR 番号が在れば `(#N)`、無ければ短いコミット SHA で参照する、2. PR 番号の在る変更だけを見どころにする。
-- **Selected Approach**: 未決（設計で決め、Highlights Guide に書く）。
-
-### Decision: 公開の走りの特定と待ち方
-- **Context**: 要件 7.1・7.2。
-- **Alternatives Considered**: `gh run list --workflow crates-io.yml --event push` を `headBranch`＝`v{版}`・`headSha`＝squash のコミットで絞る（areka と同じ）／`gh run watch --exit-status` で待つ。
-- **Selected Approach**: 未決（Research Needed の結果で決める）。
-
-### Decision: 初回の変更一覧の起点
-- **Context**: 要件 3.3（OQ-1 の決定に従う）。
-- **Alternatives Considered**: 5 節の (i)〜(iii)。
-- **Selected Approach**: 要件ディスカッションで (i) に確定（`Cargo.toml` の版を {旧版} にしたコミット＝初回は `fe9dcab` の次から数える。要件 3.3）。設計では、そのコミットを手順の中でどう見つけるか（例: `git log -S` で版の行を追う）を決める。
-
-## Implementation Complexity & Risk
-- **Effort: M（3〜7 日）** — 新設が 4 ファイル＋スキル 2 ファイルで、どれも雛形（areka）が在る。ただし手順書（`procedure.md`）の縮約と再開の表の作り直し、初回の扱いの分岐、見どころの形の決まりの英語化に手間がかかる。
-- **Risk: Low〜Medium** — Trusted Publishing の形は同じオーナーの areka で本番運用中（Low）。一方、取り消せない操作（タグ・公開）を承認待ち無しで回す手順であり、初回は前のタグ不在・Trusted Publisher 未登録・包みの中身の問題が重なる（Medium 寄り）。実装後の最初の `/release` が実地の検証になる。
-
-## Risks & Mitigations
-- Trusted Publisher 未登録のままタグを押す — 鍵の受け取りで止まり何も公開されない（安全側）。手順書（要件 13.2）と、スキルの前提確認に「登録済みか」を開発者に確かめる手段が無い点を設計で検討（crates.io の設定は API から読めない可能性 → Research Needed）。
-- 初回の前タグ不在で手順が止まる — 要件 2.8 の仮置き（OQ-1）で回避。
-- 包みに開発用ファイルが入る — OQ-7 で範囲を決める。
-- `release.yml`（非推奨アクション）が赤になる — 範囲外。公開とは独立のまま、最終報告で触れるかは OQ-4。
-- 版上げ PR を CI 未完了でマージ — OQ-2 で「待たない」に確定。Linux・macOS だけの失敗は公開前に検出されないリスクを受け入れる（手元の確かめは Windows のみ）。
-
-## Research Needed（設計フェーズで調べる）
-- 見どころの形の検査を `cargo`・`git`・`gh` だけで行えるか（要件 4.4）。
-- 手元の公開前確認として `cargo publish --dry-run --locked` と `cargo package --locked` のどちらを使うか（所要時間・索引へのアクセス・dirty な作業木での振る舞い）。
-- `gh run list --workflow crates-io.yml` でタグの push の走りを確実に特定する条件（`headBranch`＝タグ名、`headSha`＝squash のコミット）。
-- crates.io の Trusted Publisher の登録状態を手元から確かめる手段の有無。
-- 初回の変更一覧の起点（`fe9dcab` か、公開物の `.cargo_vcs_info.json` の sha か）。
-- `include`/`exclude` を足した場合の包みの中身（README・LICENSE・`src/`・`Cargo.lock` が残ること）。
+**設計フェーズの選択**: 案 B（新設のみ・判定は各ファイルに直接書く）。案 C のスクリプトは、単一クレートで判定が小さく、手元（Windows）と CI（Linux）の両方で動かす保守が見合わないため採らない（Design Decisions「判定ロジックの置き場」）。
 
 ## References
 - `C:\home\maz\git\areka\.claude\skills\release\SKILL.md`・`procedure.md` — 移植元の手順（読み取りのみ）
