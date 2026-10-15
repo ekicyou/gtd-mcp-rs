@@ -51,7 +51,7 @@
   | 3.3 起動確認（窓）・`package.ps1` | 落とす | — |
   | 3.4 `crates-io.ps1 -Verify` | `cargo publish --dry-run --locked`（または `cargo package --locked`）に置き換え候補 | 4.2 |
   | 3.5 `release-notes.ps1 -Check` | 道具を移植しないため、形の検査の手段が Missing（下の「Research Needed」） | 4.4 |
-  | 段 4 PR・main 移動時の取り込み・squash | 保つ。CI 待ちの追加は OQ-2 | 5 |
+  | 段 4 PR・main 移動時の取り込み・squash | 保つ。PR の CI は待たない（OQ-2 で確定） | 5 |
   | 段 5 タグ | 保つ | 6 |
   | 6.1/6.2 Release と crates-io の 2 本の見守り・Release 本文比較・winget | crates-io の 1 本だけに縮める（OQ-4） | 7 |
   | 6.3 赤の表 | `release.yml` の行を落とし、公開の走りの行を中心に作り直す | 7.4〜7.6 |
@@ -100,7 +100,7 @@
 | 2 前提の確かめ | `git`・`gh`・タグ（`v0.8.0` まで） | 手順・初回の前タグ不在の扱い | Missing / Constraint（OQ-1） |
 | 3 版上げと見どころ | 版の置き場 2 か所 | 見どころの置き場・変更一覧の出し方・初回の起点 | Missing / Unknown |
 | 4 手元の確かめ | steering の CI チェック 5 種（`cargo` のみ） | 公開前の包みの確認の手順化、見どころの形の検査手段、差分範囲の判定 | Missing / Unknown |
-| 5 PR と squash | `gh`、ブランチ保護無し | CI 待ちの有無（保護が無いので手順側で担保） | Constraint（OQ-2） |
+| 5 PR と squash | `gh`、ブランチ保護無し | PR の CI は待たない（OQ-2 で確定） | Constraint（OQ-2） |
 | 6 タグ | — | 手順 | Missing |
 | 7 見守り | `gh run list/watch/view` | 公開の走りの見つけ方・緑の判定（索引） | Missing |
 | 8 最終報告 | — | 手順 | Missing |
@@ -164,7 +164,7 @@
 - 初回の前タグ不在で手順が止まる — 要件 2.8 の仮置き（OQ-1）で回避。
 - 包みに開発用ファイルが入る — OQ-7 で範囲を決める。
 - `release.yml`（非推奨アクション）が赤になる — 範囲外。公開とは独立のまま、最終報告で触れるかは OQ-4。
-- 版上げ PR を CI 未完了でマージ — ブランチ保護が無いため手順側で待つ（OQ-2 の仮置き）。
+- 版上げ PR を CI 未完了でマージ — OQ-2 で「待たない」に確定。Linux・macOS だけの失敗は公開前に検出されないリスクを受け入れる（手元の確かめは Windows のみ）。
 
 ## Research Needed（設計フェーズで調べる）
 - 見どころの形の検査を `cargo`・`git`・`gh` だけで行えるか（要件 4.4）。

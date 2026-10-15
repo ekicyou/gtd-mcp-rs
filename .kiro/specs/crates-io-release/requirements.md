@@ -93,10 +93,9 @@ gtd-mcp の開発者（ekicyou）は、リリースのたびに版上げ・タ�
 2. When 版上げ PR を出した, the Release Skill shall PR に含まれるファイルを読み直し、3 つのファイル以外が含まれていれば止まる
 3. When 版上げ PR を出す, the Release Skill shall PR の本文に版・変更ファイル・手元の確かめの結果・見どころファイルの所在を書く
 4. If PR を出した後に main が「確かめた main」から進んでいた, the Release Skill shall 新しい main を取り込み、新しく入った変更を見どころに反映するかを判断し、手元の確かめを回し直してからマージに進む
-5. When 版上げ PR の CI のチェックがすべて緑で終わった, the Release Skill shall 開発者に聞かずに版上げ PR を squash マージする（仮置き: OQ-2）
-6. If 版上げ PR の CI のチェックが赤で終わった, the Release Skill shall マージせずに止まり、赤のチェックの名前を報告する（仮置き: OQ-2）
-7. When squash マージした, the Release Skill shall PR の状態を読み直して `MERGED` と squash のコミットを確かめ、その読み直しだけでマージの成否を決める
-8. The Release Skill shall 版上げ PR に版上げ以外の変更を混ぜない
+5. When 版上げ PR のファイルの確かめ（5.2）と main の取り込みの確かめ（5.4）が済んだ, the Release Skill shall PR の CI の結果を待たずに、開発者に聞かずに版上げ PR を squash マージする
+6. When squash マージした, the Release Skill shall PR の状態を読み直して `MERGED` と squash のコミットを確かめ、その読み直しだけでマージの成否を決める
+7. The Release Skill shall 版上げ PR に版上げ以外の変更を混ぜない
 
 ### Requirement 6: タグの push
 **Objective:** As a gtd-mcp の開発者, I want 正しいコミットに正しいタグが 1 本だけ押されること, so that crates.io の版とタグが必ず一致する
@@ -222,9 +221,7 @@ gtd-mcp の開発者（ekicyou）は、リリースのたびに版上げ・タ�
 要件ディスカッションで確定させる。各項目の「仮置き」は、上の受け入れ基準に反映済みの暫定案である。
 
 - **OQ-1: 初回の `/release` の前のタグ（`v0.8.3`）が無い問題** — **確定（個別議論・推奨案）**: タグを後付けせず、「`v{旧版}` が無い・`chore(release): v{旧版}` のマージ済み PR も無い・crates.io に {旧版} が在る」ときだけ前のタグの確かめを緩めて進む（要件 2.8）。変更の一覧の起点は `Cargo.toml` の版を {旧版} にしたコミット（初回は `fe9dcab`）とし、その次から数える（要件 3.3）。退けた案: 初回の前に `v0.8.3` を手で打つ（既存の `release.yml` が走り GitHub Release が作られる副作用）、`v0.8.0` を起点にする（公開済みの 0.8.1〜0.8.3 の変更が混ざる）。
-- **OQ-2: 版上げ PR の CI を待ってからマージするか**
-  - 事実: main はブランチ保護されておらず必須チェックも無いため、`gh pr merge` は CI の結果を待たずに通る。CI は 3 つの OS で回るが、手元の確かめは Windows の 1 つだけ。
-  - 仮置き: PR の CI のチェックが全部緑になるのを待ってからマージし、赤ならマージせずに止まる（要件 5.5・5.6）。
+- **OQ-2: 版上げ PR の CI を待ってからマージするか** — **確定（個別議論・開発者の判断）**: 待たない。手元の確かめ（要件 4）と PR のファイルの確かめが済んだら、PR の CI の結果を待たずに squash マージする（要件 5.5）。areka の手順と同じ。受け入れたリスク: Linux・macOS だけで起きる失敗は公開前に検出されない（手元の確かめは Windows のみ）。退けた案: PR の全チェックの緑を待つ（約 5〜6 分の待ちと、版上げと無関係な `cargo audit` の赤で止まる不便）。
 - **OQ-3: 公開後の見どころの直しを範囲に含めるか** — **確定（推奨案）**: 含める。直すのは main の見どころファイルだけで、GitHub Release の本文は触らない（要件 10）。
 - **OQ-4: 既存 `release.yml` の走りを見守り・報告に含めるか** — **確定（推奨案）**: 含めない。合否の判定は Publish Workflow の走りと crates.io の有無だけで行う（Boundary Context）。
 - **OQ-5: 次のリリースへの申し送り（areka の roadmap の節）の扱い** — **確定（推奨案）**: 移植しない（gtd-mcp の steering に roadmap が無いため）。
