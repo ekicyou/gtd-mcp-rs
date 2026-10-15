@@ -196,7 +196,7 @@ git remote add origin https://github.com/yourusername/gtd-data.git
 - **[FEATURES_JA.md](FEATURES_JA.md)** - Detailed technical specification (Japanese)
 - **[IMPLEMENTATION.md](doc/IMPLEMENTATION.md)** - Technical implementation details and architecture
 - **[GTD_ASSESSMENT.md](doc/GTD_ASSESSMENT.md)** - Feature assessment and enhancement roadmap
-- **[RELEASE.md](RELEASE.md)** - Release notes for all versions (newest first)
+- **[RELEASE.md](RELEASE.md)** - Release notes up to v0.8.0; later versions are in [doc/release-notes/](doc/release-notes/) and [GitHub Releases](https://github.com/ekicyou/gtd-mcp-rs/releases)
 
 ## Development
 

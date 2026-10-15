@@ -1,5 +1,7 @@
 # Release Notes
 
+> This file is frozen at v0.8.0. Release notes for later versions are in `doc/release-notes/` and on GitHub Releases.
+
 This file contains release notes for all versions of gtd-mcp, with the newest releases at the top.
 
 ---

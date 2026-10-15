@@ -34,7 +34,7 @@
   - _Boundary: Highlights Guide_
   - _Requirements: 14.1, 14.2, 14.3, 14.4, 14.5_
 
-- [ ] 3.2 (P) RELEASE.md を凍結し README の案内を直す
+- [x] 3.2 (P) RELEASE.md を凍結し README の案内を直す
   - `RELEASE.md` の 1 行目の見出しの直後に英語の凍結の注記（引用ブロック 1 つ）を足す
   - `README.md` と `README.ja-jp.md` の `RELEASE.md` への案内を、それぞれの言語で 1 行ずつ「v0.8.0 までは RELEASE.md、以後は doc/release-notes/ と GitHub Releases」に直す
   - 完了の状態: `git diff` で `RELEASE.md` は足した行だけ、README 2 つは 1 行ずつの置き換えだけになっている
