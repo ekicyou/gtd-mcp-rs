@@ -88,7 +88,7 @@ curl -fsS https://index.crates.io/gt/d-/gtd-mcp | grep -cF '"vers":"0.8.4"'
 
 - **ワークフローのファイルの誤り**（段の書き方・権限・入力の扱いなど）: Re-run はタグのコミットのファイルで動くので、`main` で直しても効かない。`main` で直してから Run workflow で同じ版を渡す。
 - `release.yml` の赤は公開の段に関係しない。`release.yml` が赤でも公開の段は待たずに進み、上の表だけで切り分ける。
-- **`/release` の再開**: Run workflow で出し直して緑になったら、`/release {版}` を再開する。段 6.2 が題 `crates-io v{版}` の手動の走りの緑を認め、報告まで進む。
+- **`/release` の再開**: Run workflow で出し直して緑になったら、`/release {版}` を再開する。タグの push の走りが在れば（赤でも取り消しでも）、段 6.2 が題 `crates-io v{版}` の手動の走りの緑を認め、報告まで進む。push の走りが 1 本も無いときは段 6.1 で止まるので、4 節で crates.io に出たことを確かめて終える。
 
 ## 6. 予備の手順
 

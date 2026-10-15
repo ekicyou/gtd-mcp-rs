@@ -30,7 +30,7 @@
 ## してはいけない事
 
 - タグを動かさない・消さない（手元のタグもリモートのタグも）。
-- 同じ版を二度出さない。リモートにタグ `v{版}` が在る版や、crates.io に在る版で版上げを始めない。
+- 同じ版を二度出さない。リモートにタグ `v{版}` が在る版で版上げを始めない（段 1.4）。
 - `--tags`・`--follow-tags`・`--force`・`--admin` を使わない。main へ直接 push しない。
 - 手元から `cargo publish` しない（段 3.4 の `cargo publish --dry-run` は除く）。公開は Publish Workflow だけが行う。
 - `gh run rerun` や Run workflow など、走りを自分からやり直さない。やり直すかは開発者が決める。
