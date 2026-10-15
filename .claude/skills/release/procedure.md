@@ -177,3 +177,113 @@ git ls-remote --quiet --tags {remote} refs/tags/v{版} 2>/dev/null
 4. `git ls-remote` の終了コードが 0 で、出力が 0 行（リモートにタグ `v{版}` が無い）。終了コードが 0 でなければ止まる。1 行なら同じ版を出し直さずに止まり、そのタグの SHA を示す（2.6）。
 
 - 1.4 で止まるときは何も変更していない。
+
+## 段 2 版上げと見どころ
+
+段 2 では `Cargo.toml`・`Cargo.lock`・`doc/release-notes/v{版}.md` の 3 ファイルだけを変える。他の版の見どころファイルと `RELEASE.md` は変えない（3.4）。段 2 で止まるときは PR を出さず、作業木を消さずに残す。
+
+### 2.1 版上げ
+
+1. 根の `Cargo.toml` の `[package]` の `version = "{旧版}"` の 1 行を、Edit ツールで `version = "{版}"` に直す。他の行は触らない。
+2. `Cargo.lock` を揃える。
+
+```bash
+cargo update --workspace
+sed -n '/^\[package\]/,/^\[/{s/^version = "\(.*\)"$/\1/p}' Cargo.toml
+```
+
+- `cargo update --workspace` の終了コードが 0。0 でなければ止まる。
+- 2 行目の出力が `{版}` の 1 行（3.1）。外れたら止まる。差分の範囲（`Cargo.lock` が版の 1 行だけ変わったか）の判定は段 3.1 が持つ。
+
+### 2.2 見どころ
+
+1. `{起点}` がタグ `v{旧版}` のときだけ、そのタグを手元に取る（初回の分岐で `{起点}` がコミットのときは回さない）。
+
+```bash
+git fetch --quiet {remote} refs/tags/v{旧版}:refs/tags/v{旧版} 2>/dev/null
+```
+
+  - 終了コードが 0。0 でなければ止まる。
+
+2. 変更の一覧を読む（3.2, 3.3）。
+
+```bash
+git log --first-parent --format="%h %s" {起点}..{確かめた main}
+```
+
+  - 一覧は `{起点}` の次のコミットから `{確かめた main}` まで。初回の分岐では `{起点}`（版を `{旧版}` にしたコミット）自体は入らない（3.3）。
+  - 題の末尾が `(#N)` の行は squash でマージした PR で、`#N` が参照。`(#N)` の無い行は直接のコミットで、1 列目の 7 桁の短い SHA が参照（見どころの形の契約）。
+  - 出力が 0 行なら止まる（見どころに書く変更が無い）。
+
+3. Highlights Guide（`doc/release-notes/README.md`）を全部読み、その決まりに従って `doc/release-notes/v{版}.md` を Write ツールで新しく書く（3.2）。英語・普通の文体・ASCII だけ・LF。見出しは `### ` だけで、各見出しの末尾に参照を置く。
+  - 再開（段 0 の表の 1 行目）で `doc/release-notes/v{版}.md` が既に在るときは、1・2（タグの取り込みと一覧）を回し、3 は書き直さず 4 の読み直しへ進む。
+4. 書いたファイルを Highlights Guide の「Must include」と「Do not write」に照らして、2 の一覧と突き合わせて読み直す（3.5）。設定・使い方・MCP クライアントの設定・データファイルの変更を利用者に求める変更が一覧に在れば、それが「何が変わったか・利用者がすること・しないとどうなるか」の順ですべて載っていること。
+  - 漏れや「Do not write」に当たる物が在れば、このファイルだけを直して読み直す。ファイルが在り、読み直しで漏れが無ければ段 3 へ。
+
+## 段 3 手元の確かめ
+
+3.1 から 3.4 を順に、1 つずつ回す。どれか 1 つでも判定が外れたら、**版上げ PR を出さずに止まり**、通らなかった確かめの名前（「3.1 差分の範囲」など）と、判定に使った出力を示す。作業木は消さずに残す（4.5）。
+
+- 手元の確かめでソースを書き換えない。整形の自動修正（`cargo fmt --all`）も、`cargo clippy --fix` も回さない（4.6）。見どころファイルの形が外れたときも直さずに止まる。
+
+### 3.1 差分の範囲
+
+```bash
+git diff --numstat HEAD
+git diff -U0 HEAD -- Cargo.toml
+git diff -U0 HEAD -- Cargo.lock
+git status --porcelain
+```
+
+1. `git diff --numstat HEAD` がちょうど 2 行で、`1	1	Cargo.lock` と `1	1	Cargo.toml`（列はタブ区切り。足 1 行・消 1 行）（4.3）。
+2. `git diff -U0 HEAD -- Cargo.toml` と `git diff -U0 HEAD -- Cargo.lock` のどちらも、`---`・`+++` の行を除いた `-`・`+` の行が `-version = "{旧版}"` と `+version = "{版}"` の 2 行だけ（4.3, 3.1）。
+3. `git status --porcelain` がちょうど 3 行で、` M Cargo.toml`・` M Cargo.lock`・`?? doc/release-notes/v{版}.md`。新しいファイルは見どころの 1 つだけで、他の版の見どころファイルと `RELEASE.md` は出ない（4.3, 3.4）。
+
+### 3.2 見どころの形
+
+Highlights Guide の「Format check」の 4 つの確かめを、そのまま 1 つずつ回す（4.4）。Guide の `{version}` をこの文書の `{版}` に置き換えただけで、コマンドは同じ。
+
+```bash
+F=doc/release-notes/v{版}.md
+
+# 1. At least one "### " heading.
+grep -q '^### ' "$F"
+
+# 2. No "#" or "##" headings.
+! grep -nE '^#{1,2} ' "$F"
+
+# 3. Every "### " heading ends with a reference: (#N), (abc1234), or a
+#    ", "-separated list of them.
+! grep -n '^### ' "$F" | grep -vE '^[0-9]+:### .+ \((#[0-9]+|[0-9a-f]{7})(, (#[0-9]+|[0-9a-f]{7}))*\)$'
+
+# 4. ASCII characters only.
+! LC_ALL=C grep -nP '[^\x00-\x7F]' "$F"
+```
+
+- 4 つとも終了コード 0。1 つでも 1 なら止まり、外れた確かめの番号と、出た行（行番号つき。1 は何も出さない）を示す。
+- 英語・普通の文体・「Must include」・「Do not write」は機械では見ない。段 2.2 の 4 の読み直しが持つ。
+
+### 3.3 CI と同じ確かめ
+
+steering `tech.md` の CI チェック 5 種を、この順に 1 つずつ回す（4.1）。`&&` でつながず、1 つの終了コードを見てから次を回す。
+
+```bash
+cargo fmt --all -- --check
+cargo clippy --all-targets --all-features -- -D warnings
+cargo build --verbose
+cargo test --verbose
+cargo build --release --verbose
+```
+
+- 5 つとも終了コード 0。0 でなければ、そこで止まり、そのコマンドと失敗の出力の要点を示す。後のコマンドは回さない。
+- `cargo fmt --all -- --check` が外れても `cargo fmt --all` で直さない（4.6）。
+
+### 3.4 公開前の確かめ
+
+```bash
+cargo publish --dry-run --locked --allow-dirty
+```
+
+- 終了コード 0（4.2）。0 でなければ止まり、失敗の出力の要点を示す。
+- `--dry-run` を外さない。公開は Publish Workflow だけが行う。`--allow-dirty` は、3 ファイルがこの時点でまだコミットされていないために付ける（確定: 設計判断 10）。
+- 3.1〜3.4 がすべて通ったら段 4 へ。
