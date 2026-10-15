@@ -679,6 +679,7 @@ gh pr view {番号} --json state,mergeCommit --jq '"\(.state)\t\(.mergeCommit.oi
 - 見どころファイルの置き場・名前・形の決まりの変更（段 2.2・3.2）。
 - `release.yml` を待ち合わせる方針への変更、GitHub Release 本文の自動化の導入。
 - 公開済み判定の情報源（`https://index.crates.io/gt/d-/gtd-mcp`）の変更。
+- この手順の段の番号の変更（Publishing Guide 5 節は `/release` の再開で段 6.2 を名指ししている）。
 
 ## 開発者の設定
 

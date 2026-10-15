@@ -107,3 +107,4 @@
 - 申し送り（仕様側）: タグの push の走りが一度も起きず Run workflow で出し直した場合、`/release` 再開は段 6.1 で「走りが見つからない」で止まる（要件 7.7 は push の走りが赤の場合だけを想定）。Publishing Guide 5 節の再開の約束と隙間があり、7.7 の拡張を検討する
 - Cargo の `include` は gitignore 風の照合。`/` を含まない名前（例 `"README.md"`）はどの階層にも当たるので、根のファイルは `"/README.md"` のように根に固定する（5.1 で `doc/release-notes/README.md` の混入を検出して修正）
 - `gh pr list --search` に括弧を含む題を渡すときは `'"chore(release): v{版}" in:title'` のように語を二重引用符で囲む（囲まないと在る PR にも当たらない）。Windows では git の CRLF 警告が標準エラーに出るので、行数の判定は標準出力だけで行う
+- 完了時にその場で解決: procedure.md「見直すきっかけ」に、段の番号の変更で Publishing Guide 5 節（段 6.2 を名指し）を見直す行を足した
