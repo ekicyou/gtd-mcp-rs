@@ -58,7 +58,7 @@ Environment を空にするのは、公開の段が GitHub の environment（人
 crates.io の索引に、その版の行が在るかを見る（公開の段の「公開済み判定」「記録」と同じ判定）。
 
 ```bash
-curl -fsS https://index.crates.io/gt/d-/gtd-mcp | grep -c '"vers":"0.8.4"'
+curl -fsS https://index.crates.io/gt/d-/gtd-mcp | grep -cF '"vers":"0.8.4"'
 ```
 
 - `1` なら `present`（出ている）。`0` なら `absent`（出ていない）。`curl` がエラーを出したら、`0` が出ていても `unreadable`（読めない）。
