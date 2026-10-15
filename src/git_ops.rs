@@ -1,6 +1,11 @@
 use anyhow::{Context, Result};
-use git2::{Repository, Signature, Time};
+use git2::{
+    Config, Cred, CredentialType, FetchOptions, PushOptions, RemoteCallbacks, Repository,
+    Signature, Time,
+};
+use std::io::Write;
 use std::path::Path;
+use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 
 /// Git operations handler for automatic version control
@@ -78,8 +83,10 @@ impl GitOps {
             .find_remote("origin")
             .context("Failed to find remote 'origin'")?;
 
+        let mut fetch_options = FetchOptions::new();
+        fetch_options.remote_callbacks(Self::remote_callbacks(repo.config().ok()));
         remote
-            .fetch(&[&branch_name], None, None)
+            .fetch(&[&branch_name], Some(&mut fetch_options), None)
             .context("Failed to fetch from origin")?;
 
         // Get the fetch head
@@ -205,9 +212,82 @@ impl GitOps {
 
         // Push to remote
         let refspec = format!("refs/heads/{}", branch_name);
-        remote.push(&[&refspec], None)?;
+        let mut push_options = PushOptions::new();
+        push_options.remote_callbacks(Self::remote_callbacks(repo.config().ok()));
+        remote
+            .push(&[&refspec], Some(&mut push_options))
+            .context("Failed to push to origin")?;
 
         Ok(())
+    }
+
+    /// Build remote callbacks that supply credentials for fetch/push
+    ///
+    /// libgit2 does not consult git credential helpers by itself, so HTTPS
+    /// remotes that rely on helpers (e.g. `gh auth git-credential`) fail with
+    /// 401 unless credentials are provided here. Each method is tried at most
+    /// once, because libgit2 re-invokes the callback after a rejected attempt.
+    ///
+    /// Order of attempts:
+    /// 1. `git credential fill` (resolves helpers exactly like the git CLI)
+    /// 2. git2's built-in credential helper support
+    /// 3. SSH agent (for SSH remotes)
+    /// 4. Default credentials (e.g. Negotiate/NTLM)
+    ///
+    /// # Arguments
+    /// * `config` - Repository Git config used by the built-in helper fallback
+    ///
+    /// # Returns
+    /// RemoteCallbacks with a credentials handler
+    fn remote_callbacks(config: Option<Config>) -> RemoteCallbacks<'static> {
+        let mut tried_git_credential = false;
+        let mut tried_helper = false;
+        let mut tried_ssh_agent = false;
+        let mut tried_username = false;
+        let mut tried_default = false;
+
+        let mut callbacks = RemoteCallbacks::new();
+        callbacks.credentials(move |url, username_from_url, allowed| {
+            if allowed.contains(CredentialType::USER_PASS_PLAINTEXT) {
+                if !tried_git_credential {
+                    tried_git_credential = true;
+                    if let Some((username, password)) = git_credential_fill(url, username_from_url)
+                    {
+                        return Cred::userpass_plaintext(&username, &password);
+                    }
+                }
+                if !tried_helper {
+                    tried_helper = true;
+                    if let Some(config) = &config
+                        && let Ok(cred) = Cred::credential_helper(config, url, username_from_url)
+                    {
+                        return Ok(cred);
+                    }
+                }
+            }
+
+            if allowed.contains(CredentialType::USERNAME) && !tried_username {
+                tried_username = true;
+                return Cred::username(username_from_url.unwrap_or("git"));
+            }
+
+            if allowed.contains(CredentialType::SSH_KEY) && !tried_ssh_agent {
+                tried_ssh_agent = true;
+                return Cred::ssh_key_from_agent(username_from_url.unwrap_or("git"));
+            }
+
+            if allowed.contains(CredentialType::DEFAULT) && !tried_default {
+                tried_default = true;
+                return Cred::default();
+            }
+
+            Err(git2::Error::from_str(&format!(
+                "No valid credentials for {}. Configure a git credential helper \
+                 (e.g. `gh auth setup-git`) or an SSH agent.",
+                url
+            )))
+        });
+        callbacks
     }
 
     /// Get or create a Git signature for commits
@@ -271,5 +351,99 @@ impl GitOps {
         self.push().context("Failed to push changes")?;
 
         Ok(())
+    }
+}
+
+/// Obtain credentials via `git credential fill`
+///
+/// Delegates helper resolution to the installed git CLI so that every helper
+/// configuration it supports (quoted paths, `!` shell commands, helper reset
+/// with an empty value, Git Credential Manager, `gh auth git-credential`, ...)
+/// behaves the same as on the command line. Terminal prompts are disabled so
+/// the MCP server never blocks waiting for interactive input.
+///
+/// # Arguments
+/// * `url` - Remote URL requiring authentication
+/// * `username` - Username embedded in the URL, if any
+///
+/// # Returns
+/// Optional (username, password) pair; None if git is unavailable or no helper answered
+fn git_credential_fill(url: &str, username: Option<&str>) -> Option<(String, String)> {
+    let mut input = format!("url={}\n", url);
+    if let Some(username) = username {
+        input.push_str(&format!("username={}\n", username));
+    }
+    input.push('\n');
+
+    let mut command = Command::new("git");
+    command
+        .args(["credential", "fill"])
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null());
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+
+    let mut child = command.spawn().ok()?;
+    // Dropping stdin after writing closes the pipe so git can proceed
+    child.stdin.take()?.write_all(input.as_bytes()).ok()?;
+    let output = child.wait_with_output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    parse_credential_output(&String::from_utf8_lossy(&output.stdout))
+}
+
+/// Parse the `key=value` output of `git credential fill`
+///
+/// # Arguments
+/// * `output` - Standard output of `git credential fill`
+///
+/// # Returns
+/// Optional (username, password) pair; None if the password is missing
+fn parse_credential_output(output: &str) -> Option<(String, String)> {
+    let mut username = None;
+    let mut password = None;
+    for line in output.lines() {
+        if let Some(value) = line.strip_prefix("username=") {
+            username = Some(value.to_string());
+        } else if let Some(value) = line.strip_prefix("password=") {
+            password = Some(value.to_string());
+        }
+    }
+    Some((username.unwrap_or_default(), password?))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_credential_output() {
+        let output = "protocol=https\nhost=github.com\nusername=alice\npassword=secret\n";
+        assert_eq!(
+            parse_credential_output(output),
+            Some(("alice".to_string(), "secret".to_string()))
+        );
+    }
+
+    #[test]
+    fn test_parse_credential_output_without_password() {
+        let output = "protocol=https\nhost=github.com\nusername=alice\n";
+        assert_eq!(parse_credential_output(output), None);
+    }
+
+    #[test]
+    fn test_parse_credential_output_with_crlf() {
+        let output = "username=alice\r\npassword=secret\r\n";
+        assert_eq!(
+            parse_credential_output(output),
+            Some(("alice".to_string(), "secret".to_string()))
+        );
     }
 }
