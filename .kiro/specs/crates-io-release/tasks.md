@@ -25,7 +25,7 @@
   - 完了の状態: YAML として読め（`actionlint` が手元に在れば通す。無ければ構文の読み直し）、2.1 の grep の確かめが引き続き通る
   - _Requirements: 12.1, 12.2, 12.3, 12.4, 12.5_
 
-- [ ] 3. リリースの文書
+- [x] 3. リリースの文書
 - [x] 3.1 (P) 見どころファイルの書き方の決まりを英語で書く
   - 置き場と名前（`doc/release-notes/v{version}.md`、版ごとに 1 つ、UTF-8・LF・ASCII のみ）、英語・普通の文体、見出しの形と参照の書き方（`(#N)`・7 桁 SHA・`, ` 区切り）と見本 1 つを書く
   - 「Must include」「Do not write」・見どころの数の目安・材料の取り方（前のタグが無い初回の起点を含む）を書く
@@ -41,7 +41,7 @@
   - _Boundary: Release History Note_
   - _Requirements: 15.1, 15.2, 15.3_
 
-- [ ] 3.3 (P) crates.io の設定と運用の文書を日本語で書く
+- [x] 3.3 (P) crates.io の設定と運用の文書を日本語で書く
   - 設計の 7 節（何を出すか・Trusted Publishing の設定と順序・いつもの流れ・出たことの確かめ方・止まったときのやり直し・予備の手順・してはいけない操作）を書く
   - 登録値（owner・repo・workflow `crates-io.yml`・environment 空）と、最初のタグの push より前に登録が要ること、未登録だと段「鍵」で止まることを書く
   - 切り分け表の段の名前を 2.1・2.2 のワークフローの段の名前と一致させ、Re-run と Run workflow の違い、手動で出し直した後の `/release` の再開を書く
