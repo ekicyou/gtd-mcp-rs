@@ -23,6 +23,7 @@
 | `{確かめた main}` | 前提の確かめで取り込んだ `{remote}/main` の先端の SHA | 段 1.1 |
 | `{起点}` | 変更の一覧の起点（タグ `v{旧版}` か、初回は版を `{旧版}` にしたコミット） | 段 1.3 |
 | `{番号}` | 版上げ PR の番号 | 段 0・段 4.1 |
+| `{本文}` | 版上げ PR の本文を書く、作業木の外の一時ファイルの絶対パス | 段 4.1 |
 | `{sha}` | 版上げ PR の squash のコミット | 段 0・段 4.4 |
 | `{id}` | Publish Workflow の走りの番号 | 段 6.1 |
 
@@ -287,3 +288,214 @@ cargo publish --dry-run --locked --allow-dirty
 - 終了コード 0（4.2）。0 でなければ止まり、失敗の出力の要点を示す。
 - `--dry-run` を外さない。公開は Publish Workflow だけが行う。`--allow-dirty` は、3 ファイルがこの時点でまだコミットされていないために付ける（確定: 設計判断 10）。
 - 3.1〜3.4 がすべて通ったら段 4 へ。
+
+## 段 4 版上げ PR とマージ
+
+段 4 から先は GitHub に出る。外へ出るコマンド（`git push`・`gh pr create`・`gh pr merge`）は、1 回の呼び出しにつき単独の 1 行で回す。マージの前（4.1〜4.3）で止まるときは、PR を閉じず、枝と作業木を消さずに残す。打ち直せば段 0 の再開の表の「版上げ PR が開いている」行（または「先頭のコミットの題が `chore(release): v` で始まる」行）から続く。PR の CI の結果は待たない（5.5）。
+
+### 4.1 コミットと PR
+
+1. 3 ファイルだけを名前を挙げて足し、題 `chore(release): v{版}` でコミットする（5.1, 5.7）。`git add -A`・`git add .`・`git commit -a` は使わない。
+
+```bash
+git add Cargo.toml Cargo.lock doc/release-notes/v{版}.md
+git commit -m "chore(release): v{版}"
+git status --porcelain
+git show --numstat --format= HEAD
+```
+
+  - `git commit` の終了コードが 0。0 でなければ止まる。
+  - `git status --porcelain` が 0 行。
+  - `git show --numstat --format= HEAD` がちょうど 3 行で、`1	1	Cargo.lock`・`1	1	Cargo.toml`・`{N}	0	doc/release-notes/v{版}.md`（列はタブ区切り。`{N}` は見どころファイルの行数で、1 以上）。外れたら止まる（5.7）。
+
+2. 作業の枝を push する（再開の表の 2 行目はここから）。
+
+```bash
+git push --quiet {remote} HEAD 2>/dev/null
+```
+
+```bash
+git ls-remote --quiet {remote} refs/heads/{枝} 2>/dev/null
+git rev-parse HEAD
+```
+
+  - `git push` の終了コードが 0 で、`git ls-remote` の 1 行の SHA が `git rev-parse HEAD` と同じ。外れたら止まる。`{枝}` が `main` でないことは段 1.1 で確かめてある（main へ直接 push しない）。
+
+3. PR の本文を、Write ツールで作業木の外の一時ファイル `{本文}`（Claude Code の scratchpad の絶対パス。無ければ `/tmp/release-v{版}-pr-body.md`）に書く。パスはスラッシュ区切りで書き、コマンドでは引用符で囲む（Git Bash ではクォートしないバックスラッシュが消える）。作業木の中には書かない（作業木がきれいでなくなる）。本文には版・変更ファイル（1 の `git show --numstat --format= HEAD` の出力 3 行）・手元の確かめ 3.1〜3.4 の結果・見どころファイルの所在を書く（5.3）。形は次のとおり。
+
+```text
+Release v{版}.
+
+Files changed (git show --numstat --format= HEAD):
+
+    1	1	Cargo.lock
+    1	1	Cargo.toml
+    {N}	0	doc/release-notes/v{版}.md
+
+Local checks (all passed):
+
+- 3.1 diff scope
+- 3.2 highlights format
+- 3.3 CI checks: cargo fmt --all -- --check / cargo clippy --all-targets --all-features -- -D warnings / cargo build --verbose / cargo test --verbose / cargo build --release --verbose
+- 3.4 cargo publish --dry-run --locked --allow-dirty
+
+Highlights: doc/release-notes/v{版}.md
+```
+
+  - 3.1〜3.4 は通ったときだけコミットまで来るので「all passed」と書く。再開の表の 2 行目から来たときも同じ（コミットは段 3 が通った後にしか作られない）。
+
+4. main 宛てに PR を出す。
+
+```bash
+gh pr create --base main --head {枝} --title "chore(release): v{版}" --body-file "{本文}"
+```
+
+5. 出た PR を読み直し、`{番号}` と URL を覚える。`gh pr create` の終了コードや出力ではなく、この読み直しで決める。
+
+```bash
+gh pr list --head {枝} --state open --json number,url,title --jq '.[] | select(.title == "chore(release): v{版}") | "\(.number)\t\(.url)"'
+```
+
+  - ちょうど 1 行。1 列目を `{番号}` とし、2 列目の URL を最終報告のために覚える。0 行なら止まる（PR が開いていない）。
+
+### 4.2 PR のファイル
+
+```bash
+gh pr view {番号} --json headRefOid,files --jq '.headRefOid, (.files[] | .path)'
+git rev-parse HEAD
+```
+
+- 1 行目（PR の先頭のコミット）が `git rev-parse HEAD` と同じ。違えば止まる（読んだファイルが今の作業の枝のものでない）。
+- 2 行目以降がちょうど 3 行で、`Cargo.lock`・`Cargo.toml`・`doc/release-notes/v{版}.md` の 3 つ（順は問わない）（5.2）。それ以外のパスが在るか、3 行でなければ、**マージせずに止まり**、出たパスを示す。PR は閉じない。
+
+### 4.3 main の移動
+
+PR を出した後に main が `{確かめた main}` から進んでいたら、新しい main を取り込み、確かめ直してからマージへ進む（5.4）。
+
+1. main の先端を読む。
+
+```bash
+git fetch --quiet {remote} main 2>/dev/null
+git rev-parse {remote}/main
+```
+
+  - `git fetch` の終了コードが 0。0 でなければ止まる。
+  - `git rev-parse {remote}/main` が `{確かめた main}` と同じなら、取り込む物は無い。4.4 へ。違えば 2 から 8 を順に回す。
+
+2. 新しく入った変更を控える。`{確かめた main}` を覚えていないとき（再開の表の 2 行目・4 行目から来たとき）は、取り込みの前の `git merge-base {remote}/main HEAD` の値を `{確かめた main}` とする。このときは先に 1 の `git fetch` を回す。
+
+```bash
+git merge-base {remote}/main HEAD
+git log --first-parent --format="%h %s" {確かめた main}..{remote}/main
+```
+
+  - 出た行（題と参照）を最終報告のために控える（8.3）。0 行でも 3 以降を回す。
+
+3. 新しい main を取り込む。
+
+```bash
+git merge --no-edit {remote}/main
+```
+
+  - 衝突したら、衝突を自分で解かない。`git diff --name-only --diff-filter=U` で衝突したファイルを控え、`git merge --abort` で取り込みの前に戻してから止まり、控えたファイルを示す。PR は閉じない。
+
+4. 2 で控えた変更を Highlights Guide（`doc/release-notes/README.md`）に照らし、見どころに反映するかを決める。「Must include」に当たる物（設定・使い方・MCP クライアントの設定・データファイルの変更を利用者に求める変更など）が在れば、`doc/release-notes/v{版}.md` だけを Edit ツールで足し、段 3.2 の 4 つの確かめを回し、見どころだけのコミットを足す。当たる物が無ければ見どころは変えず、コミットも足さない。
+
+```bash
+git add doc/release-notes/v{版}.md
+git commit -m "chore(release): v{版} highlights update"
+```
+
+  - 足したかどうかを最終報告のために控える（8.3）。
+
+5. 段 3.3（CI と同じ確かめの 5 つ）と段 3.4（公開前の確かめ）を、書かれたとおり 1 つずつ回し直す。外れたら、マージせずに止まり、通らなかった確かめの名前と出力を示す。
+
+6. 段 3.1（差分の範囲）を `{remote}/main` 相手に読み替えて回し直す。
+
+```bash
+git diff --numstat {remote}/main HEAD
+git diff -U0 {remote}/main HEAD -- Cargo.toml
+git diff -U0 {remote}/main HEAD -- Cargo.lock
+git status --porcelain
+```
+
+  - `git diff --numstat {remote}/main HEAD` がちょうど 3 行で、`1	1	Cargo.lock`・`1	1	Cargo.toml`・`{N}	0	doc/release-notes/v{版}.md`。
+  - `Cargo.toml` と `Cargo.lock` の差分のどちらも、`---`・`+++` の行を除いた `-`・`+` の行が `-version = "{旧版}"` と `+version = "{版}"` の 2 行だけ。`{旧版}` を覚えていないときは、`-version = "…"` の行の版を `{旧版}` とし、それが `{版}` より古いことを段 1.4 の 3 と同じ比べ方で確かめる。
+  - `git status --porcelain` が 0 行。
+  - 外れたら、マージせずに止まり、出力を示す。
+
+7. 作業の枝を push し、4.1 の 2 の読み直しと 4.2 を回し直す。
+
+```bash
+git push --quiet {remote} HEAD 2>/dev/null
+```
+
+8. 1 で読んだ `{remote}/main` の値を `{確かめた main}` として覚え直し、1 へ戻る。1 で先端が `{確かめた main}` と同じになるまで繰り返す。
+
+### 4.4 squash マージ
+
+1. マージの直前に、もう一度 4.3 の 1 を回す。先端が `{確かめた main}` と違えば 4.3 の 2 へ戻る。
+2. 版上げ PR を squash でマージする。PR の CI の結果は待たず、開発者にも聞かない（5.5）。`--admin`・`--auto`・`--delete-branch` は付けない（作業の枝は消さない）。
+
+```bash
+gh pr merge {番号} --squash
+```
+
+3. PR の状態を読み直す。`gh pr merge` の終了コードや出力ではなく、この読み直しだけでマージの成否を決める（5.6）。
+
+```bash
+gh pr view {番号} --json state,mergeCommit --jq '"\(.state)\t\(.mergeCommit.oid // "-")"'
+```
+
+  - 1 列目が `MERGED` で、2 列目が 40 桁の SHA。当たれば 2 列目を `{sha}` として覚え、段 5 へ。
+  - `MERGED` でなければ止まり、出た行を示す。マージをやり直さない（`--admin` を足して打ち直す・`--auto` で待つ、などをしない）。PR は開いたまま残り、打ち直せば再開の表の「版上げ PR が開いている」行から続く。
+
+## 段 5 タグの push
+
+段 5 では、squash のコミット `{sha}` に注釈なしのタグ `v{版}` を 1 本だけ打ち、そのタグ 1 本だけを push する。タグを動かさない・消さない（手元のタグもリモートのタグも）。`--tags`・`--follow-tags`・`--force` を使わない（6.4, 6.5）。
+
+段 5 で止まるときは、main の版は `{版}` に上がったままになる。止まったら、見えた事実に加えて「打ち直せば再開の表の『版上げ PR が `MERGED` で、リモートのタグ `v{版}` が無い』行から、同じ `{sha}` にタグを打てる」ことを報告する（6.6）。手元に打ったタグは残す。
+
+### 5.1 タグの確かめ
+
+```bash
+git fetch --quiet {remote} main 2>/dev/null
+git merge-base --is-ancestor {sha} {remote}/main
+git show {sha}:Cargo.toml | sed -n '/^\[package\]/,/^\[/{s/^version = "\(.*\)"$/\1/p}'
+git ls-remote --quiet --tags {remote} refs/tags/v{版} 2>/dev/null
+git rev-parse -q --verify refs/tags/v{版}
+```
+
+4 つとも当たったら 5.2 へ。どれか 1 つでも外れたら、**push せずに止まる**（6.1, 6.2）。
+
+1. `git fetch` の終了コードが 0 で、`git merge-base --is-ancestor {sha} {remote}/main` の終了コードが 0（squash のコミットが main に在る）。1 や 128 なら止まる。
+2. `git show {sha}:Cargo.toml` から読んだ版が `{版}` の 1 行（そのコミットの版が今回の版と一致する）。
+3. `git ls-remote` の終了コードが 0 で、出力が 0 行（リモートにタグ `v{版}` が無い）。1 行なら同じ版を二度出さずに止まり、そのタグの SHA を示す。
+4. 手元のタグ `v{版}` が無い（`git rev-parse -q --verify refs/tags/v{版}` が何も出さず終了コード 1）か、出た SHA が `{sha}` と同じ。別の SHA（別のコミットや注釈つきのタグ）なら止まり、その SHA を示す。手元のタグを消さない・動かさない（6.2）。
+
+### 5.2 タグの push
+
+1. 手元にタグ `v{版}` が無いときだけ、`{sha}` に注釈なしのタグを打つ（`-a`・`-s`・`-m`・`-f` を付けない）。在るとき（5.1 の 4 で `{sha}` を指していたとき）は打たない。
+
+```bash
+git tag v{版} {sha}
+git rev-parse -q --verify refs/tags/v{版}
+```
+
+  - `git tag` の終了コードが 0 で、`git rev-parse` の出力が `{sha}`。外れたら止まり、出た値を示す。打ったタグは消さない。
+
+2. そのタグ 1 本だけを push する（6.1, 6.5）。
+
+```bash
+git push --quiet {remote} refs/tags/v{版} 2>/dev/null
+```
+
+3. リモートのタグを読み直す。`git push` の終了コードに関わらず、この読み直しで成否を決める（6.3）。
+
+```bash
+git ls-remote --quiet --tags {remote} refs/tags/v{版} 2>/dev/null
+```
+
+  - 終了コードが 0 で、ちょうど 1 行の `{sha}	refs/tags/v{版}`（SHA が `{sha}`）。当たれば段 6 へ。
+  - 0 行（タグを打てなかった）なら、push をやり直さずに止まる。手元のタグは残し、段 5 の冒頭の報告をする（6.6）。
+  - 1 行でも SHA が `{sha}` と違えば止まり、その SHA を示す。リモートのタグに触れない（6.4）。
