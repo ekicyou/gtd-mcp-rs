@@ -89,7 +89,7 @@ gtd-mcp の開発者（ekicyou）は、リリースのたびに版上げ・タ�
 #### Acceptance Criteria
 1. When 手元の確かめがすべて通った, the Release Skill shall 3 つのファイルだけを名前を挙げてコミットし、題 `chore(release): v{版}` の PR を main 宛てに出す
 2. When 版上げ PR を出した, the Release Skill shall PR に含まれるファイルを読み直し、3 つのファイル以外が含まれていれば止まる
-3. When 版上げ PR を出した, the Release Skill shall PR の本文に版・変更ファイル・手元の確かめの結果・見どころファイルの所在を書く
+3. When 版上げ PR を出す, the Release Skill shall PR の本文に版・変更ファイル・手元の確かめの結果・見どころファイルの所在を書く
 4. If PR を出した後に main が「確かめた main」から進んでいた, the Release Skill shall 新しい main を取り込み、新しく入った変更を見どころに反映するかを判断し、手元の確かめを回し直してからマージに進む
 5. When 版上げ PR の CI のチェックがすべて緑で終わった, the Release Skill shall 開発者に聞かずに版上げ PR を squash マージする（仮置き: OQ-2）
 6. If 版上げ PR の CI のチェックが赤で終わった, the Release Skill shall マージせずに止まり、赤のチェックの名前を報告する（仮置き: OQ-2）
@@ -159,8 +159,9 @@ gtd-mcp の開発者（ekicyou）は、リリースのたびに版上げ・タ�
 2. When 開発者が版を入力して手動で起動した, the Publish Workflow shall タグ `v{入力の版}` のコミットを対象に公開の走りを始める
 3. If タグ名が `v` と数字 3 つの形でない、または手動起動の入力が数字 3 つの形でない, the Publish Workflow shall 何も公開せずに失敗で終わり、受け付けられる形を示す
 4. If 対象のコミットの `Cargo.toml` の版がタグ（または入力）の版と一致しない, the Publish Workflow shall 何も公開せずに失敗で終わり、2 つの版を示す
-5. The Publish Workflow shall タグ名や入力の値を、形を確かめるまで処理の文に埋め込まない
-6. The Publish Workflow shall 他のワークフローの完了をきっかけにして起動しない
+5. If 手動起動で入力された版のタグ `v{入力の版}` がリモートに無い, the Publish Workflow shall 何も公開せずに失敗で終わり、タグが無いことを示す
+6. The Publish Workflow shall タグ名や入力の値を、形を確かめるまで処理の文に埋め込まない
+7. The Publish Workflow shall 他のワークフローの完了をきっかけにして起動しない
 
 ### Requirement 12: 冪等な公開と認証
 **Objective:** As a gtd-mcp の開発者, I want 同じ版で何度起動し直しても安全に公開されること, so that 止まった公開をボタン 1 つでやり直せる
