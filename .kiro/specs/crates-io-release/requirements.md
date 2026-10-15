@@ -6,13 +6,14 @@ gtd-mcp の開発者（ekicyou）は、リリースのたびに版上げ・タ�
 これを、areka の `release` スキルを gtd-mcp 用に削って移植した `/release` スキル（版上げ → 見どころファイル → 手元の確かめ → 版上げ PR → squash マージ → タグ `v{版}` の push → crates.io 公開の走りの見守り → 最終報告を承認待ち無しで回す）と、タグ push をきっかけに Trusted Publishing（OIDC）で crates.io へ冪等に公開する CI ワークフロー 1 本（`.github/workflows/crates-io.yml`）に置き換える。あわせて crates.io 側の Trusted Publishing 設定手順・運用・やり直し・予備手順の文書、英語の見どころファイルの書き方の決まり、`RELEASE.md` を凍結する注記を用意する。既存の `release.yml`・`ci.yml`・`security-audit.yml` は変更しない。詳細は `brief.md` を参照。
 
 ## Introduction
-本仕様は、gtd-mcp のリリース 1 回分（版上げから crates.io への公開確認まで）を、開発者の承認待ち無しに安全に回せるようにする。成果物は次の 5 つである。
+本仕様は、gtd-mcp のリリース 1 回分（版上げから crates.io への公開確認まで）を、開発者の承認待ち無しに安全に回せるようにする。成果物は次の 6 つである。
 
 - **Release Skill**: `/release` スキル（`.claude/skills/release/SKILL.md` と `procedure.md`）。手元での版上げから見守り・最終報告までを担う。
 - **Publish Workflow**: crates.io への公開ワークフロー（`.github/workflows/crates-io.yml`）。タグ `v{版}` の push を受けて、長期の鍵を使わずに crates.io へ冪等に公開する。
 - **Publishing Guide**: crates.io 設定と運用の文書（`doc/crates-io-publish.md`）。
 - **Highlights Guide**: 見どころファイルの書き方の決まり（`doc/release-notes/README.md`、英語）。
-- **Release History Note**: `RELEASE.md` 冒頭の凍結の注記。
+- **Release History Note**: `RELEASE.md` 冒頭の凍結の注記と、`README.md`・`README.ja-jp.md` の案内の修正。
+- **gtd-mcp package**: `Cargo.toml` の包みの範囲の指定（crates.io に上がる中身を絞る一度きりの変更）。
 
 本文中の「{版}」は今回出す版（`X.Y.Z`）、「{旧版}」は上げる前の版、「版上げ PR」は題が `chore(release): v{版}` の PR を指す。「（仮置き: OQ-n）」と付けた受け入れ基準は、要件ディスカッションで確定させる未決事項に基づく仮の記述である（末尾「未決事項と仮置き」参照）。
 
@@ -22,7 +23,8 @@ gtd-mcp の開発者（ekicyou）は、リリースのたびに版上げ・タ�
   - タグ `v{版}` の push、または版を指定した手動起動による crates.io への冪等な公開（Trusted Publishing のみで認証）
   - crates.io 側の Trusted Publisher 登録手順・いつもの流れ・やり直し・予備の手順・してはいけない操作の文書化
   - 見どころファイル（英語・普通の文体）の書き方の決まり
-  - `RELEASE.md` の凍結と、以後の記録の置き場への案内
+  - `RELEASE.md` の凍結と、以後の記録の置き場への案内（`README.md`・`README.ja-jp.md` の `RELEASE.md` への案内の 1 行ずつの修正を含む）
+  - crates.io に上がる包みの中身を、利用に要るファイルだけに絞る一度きりの変更（`Cargo.toml` の包みの範囲の指定。このフィーチャーの実装で 1 回だけ行い、版上げ PR では触らない）
   - 開発者の自動モード許可ルールの文例の提示（設定ファイル自体は書き換えない）
 - **Out of scope**:
   - 既存の `release.yml`（バイナリ配布と GitHub Release 作成）・`ci.yml`・`security-audit.yml` の変更
@@ -31,7 +33,7 @@ gtd-mcp の開発者（ekicyou）は、リリースのたびに版上げ・タ�
   - 過去の版（0.8.1〜0.8.3）のタグや見どころの後追い作成
   - crates.io の画面操作そのもの、開発者の Claude Code 設定ファイルの書き換え
 - **Adjacent expectations**:
-  - タグ `v*` の push では既存の `release.yml` も同時に走る。Publish Workflow は `release.yml` を呼ばず、`release.yml` も Publish Workflow を呼ばない。Publish Workflow が `release.yml` の完了を待ち合わせるかどうかは設計で決める（brief の基本方針は「待ち合わせない」）。Release Skill は `release.yml` の走りを合否の判定に含めない（仮置き: OQ-4）。
+  - タグ `v*` の push では既存の `release.yml` も同時に走る。Publish Workflow は `release.yml` を呼ばず、`release.yml` も Publish Workflow を呼ばない。Publish Workflow が `release.yml` の完了を待ち合わせるかどうかは設計で決める（brief の基本方針は「待ち合わせない」）。Release Skill は `release.yml` の走りを見守らず、合否の判定にも含めない（OQ-4 で確定）。
   - crates.io 側で Trusted Publisher（owner `ekicyou`・repo `gtd-mcp-rs`・workflow `crates-io.yml`・environment 空）が登録済みであることを前提とする。登録は開発者が行う。
   - GitHub 操作には開発者の手元で認証済みの `gh` を使う。手元の確かめは steering（`tech.md`）の「CI チェック」と同じ内容を基準とする。
 
@@ -148,7 +150,7 @@ gtd-mcp の開発者（ekicyou）は、リリースのたびに版上げ・タ�
 **Objective:** As a gtd-mcp の開発者, I want 最終報告を読んで見どころの直しを頼めること, so that 公開済みの版の記述の誤りを main で直せる
 
 #### Acceptance Criteria
-1. When 開発者が公開済みの版 {版} の見どころの直しを頼んだ, the Release Skill shall 最新の main を取り込み、`doc/release-notes/v{版}.md` の 1 ファイルだけを直す PR を題 `docs(release): v{版} の見どころの直し` で出し、そのファイルだけを含むことを確かめて squash マージする（仮置き: OQ-3）
+1. When 開発者が公開済みの版 {版} の見どころの直しを頼んだ, the Release Skill shall 最新の main を取り込み、`doc/release-notes/v{版}.md` の 1 ファイルだけを直す PR を題 `docs(release): v{版} の見どころの直し` で出し、そのファイルだけを含むことを確かめて squash マージする
 2. The Release Skill shall 見どころの直しでタグ・タグのコミット・crates.io の公開物・GitHub Release を変更しない
 
 ### Requirement 11: 公開ワークフローのきっかけと版の確かめ
@@ -205,6 +207,16 @@ gtd-mcp の開発者（ekicyou）は、リリースのたびに版上げ・タ�
 #### Acceptance Criteria
 1. The Release History Note shall `RELEASE.md` の冒頭に、以後の版の記録は `doc/release-notes/` と GitHub Releases を参照する旨の注記を英語で置く
 2. The Release History Note shall `RELEASE.md` の既存の本文（v0.8.0 までの記録）を変更しない
+3. The Release History Note shall `README.md`・`README.ja-jp.md` の `RELEASE.md` を全版のリリースノートとする案内を、v0.8.0 までは `RELEASE.md`、以後は `doc/release-notes/` と GitHub Releases を参照する案内に、それぞれの文書の言語で 1 か所ずつ直す
+
+### Requirement 16: crates.io に上がる包みの中身
+**Objective:** As a gtd-mcp の利用者, I want crates.io から取得するパッケージに利用に要るファイルだけが入っていること, so that 開発用のスキル・仕様・CI の設定を受け取らずに済む
+**Out of boundary for this Release Skill:** この変更はこのフィーチャーの実装で 1 回だけ行い、版上げ PR（要件 3〜5）では版の置き場以外を触らない。
+
+#### Acceptance Criteria
+1. The gtd-mcp package shall crates.io へ包む対象を、ビルドと利用に要るファイル（ソース・`Cargo.toml`・`Cargo.lock`・README・ライセンス等。具体的な一覧は設計で決める）に限る
+2. The gtd-mcp package shall 包みに `.claude/`・`.kiro/`・`.github/`・`CLAUDE.md` を含めない
+3. When 包みの範囲を変えた, the gtd-mcp package shall 包んだ中身からビルドできることを公開せずに確かめられる
 
 ## 未決事項と仮置き (Open Questions)
 要件ディスカッションで確定させる。各項目の「仮置き」は、上の受け入れ基準に反映済みの暫定案である。
@@ -216,16 +228,8 @@ gtd-mcp の開発者（ekicyou）は、リリースのたびに版上げ・タ�
 - **OQ-2: 版上げ PR の CI を待ってからマージするか**
   - 事実: main はブランチ保護されておらず必須チェックも無いため、`gh pr merge` は CI の結果を待たずに通る。CI は 3 つの OS で回るが、手元の確かめは Windows の 1 つだけ。
   - 仮置き: PR の CI のチェックが全部緑になるのを待ってからマージし、赤ならマージせずに止まる（要件 5.5・5.6）。
-- **OQ-3: 公開後の見どころの直しを範囲に含めるか**
-  - 仮置き: 含める。ただし GitHub Release の本文は見どころから作らない（範囲外）ので、直すのは main の見どころファイルだけ（要件 10）。
-- **OQ-4: 既存 `release.yml` の走りを見守り・報告に含めるか**
-  - 仮置き: 含めない。合否の判定は Publish Workflow の走りと crates.io の有無だけで行う。`release.yml` は非推奨のアクションを使っており赤になる可能性があるが、範囲外として扱う。
-- **OQ-5: 次のリリースへの申し送り（areka の roadmap の節）の扱い**
-  - 事実: gtd-mcp の steering に roadmap は無い。
-  - 仮置き: 申し送りを読む段は移植しない。
-- **OQ-6: README の RELEASE.md への案内**
-  - 事実: `README.md`・`README.ja-jp.md` は `RELEASE.md` を「全版のリリースノート」と案内している。
-  - 仮置き: brief の範囲に README の変更は無いため変更しない（注記は `RELEASE.md` 側だけ）。ディスカッションで README の 1 行修正を範囲に入れるか決める。
-- **OQ-7: crates.io に上がる包みの中身を絞るか**
-  - 事実: `Cargo.toml` に `include`/`exclude` が無く、現状の包みに `.claude/`・`.kiro/`・`.github/`・`CLAUDE.md`・`doc/` 等が入る（research.md 4 節）。この spec で足すスキルや文書も公開物に混ざる。
-  - 仮置き: 版上げ PR（要件 3〜5）は版の置き場以外を触らない前提を保ち、包みの範囲の変更はこの spec の要件に含めない。ディスカッションで、このフィーチャーの実装 PR で一度だけ `Cargo.toml` の包みの範囲を絞るかを決める。
+- **OQ-3: 公開後の見どころの直しを範囲に含めるか** — **確定（推奨案）**: 含める。直すのは main の見どころファイルだけで、GitHub Release の本文は触らない（要件 10）。
+- **OQ-4: 既存 `release.yml` の走りを見守り・報告に含めるか** — **確定（推奨案）**: 含めない。合否の判定は Publish Workflow の走りと crates.io の有無だけで行う（Boundary Context）。
+- **OQ-5: 次のリリースへの申し送り（areka の roadmap の節）の扱い** — **確定（推奨案）**: 移植しない（gtd-mcp の steering に roadmap が無いため）。
+- **OQ-6: README の RELEASE.md への案内** — **確定（推奨案）**: 範囲に入れ、`README.md`・`README.ja-jp.md` の案内を 1 か所ずつ直す（要件 15.3）。
+- **OQ-7: crates.io に上がる包みの中身を絞るか** — **確定（推奨案）**: 絞る。このフィーチャーの実装で `Cargo.toml` の包みの範囲を一度だけ指定し、版上げ PR は版の置き場以外を触らない前提を保つ（要件 16）。
