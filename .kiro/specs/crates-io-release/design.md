@@ -59,7 +59,7 @@
 - 版の置き場は `Cargo.toml` の `[package] version`（`0.8.3`）と `Cargo.lock` の `name = "gtd-mcp"` 直後の `version` 行の 2 か所。単一クレート（lib `gtd_mcp` + bin `gtd-mcp`）。
 - `Cargo.lock` は追跡済み（`dbe9713`）で、`--locked` を前提にできる。
 - 既存の CI は `ubuntu-latest` を中心に `actions/checkout@v5` を使う。`release.yml` はタグ `v*` の push で走り、本 spec の Publish Workflow と並走する。
-- main はブランチ保護が無い。`dependabot.yml` は毎週 `Cargo.toml`・`Cargo.lock` を変更する PR を開きうる（要件 2.5 の止まり条件に当たる。リスク参照）。
+- main はブランチ保護が無い。`dependabot.yml` は毎週 `Cargo.toml`・`Cargo.lock` を変更する PR を開きうるが、作者が `dependabot[bot]` の PR は要件 2.5 の止まり条件から外す（設計判断 9）。`rebase-strategy: auto` なので版上げの後の衝突も dependabot が自分で直す。
 - `Cargo.toml` に `include`/`exclude` が無く、現状の包みに `.claude/`・`.kiro/`・`.github/`・`CLAUDE.md`・`doc/`・`tests/` 等が入る。
 - `src/` に `include_str!` 等の外部ファイル参照は無い（`src/**/*.rs` だけでビルドできる）。
 
@@ -99,7 +99,7 @@ graph TB
 |-------|------------------|-----------------|-------|
 | Agent procedure | Claude Code スキル（`SKILL.md` + `procedure.md`） | リリース手順の正本と約束 | `disable-model-invocation: true` で明示実行のみ |
 | Local CLI | `git`・`gh` 2.x・`cargo`（stable）・`curl` | 版上げ・確かめ・PR・タグ・走りの読み取り | 新しい道具は足さない。`cargo-edit` にも依存しない |
-| CI runtime | GitHub Actions `ubuntu-latest`・bash | 公開の走り | 既存 CI と同じ OS。仮置き（OPEN QUESTION 1） |
+| CI runtime | GitHub Actions `ubuntu-latest`・bash | 公開の走り | 既存 CI と同じ OS。確定（設計判断 1） |
 | CI actions | `actions/checkout@v5`・`rust-lang/crates-io-auth-action@v1` | 取り出し・OIDC で短命の鍵 | checkout は既存 `ci.yml` と同じ版 |
 | Registry | crates.io sparse index（`https://index.crates.io/gt/d-/gtd-mcp`） | 公開済み判定 | 1 行 1 版の JSON |
 | Packaging | `Cargo.toml` の `include` | 包みの範囲 | 一度きりの変更 |
@@ -121,7 +121,7 @@ doc/
 `doc/release-notes/v{版}.md` はリリースのたびに Release Skill が作る実行時の成果物であり、本フィーチャーの実装では作らない。
 
 ### Modified Files
-- `Cargo.toml` — `[package]` に `include = ["src/**/*.rs", "Cargo.toml", "Cargo.lock", "README.md", "LICENSE"]` を足す（要件 16。仮置き: OPEN QUESTION 6）。他の行は変えない。
+- `Cargo.toml` — `[package]` に `include = ["src/**/*.rs", "Cargo.toml", "Cargo.lock", "README.md", "LICENSE"]` を足す（要件 16。確定: 設計判断 6）。他の行は変えない。
 - `RELEASE.md` — 1 行目の `# Release Notes` の直後に、英語の凍結の注記（引用ブロック 1 つ）を足す。既存の本文は 1 字も変えない（要件 15.1, 15.2）。
 - `README.md` — 199 行目の `RELEASE.md` の案内 1 行を、英語で「v0.8.0 までは `RELEASE.md`、以後は `doc/release-notes/` と GitHub Releases」に直す（要件 15.3）。
 - `README.ja-jp.md` — 213 行目の同じ案内 1 行を日本語で直す（要件 15.3）。
@@ -221,7 +221,7 @@ graph TB
 | 5.5, 5.6, 5.7 | CI を待たない squash マージと読み直し | Release Skill | 段 4.4 | リリース 1 回分 |
 | 6.1, 6.2, 6.3, 6.4, 6.5, 6.6 | タグの確かめ・1 本だけの push・読み直し | Release Skill | 段 5 | リリース 1 回分 |
 | 7.1, 7.2 | 公開の走りの特定と待ち | Release Skill | 段 6.1 | リリース 1 回分 |
-| 7.3 | 緑の判定 | Release Skill | 段 6.2・公開済み判定の契約 | — |
+| 7.3, 7.7 | 緑の判定（再開時は同じ版の手動の走りも認める） | Release Skill, Publish Workflow | 段 6.2・公開済み判定の契約・`run-name` | — |
 | 7.4, 7.5, 7.6 | 赤の扱い | Release Skill, Publishing Guide | 段 6.3・切り分け表 | — |
 | 8.1, 8.2, 8.3, 8.4, 8.5, 8.6 | 最終報告 | Release Skill | 段 7 | — |
 | 9.1, 9.2, 9.3, 9.4 | 再開の判定 | Release Skill | 再開の表 | 再開の判定 |
@@ -274,9 +274,9 @@ graph TB
 
 #### 見どころの形の契約（Highlights Guide が定め、Release Skill が確かめる）
 - 置き場: `doc/release-notes/v{版}.md`、版ごとに 1 つ、UTF-8、改行は LF。
-- 中身: ASCII 文字だけ（英語・普通の文体の機械的な代理。仮置き: OPEN QUESTION 5）。
+- 中身: ASCII 文字だけ（英語・普通の文体の機械的な代理。確定: 設計判断 5）。
 - 見出し: `#`・`##` の見出しを使わない。`### ` で始まる行が 1 行以上在り、`### ` の行はすべて見どころの見出し。
-- 見出しの末尾: 元になった変更への参照を `(...)` で置く。参照 1 つは `#{PR 番号}` か、PR を持たない直接のコミットの 7 桁の短い SHA。複数は `, `（コンマと空白 1 つ）で区切る。正規表現: `^### .+ \((#[0-9]+|[0-9a-f]{7})(, (#[0-9]+|[0-9a-f]{7}))*\)$`（仮置き: OPEN QUESTION 4）。
+- 見出しの末尾: 元になった変更への参照を `(...)` で置く。参照 1 つは `#{PR 番号}` か、PR を持たない直接のコミットの 7 桁の短い SHA。複数は `, `（コンマと空白 1 つ）で区切る。正規表現: `^### .+ \((#[0-9]+|[0-9a-f]{7})(, (#[0-9]+|[0-9a-f]{7}))*\)$`（確定: 設計判断 4）。
 - 機械で見ない物（書いた側が読み直す）: 英語・普通の文体であること、「必ず載せるもの」が全部載っていること、「書かないもの」が無いこと。
 
 ### 手順（手元）
@@ -286,7 +286,7 @@ graph TB
 | Field | Detail |
 |-------|--------|
 | Intent | `/release` の 1 回で、版上げから公開確認・最終報告までを止まらずに回す |
-| Requirements | 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 2.9, 3.1, 3.2, 3.3, 3.4, 3.5, 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 9.7, 9.8, 9.9, 9.10, 10.1, 10.2 |
+| Requirements | 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 2.9, 3.1, 3.2, 3.3, 3.4, 3.5, 4.1, 4.2, 4.3, 4.4, 4.5, 4.6, 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7, 8.1, 8.2, 8.3, 8.4, 8.5, 8.6, 9.1, 9.2, 9.3, 9.4, 9.5, 9.6, 9.7, 9.8, 9.9, 9.10, 10.1, 10.2 |
 
 **Responsibilities & Constraints**
 - `SKILL.md` は約束（Core Task・段の要約・Rules）だけを持ち、段・コマンド・判定・表は `procedure.md` が正本（areka と同じ分担）。frontmatter に `disable-model-invocation: true` と `argument-hint: '[X.Y.Z]'` を置く（1.6）。
@@ -310,7 +310,7 @@ graph TB
 |---|---|---|---|
 | 0 再開の読み方 | State Management の表で始める段を決める | どれかの行に当たる | 9.1〜9.4 |
 | 1.1 枝・作業木・main | `git branch --show-current` が `main` でない。`git status --porcelain` が 0 行。`git fetch --quiet {remote} main` → 必要なら `git merge {remote}/main`。`git diff --name-only {remote}/main...HEAD` が 0 件。`git rev-parse {remote}/main` を `{確かめた main}` に覚える | 3 つ全部が当たる。`main` なら「ハーネスのワークツリーの枝で打ち直す」と示す | 2.1, 2.2, 2.3, 2.4 |
-| 1.2 開いた PR | `gh pr list --state open --limit 200 --json number,title,files` で、`files` に `Cargo.toml` か `Cargo.lock`（根）を持つ PR を数える（`files` が 100 件の PR は `gh pr diff {番号} --name-only` で読み直す） | 0 本。在れば番号と題を示す | 2.5 |
+| 1.2 開いた PR | `gh pr list --state open --limit 200 --json number,title,files,author` で、`author.login` が `app/dependabot` の PR を除き、`files` に `Cargo.toml` か `Cargo.lock`（根）を持つ PR を数える（`files` が 100 件の PR は `gh pr diff {番号} --name-only` で読み直す） | 0 本。在れば番号と題を示す | 2.5 |
 | 1.3 旧版と前のタグ | `git show HEAD:Cargo.toml` の `[package] version` を `{旧版}` とする。`git ls-remote --quiet --tags {remote} refs/tags/v{旧版}` を読む。1 行なら `{起点}`＝`v{旧版}`。0 行なら `gh pr list --state merged --search "chore(release): v{旧版} in:title" --json number,title,mergeCommit` と公開済み判定（`{旧版}`）を読み、下の 3 分岐に当てはめる | 下の分岐表 | 2.7, 2.8, 2.9 |
 | 1.4 次の版 | 引数なしは `{旧版}` の 3 つ目 +1。引数は先頭の `v` を除く。形 `^[0-9]+\.[0-9]+\.[0-9]+$`。`{版}` > `{旧版}`（数 3 つを数として比べる）。`git ls-remote --quiet --tags {remote} refs/tags/v{版}` が 0 行 | 全部が当たる。形の外れは受け付ける形を、版の外れは 2 つの版を示す。何も変更していない | 1.1, 1.2, 1.3, 1.4, 2.6 |
 | 2.1 版上げ | `Cargo.toml` の `version = "{旧版}"` 1 行を Edit で `{版}` に直し、`cargo update --workspace` で `Cargo.lock` の 1 行を揃える | `Cargo.toml` の版が `{版}`。範囲の判定は 3.1 が持つ | 3.1 |
@@ -318,7 +318,7 @@ graph TB
 | 3.1 差分の範囲 | `git diff --numstat HEAD`・`git diff -U0 HEAD -- Cargo.toml`・`git diff -U0 HEAD -- Cargo.lock`・`git status --porcelain` | 変更は `Cargo.toml`・`Cargo.lock` だけで、各々 消 1 行 `version = "{旧版}"`・足 1 行 `version = "{版}"`。新しいファイルは `doc/release-notes/v{版}.md` の 1 行だけ | 4.3, 3.4 |
 | 3.2 見どころの形 | 見どころの形の契約を `grep` で確かめる（`### ` 行が 1 以上・`^#{1,2} ` 行が 0・`### ` 行がすべて参照の正規表現に合う・非 ASCII の行が 0） | 4 つとも当たる。外れた項目と行番号を示す | 4.4 |
 | 3.3 CI と同じ確かめ | steering `tech.md` の 5 コマンド（`cargo fmt --all -- --check`・`cargo clippy --all-targets --all-features -- -D warnings`・`cargo build --verbose`・`cargo test --verbose`・`cargo build --release --verbose`）を 1 つずつ順に | 5 つとも終了コード 0。整形の自動修正（`cargo fmt --all`）はしない | 4.1, 4.6 |
-| 3.4 公開前の確かめ | `cargo publish --dry-run --locked --allow-dirty` | 終了コード 0（仮置き: OPEN QUESTION 10） | 4.2 |
+| 3.4 公開前の確かめ | `cargo publish --dry-run --locked --allow-dirty` | 終了コード 0（確定: 設計判断 10） | 4.2 |
 | 4.1 コミットと PR | `git add Cargo.toml Cargo.lock doc/release-notes/v{版}.md` → 題 `chore(release): v{版}` でコミット → `git push --quiet {remote} HEAD` → `gh pr create --base main --title "chore(release): v{版}" --body-file …`。本文に版・変更ファイル（`--numstat`）・3.1〜3.4 の結果・見どころの所在 | PR が開いた | 5.1, 5.3, 5.7 |
 | 4.2 PR のファイル | `gh pr view {番号} --json files` | 3 ファイルだけ | 5.2 |
 | 4.3 main の移動 | `git fetch --quiet {remote} main`。先端が `{確かめた main}` と違えば: 新しく入った題を `git log --first-parent --format="%h %s" {確かめた main}..{remote}/main` で控える → `git merge {remote}/main` → 「Must include」に当たる物が在れば見どころに足して 3.2 を回し、見どころだけのコミットを足す → 3.3・3.4 を回し直す → 3.1 を `{remote}/main` 相手に読み替えて回し直す → push → 4.2 を回し直す → `{確かめた main}` を覚え直す | 先端が `{確かめた main}` と同じ | 5.4 |
@@ -326,7 +326,7 @@ graph TB
 | 5.1 タグの確かめ | `git fetch --quiet {remote} main` → `git merge-base --is-ancestor {sha} {remote}/main` が 0。`git show {sha}:Cargo.toml` の版が `{版}`。`git ls-remote --quiet --tags {remote} refs/tags/v{版}` が 0 行。手元の `refs/tags/v{版}` が無いか `{sha}` を指す | 4 つとも当たる。手元のタグが別のコミットなら止まり、消さない | 6.1, 6.2 |
 | 5.2 タグの push | 手元に無ければ `git tag v{版} {sha}`（注釈なし）。`git push --quiet {remote} refs/tags/v{版}` | `git ls-remote --quiet --tags {remote} refs/tags/v{版}` が `{sha}` を返す | 6.1, 6.3, 6.4, 6.5 |
 | 6.1 走りの特定と待ち | `gh run list --workflow crates-io.yml --event push --json databaseId,headSha,headBranch,status,conclusion` から `headBranch`＝`v{版}` かつ `headSha`＝`{sha}` の走りを取る（30 秒ごと最長 5 分）。`gh run watch {id} --exit-status --interval 30` を裏で回して待つ | 走りが見つかり、`completed` になった。見つからなければ止まる | 7.1, 7.2 |
-| 6.2 緑の判定 | `gh run view {id} --json conclusion` が `success`、かつ公開済み判定（`{版}`）が `present`（`absent` なら 30 秒ごと最長 5 分読み直す） | 両方が当たれば緑 | 7.3 |
+| 6.2 緑の判定 | `gh run view {id} --json conclusion` が `success`、かつ公開済み判定（`{版}`）が `present`（`absent` なら 30 秒ごと最長 5 分読み直す）。再開のときに push の走りが `success` でなければ、`gh run list --workflow crates-io.yml --event workflow_dispatch --json databaseId,displayTitle,status,conclusion` から題が `crates-io v{版}` で `completed` の最も新しい走りを読み、`success` ならそれを `{id}` に置き換えて同じ判定を行う | 両方が当たれば緑 | 7.3, 7.7 |
 | 6.3 赤の扱い | 見えた事実を Publishing Guide 5 節の切り分けに当てはめて示し、止まる | — | 7.4, 7.5, 7.6 |
 | 7 報告 | 日本語の報告 1 つ（Error Handling の「最終報告の中身」） | — | 8.1〜8.5 |
 
@@ -371,7 +371,7 @@ graph TB
 **Implementation Notes**
 - Integration: areka の `procedure.md` の骨組み（読み方・してはいけない事・止まり方・段 1〜7・再開の表・見直すきっかけ・開発者の設定）を保ち、上の表に縮める。areka 固有の段（申し送り・`dist/README.txt`・`THIRD-PARTY-NOTICES.md`・起動確認・Release の走りと本文の比較・winget・`tools/*.ps1`）は落とす。
 - Validation: 実装 PR の後、最初の `/release`（0.8.4 の予定）が実地の検証になる。それまでに段 1〜3.4 の判定コマンドを手元で個別に回して出力の形を確かめる（Testing Strategy）。
-- Risks: dependabot の開いた PR が段 1.2 で止める（Risks 参照）。
+- Risks: 段 1.2 は dependabot の PR を数えない（設計判断 9）。人が版の置き場を触る PR を開いていれば止まる。
 
 ### CI
 
@@ -399,6 +399,7 @@ graph TB
   - `push: tags: ['v*']`
   - `workflow_dispatch: inputs: version`（`required: true`・`type: string`・説明「出す版（v を付けない。例 0.8.4）」）
   - `workflow_run` 等の他のワークフローをきっかけにしない。
+- **Run name**（7.7）: `run-name: crates-io ${{ inputs.version && format('v{0}', inputs.version) || github.ref_name }}`。タグの push でも手動起動でも走りの題が `crates-io v{版}` になり、Release Skill が手動の走りを版で見つけられる（式は題の生成だけに使い、`run:` には埋め込まない）。
 - **Permissions**（12.6, 12.7）: `contents: read`・`id-token: write` だけ。`secrets.` を一切参照しない。`actions/checkout` は `persist-credentials: false`。
 - **Concurrency**（12.8）: `group: crates-io`・`cancel-in-progress: false`。
 - **Steps**（名前は Publishing Guide の切り分け表と一致させる。要件 12.4 の「どの段で止まったか」は段の結果で残る）:
@@ -413,7 +414,7 @@ graph TB
 | 包む確かめ | `state == absent` | `cargo publish --dry-run --locked` | 包めない・組み立てられない | 12.3, 12.4 |
 | 鍵 | `state == absent` | `rust-lang/crates-io-auth-action@v1`（`id: auth`） | 鍵を受け取れない（Trusted Publisher の未登録・不一致） | 12.3, 12.4 |
 | 公開 | `state == absent` | `CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}` を環境変数で渡し `cargo publish --locked --no-verify` | 公開に失敗 | 12.3, 12.4 |
-| 記録 | `always()` | `VERSION` が無ければ「版を確かめる前に止まった」と要約に書いて終わる。在れば公開済み判定を行い、`absent` で「公開」が成功していた場合だけ 30 秒ごと最長 5 分読み直す（仮置き: OPEN QUESTION 8）。`## crates.io gtd-mcp {版}` と `present`/`absent`/`unreadable` と各段の結果を `GITHUB_STEP_SUMMARY` に書く | `present` でない | 12.5 |
+| 記録 | `always()` | `VERSION` が無ければ「版を確かめる前に止まった」と要約に書いて終わる。在れば公開済み判定を行い、`absent` で「公開」が成功していた場合だけ 30 秒ごと最長 5 分読み直す（確定: 設計判断 8）。`## crates.io gtd-mcp {版}` と `present`/`absent`/`unreadable` と各段の結果を `GITHUB_STEP_SUMMARY` に書く | `present` でない | 12.5 |
 
 - **Idempotency & recovery**: 公開済みなら鍵を取らずに緑（12.2）。「Re-run」はタグのコミットに在るワークフローで、「Run workflow」は main のワークフローで動く。どちらも同じ版で何度でも安全。公開の競合（並走で既に出た）でも「記録」が `present` を読めば緑になる。
 - **Output / destination**: crates.io の `gtd-mcp` {版}、走りの要約。
@@ -437,7 +438,7 @@ graph TB
 2. Trusted Publishing の設定 — `gtd-mcp` の Settings → Trusted Publishing に owner `ekicyou`・repo `gtd-mcp-rs`・workflow `crates-io.yml`・environment 空。**最初のタグの push より前に済ませる**。済ませずに押すと段「鍵」で止まり何も公開されない（13.1, 13.2）。
 3. いつもの流れ — タグの push で `release.yml` と `crates-io.yml` が並走し、互いを待たない。段の表（上の Steps と同じ名前）。`release.yml` が赤でも crates.io には出る点を明記（13.3）。
 4. 出たことの確かめ方 — 公開済み判定の契約を手で行う形（`curl -fsS https://index.crates.io/gt/d-/gtd-mcp` の出力に `"vers":"{版}"` の行が在るか）。反映の遅れに触れる（13.3）。
-5. 止まったときのやり直し — 「Re-run」（タグのコミットのワークフロー）と「Run workflow」（main のワークフロー・入力 `version`）の違い。段ごとの切り分け表（版の形／タグの確かめ／版の一致＝タグのコミットの誤りは次の版／公開済み判定の `unreadable`＝時間を置いて Re-run／包む確かめ＝一時的なら Re-run・コードの誤りなら次の版／鍵＝Trusted Publisher を登録・直してから Re-run／公開＝一時的なら Re-run／「公開」が緑で「記録」だけ赤＝反映待ち・Re-run／ワークフローの誤り＝main で直して Run workflow）（13.4）。Release Skill 段 6.3 はこの表を指す。
+5. 止まったときのやり直し — 「Re-run」（タグのコミットのワークフロー）と「Run workflow」（main のワークフロー・入力 `version`）の違い。段ごとの切り分け表（版の形／タグの確かめ／版の一致＝タグのコミットの誤りは次の版／公開済み判定の `unreadable`＝時間を置いて Re-run／包む確かめ＝一時的なら Re-run・コードの誤りなら次の版／鍵＝Trusted Publisher を登録・直してから Re-run／公開＝一時的なら Re-run／「公開」が緑で「記録」だけ赤＝反映待ち・Re-run／ワークフローの誤り＝main で直して Run workflow）（13.4）。Release Skill 段 6.3 はこの表を指す。「Run workflow」で出し直して緑になった後に `/release` を再開すれば、段 6.2 がその手動の走りを認めて報告まで進むことを書く。
 6. 予備の手順 — タグのコミットに `git switch --detach v{版}` で移る、作業木がきれい、steering の CI チェックが緑、crates.io の API Tokens で期限をその日まで・対象 `gtd-mcp` だけ・`publish-update` だけの鍵を作る、`cargo login`（鍵は聞かれてから貼る）、`cargo publish --locked`、`cargo logout`、crates.io で鍵を Revoke、4 節で確かめる（13.5）。
 7. してはいけない操作 — `git remote -v`・`git config --get remote.origin.url`・`.git/config` の表示・`credentials.toml` の表示・`cargo login` の後ろへの鍵の直書き・鍵の環境変数への表示・鍵をリポジトリや Secrets に置くこと（13.6）。
 
@@ -478,7 +479,7 @@ graph TB
 | Intent | crates.io に包む対象をビルドと利用に要るファイルだけにする |
 | Requirements | 16.1, 16.2, 16.3 |
 
-- `[package]` に `include = ["src/**/*.rs", "Cargo.toml", "Cargo.lock", "README.md", "LICENSE"]` を足す（仮置き: OPEN QUESTION 6）。許す方式（`include`）にするのは、今後 `.claude/` 等に何が足されても包みに混ざらないため。
+- `[package]` に `include = ["src/**/*.rs", "Cargo.toml", "Cargo.lock", "README.md", "LICENSE"]` を足す（確定: 設計判断 6）。許す方式（`include`）にするのは、今後 `.claude/` 等に何が足されても包みに混ざらないため。
 - `tests/` は含めない。cargo は包みに無い test ターゲットを包みの `Cargo.toml` から外して警告するだけで、ビルドと利用には影響しない。
 - 確かめ（16.3）: `cargo package --list --locked --allow-dirty` が上の 5 種だけを（`Cargo.toml.orig`・`.cargo_vcs_info.json` 等の cargo が足す物を除いて）返し、`.claude/`・`.kiro/`・`.github/`・`CLAUDE.md` を含まないこと。`cargo publish --dry-run --locked --allow-dirty` が終了コード 0。
 - 版上げ PR はこの行を触らない（Release Skill 段 3.1 の差分の範囲の判定が保証する）。
@@ -559,23 +560,23 @@ graph TB
 
 ## 未決事項とリスク
 
-### 仮置きの設計判断（設計ディスカッションで確定させる）
-本文の「仮置き: OPEN QUESTION n」は次の仮置きを指す。各項の「仮置き」を本文に反映済みである。
+### 設計判断（設計ディスカッションで確定）
+本文の「確定: 設計判断 n」は次の項を指す。11 項すべてを推奨案で確定した（一括承認）。
 
-1. **公開の走りのランナー**: 仮置き `ubuntu-latest`＋bash（既存 CI と同じ OS・起動が速い・公開に OS 依存が無い）。代案: areka と同じ `windows-latest`＋pwsh（移植元との差が小さい）。
-2. **`release.yml` との待ち合わせ**: 仮置き「待ち合わせない」（brief の基本方針・要件 12.9）。`release.yml` が赤でも crates.io には出る状態を Publishing Guide に明記する。代案: areka と同じく同じタグの `release.yml` の緑を待つ（`actions: read` が増え、非推奨アクションを使う `release.yml` の赤に公開が巻き込まれる）。
-3. **判定の置き場**: 仮置き「ワークフローの `run:` と `procedure.md` のコマンドに直接書き、スクリプトを足さない」（brief の優先・単一クレートで判定が小さい）。代案: 手元と CI で共有する小さなスクリプト 1 本。
-4. **見どころの参照の書き方**: 仮置き「PR 番号 `(#N)`、PR の無い直接コミットは 7 桁の短い SHA、複数は `, ` 区切り」。代案: PR 番号を持つ変更だけを見出しにし、直接コミットは本文で触れる（areka と同じ）。
-5. **見どころの形の機械の確かめ**: 仮置き「`grep` で 4 つ（`### ` が 1 以上・`#`/`##` が 0・見出し末尾の参照・非 ASCII が 0）」。ASCII のみを英語の代理にする。代案: ASCII の確かめを外す（記号の自由度を取る）、または機械の確かめを無くして読み直しだけにする。
-6. **包みの範囲**: 仮置き `include = ["src/**/*.rs", "Cargo.toml", "Cargo.lock", "README.md", "LICENSE"]`（`tests/` を含めない）。代案: `tests/**` も含める（包みから `cargo test` できる）、または `exclude` で開発用のフォルダだけを外す。
-7. **版上げのやり方**: 仮置き「`Cargo.toml` の 1 行を Edit し `cargo update --workspace`」（`cargo-edit` に依存しない 1 通りだけ）。代案: areka と同じく `cargo set-version {版}` を主とし、無いときに Edit へ落とす。
-8. **待ちの上限**: 仮置き「走りの特定は 30 秒ごと最長 5 分、緑の判定と『記録』の索引の読み直しは 30 秒ごと最長 5 分」。代案: 「記録」は読み直さず、反映の遅れは Publishing Guide の切り分け（Re-run）に任せる（areka と同じ）。
-9. **dependabot の開いた PR**: 要件 2.5 のとおり、`Cargo.toml`・`Cargo.lock` を触る開いた PR（dependabot の `chore(deps)` を含む）が在れば止まる設計にしている。dependabot は毎週の cargo の更新 PR を開きうるため、`/release` の前にそれらを片づける運用になる。緩めるには要件 2.5 の変更が要る。
-10. **手元の公開前の確かめ**: 仮置き `cargo publish --dry-run --locked --allow-dirty`（CI の「包む確かめ」と同じコマンドの形）。代案: `cargo package --locked --allow-dirty`（索引の公開 API に寄らない）。
-
+1. **公開の走りのランナー**: `ubuntu-latest`＋bash（既存 CI と同じ OS・起動が速い・公開に OS 依存が無い）。退けた案: `windows-latest`＋pwsh。
+2. **`release.yml` との待ち合わせ**: 待ち合わせない（brief の基本方針・要件 12.9）。`release.yml` が赤でも crates.io には出ることを Publishing Guide に明記する。退けた案: `release.yml` の緑を待つ（`actions: read` が増え、非推奨アクションを使う `release.yml` の赤に公開が巻き込まれる）。
+3. **判定の置き場**: ワークフローの `run:` と `procedure.md` のコマンドに直接書き、スクリプトを足さない。退けた案: 共有スクリプト 1 本。
+4. **見どころの参照の書き方**: PR 番号 `(#N)`、PR の無い直接コミットは 7 桁の短い SHA、複数は `, ` 区切り。退けた案: PR を持つ変更だけを見出しにする。
+5. **見どころの形の機械の確かめ**: `grep` で 4 つ（`### ` が 1 以上・`#`/`##` が 0・見出し末尾の参照・非 ASCII が 0）。退けた案: ASCII の確かめを外す、読み直しだけにする。
+6. **包みの範囲**: `include = ["src/**/*.rs", "Cargo.toml", "Cargo.lock", "README.md", "LICENSE"]`（`tests/` を含めない）。退けた案: `tests/**` も含める、`exclude` 方式。
+7. **版上げのやり方**: `Cargo.toml` の 1 行を Edit し `cargo update --workspace`。退けた案: `cargo set-version` を主とする。
+8. **待ちの上限**: 走りの特定・緑の判定・「記録」の索引の読み直しは、いずれも 30 秒ごと最長 5 分。退けた案: 「記録」は読み直さず Re-run に任せる。
+9. **dependabot の開いた PR**: 作者が `dependabot[bot]`（`gh` の `author.login` は `app/dependabot`）の PR は段 1.2 で数えない。要件 2.5 をそのように直した。dependabot は `gtd-mcp` 自身の版を変えず、`rebase-strategy: auto` で衝突も自分で直す。退けた案: 止めて運用で片づける。
+10. **手元の公開前の確かめ**: `cargo publish --dry-run --locked --allow-dirty`（CI の「包む確かめ」と同じ形）。退けた案: `cargo package --locked --allow-dirty`。
+11. **手動の出し直しの認識**: ワークフローに `run-name` を足して走りの題を `crates-io v{版}` に揃え、再開時の段 6.2 は同じ版の手動の走りの `success` も緑の根拠に認める。要件 7.7 を足した。退けた案: push の走りだけを見て、毎回開発者に判断させる。
 ### リスク
 - **Trusted Publisher の未登録**: スキルからは確かめられない。未登録のままタグを押すと段「鍵」で止まり何も公開されない（安全側）。Publishing Guide 2 節で順序を案内し、登録後に Re-run で回復できる。
 - **Linux・macOS だけの失敗**: 版上げ PR の CI を待たない（要件 5.5）ため、手元（Windows）で通り他 OS で落ちる変更は公開前に検出されない（要件ディスカッションで受け入れ済み）。
 - **`concurrency` の待ち行列**: GitHub の `concurrency` は待ちを 1 本しか保てず、3 本目が来ると待っていた 1 本が取り消される。同じ版の起動し直しは冪等なので、取り消された走りは Run workflow で回復できる。
-- **索引の反映の遅れ**: 公開直後に `absent` を読むことがある。読み直しの上限（OPEN QUESTION 8）を超えたら赤とし、切り分け表の「反映待ち」に当てる。
+- **索引の反映の遅れ**: 公開直後に `absent` を読むことがある。読み直しの上限（設計判断 8）を超えたら赤とし、切り分け表の「反映待ち」に当てる。
 - **最初の自動公開の時期**: タグの push の走りはタグのコミットのワークフローで動くため、本フィーチャーの実装 PR が main に入る前のコミットに打ったタグでは自動公開は起きない。

@@ -58,7 +58,7 @@ gtd-mcp の開発者（ekicyou）は、リリースのたびに版上げ・タ�
 2. If 作業木に未コミットの変更がある, the Release Skill shall 何も変更せずに止まる
 3. When 前提を確かめる, the Release Skill shall 最新の main を作業の枝に取り込み、取り込んだ main の先端を「確かめた main」として覚える
 4. If main の取り込みで衝突が起きた、または取り込み後に作業の枝と main の間に差分が残る, the Release Skill shall 止まって事実を報告する
-5. If 版の置き場（`Cargo.toml` の `[package] version`、`Cargo.lock`）を変更する開いた PR が 1 本以上ある, the Release Skill shall その PR の番号と題を示して止まる
+5. If 版の置き場（`Cargo.toml` の `[package] version`、`Cargo.lock`）を変更する開いた PR（作者が `dependabot[bot]` の PR を除く。dependabot は依存の版だけを変え、`gtd-mcp` 自身の版を変えない）が 1 本以上ある, the Release Skill shall その PR の番号と題を示して止まる
 6. If リモートにタグ `v{版}` が既に在る, the Release Skill shall 同じ版を出し直さずに止まる
 7. If リモートにタグ `v{旧版}` が無く、題が `chore(release): v{旧版}` のマージ済みの PR が在る, the Release Skill shall 前の回が「マージの後・タグの前」で止まっていると示し、版を上げずに止まる
 8. While タグ `v{旧版}` が無く、題が `chore(release): v{旧版}` のマージ済みの PR も無く、crates.io に {旧版} が公開済みである（`/release` 導入前に手作業で出した版）, the Release Skill shall タグを後から作らずに止まらず先へ進み、前のタグが無かったことを最終報告に書く
@@ -118,6 +118,7 @@ gtd-mcp の開発者（ekicyou）は、リリースのたびに版上げ・タ�
 4. If 走りが赤で終わった、または crates.io に {版} が見つからない, the Release Skill shall 見えた事実と Publishing Guide の切り分けのどれに当たるかを示して止まり、やり直すかどうかを開発者に決めてもらう
 5. The Release Skill shall 自分から走りをやり直さず、手元から crates.io へ公開しない
 6. If 赤の原因がタグのコミットの中身に在る, the Release Skill shall 同じ版で出し直さず、次の版で出す必要があることを報告する
+7. When 再開して見守りの段に入り、タグの push の走りが赤でも、開発者が同じ版を手動で起動した Publish Workflow の走りが成功で終わっている, the Release Skill shall その手動の走りを 7.3 の走りとして扱う
 
 ### Requirement 8: 最終報告
 **Objective:** As a gtd-mcp の開発者, I want 1 回分の結果と見どころの全文を 1 つの報告で読めること, so that 公開内容をその場で確かめ、直しを頼める
