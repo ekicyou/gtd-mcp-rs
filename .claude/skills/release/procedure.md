@@ -499,3 +499,189 @@ git ls-remote --quiet --tags {remote} refs/tags/v{版} 2>/dev/null
   - 終了コードが 0 で、ちょうど 1 行の `{sha}	refs/tags/v{版}`（SHA が `{sha}`）。当たれば段 6 へ。
   - 0 行（タグを打てなかった）なら、push をやり直さずに止まる。手元のタグは残し、段 5 の冒頭の報告をする（6.6）。
   - 1 行でも SHA が `{sha}` と違えば止まり、その SHA を示す。リモートのタグに触れない（6.4）。
+
+## 段 6 公開の見守り
+
+段 6 では Publish Workflow（`.github/workflows/crates-io.yml`。ワークフロー名 `crates-io`、走りの題 `crates-io v{版}`）の走りを読むだけで、書き換えない。`gh run rerun` も Run workflow もしない。手元から `cargo publish` しない（7.5）。
+
+段 0 の再開の表から段 6 に入ったときは、`{sha}` を版上げ PR の `mergeCommit` とし、0.1 で読んだリモートのタグ `v{版}` の SHA が `{sha}` と同じことを確かめる。違えば止まり、2 つの SHA を示す（タグに触れない）。
+
+### 6.1 走りの特定と待ち
+
+1. タグの push の走りのうち、`headBranch` が `v{版}` で `headSha` が `{sha}` の走りを探す（7.1）。見つからなければ 30 秒置いて読み直し、最長 10 回（5 分）。待ちは前景の `sleep` を使わず、下の 1 本を Bash ツールの裏で回し（`run_in_background`）、終わりの知らせを待つ。
+
+```bash
+for i in 1 2 3 4 5 6 7 8 9 10; do out=$(gh run list --workflow crates-io.yml --event push --limit 20 --json databaseId,headSha,headBranch,status,conclusion --jq '.[] | select(.headBranch == "v{版}" and .headSha == "{sha}") | "\(.databaseId)\t\(.status)\t\(.conclusion)"') || { echo "gh-error"; break; }; if [ -n "$out" ]; then printf '%s\n' "$out"; break; fi; sleep 30; done
+```
+
+  - 出力が `番号	状態	結論`（タブ区切り）のちょうど 1 行なら、1 列目を `{id}` とする。
+  - 何も出ない（10 回読んでも見つからない）なら止まり、「タグ `v{版}`（`{sha}`）の `crates-io` の走りが見つからない」と報告する（7.2）。`gh-error` か 2 行以上なら、その出力を示して止まる。
+
+2. 2 列目が `completed` でなければ、走りが終わるまで待つ。これも Bash ツールの裏で回し、終わりの知らせを待つ。終了コードでは判定せず、成否は 6.2 の読み直しで決める。
+
+```bash
+gh run watch {id} --exit-status --interval 30
+```
+
+### 6.2 緑の判定
+
+1. 走りの結論を読む。
+
+```bash
+gh run view {id} --json status,conclusion,url --jq '"\(.status)\t\(.conclusion)\t\(.url)"'
+```
+
+  - 1 列目が `completed` で 2 列目が `success` なら 2 へ。3 列目の URL を最終報告のために覚える。
+  - `completed` でなければ 6.1 の 2 へ戻る。
+  - `success` でないとき: 段 0 の再開から段 6 に入った回（再開の表の「リモートのタグが在る」2 行）に限り、同じ版を開発者が手で起動した走りを読む（7.7）。そうでない回は 6.3 へ。
+
+```bash
+gh run list --workflow crates-io.yml --event workflow_dispatch --limit 20 --json databaseId,displayTitle,status,conclusion,createdAt --jq '[.[] | select(.displayTitle == "crates-io v{版}" and .status == "completed")] | sort_by(.createdAt) | last // empty | "\(.databaseId)\t\(.conclusion)"'
+```
+
+  - 題が `crates-io v{版}` で `completed` の最も新しい手動の走りが出る。2 列目が `success` なら、1 列目で `{id}` を置き換え、1 から同じ判定を行う。0 行か `success` でなければ、タグの push の走りのまま 6.3 へ。
+
+2. crates.io に `{版}` が在るかを読む（公開済み判定の契約。段 1.3 と同じ情報源・同じ一致）。
+
+```bash
+curl -fsS https://index.crates.io/gt/d-/gtd-mcp | grep -cF '"vers":"{版}"'
+```
+
+  - `curl` がエラーを出したら、数に関わらず `unreadable`。エラーが無く 1 以上なら `present`、0 なら `absent`。
+  - `present` なら緑。段 7 へ（7.3）。
+  - `absent` か `unreadable` なら、すぐに赤としない。30 秒置いて読み直し、最長 10 回（5 分）。待ちは 6.1 と同じく下の 1 本を裏で回す。
+
+```bash
+for i in 1 2 3 4 5 6 7 8 9 10; do sleep 30; if body=$(curl -fsS https://index.crates.io/gt/d-/gtd-mcp); then n=$(printf '%s\n' "$body" | grep -cF '"vers":"{版}"'); echo "$n"; [ "$n" -ge 1 ] && break; else echo unreadable; fi; done
+```
+
+  - 最後の行が 1 以上なら `present` で緑。それ以外（`0` か `unreadable`）なら赤として 6.3 へ。
+
+### 6.3 赤の扱い
+
+走りが `success` で終わらなかったとき、または 6.2 の上限まで読んでも crates.io に `{版}` が無いときは、**自分からやり直さずに止まる**（7.4, 7.5）。`gh run rerun`・Run workflow・手元の `cargo publish` をしない。やり直すかは開発者が決める。
+
+1. 走りの段ごとの結果を読む。
+
+```bash
+gh run view {id} --json jobs --jq '.jobs[].steps[] | "\(.name)\t\(.conclusion)"'
+```
+
+2. 「記録」以外で最初に `failure`（または `cancelled`）になった段を、Publishing Guide（`doc/crates-io-publish.md`）5 節「止まったときのやり直し」の切り分け表の「止まった段」に当てはめる。走りが `success` なのに crates.io に無いとき、または「記録」だけが赤のときは、表の「記録」の行（索引への反映待ち）に当てる。どの段も赤でない（走りが取り消された、など）ときは、その事実をそのまま示す。
+3. 止まり、次を示す（段 7 の「止まった」報告）。
+  - 走りの番号・URL・結論、1 の出力のうち赤の段、当てはめた切り分け表の行（「見えたこと・原因」と「やり直し」）。
+  - やり直しは表のとおり Re-run（タグのコミットの `crates-io.yml` で動く）か Run workflow（`main` の `crates-io.yml` で動き、入力 `version` に `{版}`）で、開発者が GitHub の Actions の画面から行うこと。緑になった後に `/release {版}` を打ち直せば、段 0 から段 6 に入り、6.2 がその走りを認めて報告まで進むこと。
+  - 赤の原因がタグのコミットの中身に在る（表の「版の一致」の行、「包む確かめ」でコードや設定の誤りのとき）なら、**同じ版では出し直さず、`main` で直して次の版で出す必要がある**と書く（7.6）。タグは動かさず消さない。
+
+## 段 7 報告
+
+回が終わったら（緑で終わった、または止まった）、日本語の報告を 1 つ出す（8.1）。記録用のコミットや進み具合のファイルは作らない（8.6）。
+
+1. 必ず載せる（8.2）。その時点でまだ無い物（段 4 より前で止まって PR が無い、など）は「まだ無い」と書く。
+  - 版 `{版}`
+  - タグのコミット `{sha}`
+  - 版上げ PR の番号と URL（URL を覚えていないとき・再開で来たときは `gh pr view {番号} --json url --jq .url` で読む）
+  - Publish Workflow の走りの番号 `{id}`・URL・結論（手動の走りを認めたときはそのことも）
+  - crates.io での `{版}` の `present`／`absent`（6.2 の 2 の最後の読み取り。`unreadable` ならそう書く）
+2. 該当するときに載せる（8.3）。
+  - 途中で main を取り込んだか: 段 4.3 で控えた題と参照、見どころに足したか。
+  - 初回の扱い: 前のタグ `v{旧版}` が無かったこと、選んだ `{起点}`（段 1.3）。
+  - 途中で気付いた範囲外の問題（直さずに書く。9.9）。
+3. 緑で終わったとき（8.4）: タグのコミットの見どころの全文を、下の出力のまま載せる。その後に「直しが要れば言ってください。main のファイルを直します」と添える。
+
+```bash
+git show {sha}:doc/release-notes/v{版}.md
+```
+
+4. 止まったとき（8.5）: 止まった段の名前（「6.3 赤の扱い」など）・見えた事実（判定に使ったコマンドの出力）・次に開発者が決めること。
+
+## 見どころの直し
+
+公開済みの版 `{版}` の見どころの直しを頼まれたときだけ行う。段 0〜7 は回さない（1.5）。直すのは main の `doc/release-notes/v{版}.md` の 1 ファイルだけで、タグ・タグのコミット・crates.io の公開物・GitHub Release には触れない（10.2）。外へ出るコマンドは単独の 1 行で回す。判定に当たらなければ止まる。
+
+1. 枝・作業木・main。
+
+```bash
+git branch --show-current
+git status --porcelain
+git fetch --quiet {remote} main 2>/dev/null
+git merge --no-edit {remote}/main
+git ls-files --error-unmatch doc/release-notes/v{版}.md
+```
+
+  - `git branch --show-current` が `main` でない（main へ直接 push しない）。`git status --porcelain` が 0 行。`git fetch` の終了コードが 0。
+  - `git merge` が衝突したら、段 1.1 の 5 と同じく `git merge --abort` で取り込みの前に戻して止まる。
+  - `git ls-files --error-unmatch` の終了コードが 0（直すファイルが main に在る）。
+
+2. `doc/release-notes/v{版}.md` を頼まれたとおり Edit ツールで直し、段 3.2 の 4 つの確かめを回す。どれか外れたら止まる。
+
+```bash
+git status --porcelain
+```
+
+  - ちょうど 1 行の ` M doc/release-notes/v{版}.md`。
+
+3. コミットし、push する。
+
+```bash
+git add doc/release-notes/v{版}.md
+git commit -m "docs(release): v{版} の見どころの直し"
+```
+
+```bash
+git push --quiet {remote} HEAD 2>/dev/null
+```
+
+```bash
+git ls-remote --quiet {remote} refs/heads/{枝} 2>/dev/null
+git rev-parse HEAD
+```
+
+  - `git push` の終了コードが 0 で、`git ls-remote` の 1 行の SHA が `git rev-parse HEAD` と同じ。外れたら止まる。
+
+4. PR を出し、読み直す。
+
+```bash
+gh pr create --base main --head {枝} --title "docs(release): v{版} の見どころの直し" --body "Fix the highlights of v{版}. Only doc/release-notes/v{版}.md is changed."
+```
+
+```bash
+gh pr list --head {枝} --state open --json number,url,title --jq '.[] | select(.title == "docs(release): v{版} の見どころの直し") | "\(.number)\t\(.url)"'
+gh pr view {番号} --json headRefOid,files --jq '.headRefOid, (.files[] | .path)'
+git rev-parse HEAD
+```
+
+  - `gh pr list` がちょうど 1 行。1 列目を `{番号}` とする。
+  - `gh pr view` の 1 行目が `git rev-parse HEAD` と同じで、2 行目以降がちょうど 1 行の `doc/release-notes/v{版}.md`（10.1）。外れたらマージせずに止まる。PR は閉じない。
+
+5. squash でマージし、読み直す。
+
+```bash
+gh pr merge {番号} --squash
+```
+
+```bash
+gh pr view {番号} --json state,mergeCommit --jq '"\(.state)\t\(.mergeCommit.oid // "-")"'
+```
+
+  - 1 列目が `MERGED`。外れたらマージをやり直さずに止まる。
+  - 報告に PR の番号・URL・squash のコミットと、直した後のファイルの全文を載せる。
+
+## 見直すきっかけ
+
+次の変更があったら、この手順（段 1.3・2.2・3.2・6・見どころの直し）と Publishing Guide を合わせて見直す。
+
+- ワークフローのファイル名 `crates-io.yml`・ワークフロー名 `crates-io`・`run-name`（走りの題 `crates-io v{版}`）の変更（段 6.1・6.2 の走りの見つけ方。ファイル名は crates.io の Trusted Publisher の設定も直す）。
+- きっかけ（タグ `v*` の push・`workflow_dispatch` の入力 `version`）や段の名前の変更（段 6.3 と Publishing Guide 5 節の切り分け表）。
+- 版の置き場の変更（`Cargo.toml` の `[package] version` 1 行・`Cargo.lock` の 1 行。ワークスペース化・クレートの追加を含む）。
+- 見どころファイルの置き場・名前・形の決まりの変更（段 2.2・3.2）。
+- `release.yml` を待ち合わせる方針への変更、GitHub Release 本文の自動化の導入。
+- 公開済み判定の情報源（`https://index.crates.io/gt/d-/gtd-mcp`）の変更。
+
+## 開発者の設定
+
+自動モードで承認待ち無しに回すには、開発者が自分の Claude Code の設定の `autoMode.allow` に、次の文を 1 つの文字列として足す（9.10）。`/release` はどの設定ファイルも書き換えない。
+
+```text
+While running the /release skill in the gtd-mcp-rs repository, allow only these operations: pushing the current working branch (never main) with `git push <remote> HEAD`; creating a pull request into main from that branch titled `chore(release): vX.Y.Z` and squash-merging it with `gh pr merge <number> --squash`; creating a lightweight tag `vX.Y.Z` on the squash commit of that merged `chore(release): vX.Y.Z` pull request and pushing only that one tag with `git push <remote> refs/tags/vX.Y.Z`; creating a pull request into main from that branch titled `docs(release): vX.Y.Z の見どころの直し` that changes only `doc/release-notes/vX.Y.Z.md` and squash-merging it with `gh pr merge <number> --squash`. Never allow: `--admin`, `--force`, `--tags`, `--follow-tags`, pushing directly to main, moving or deleting any tag, merging any other pull request, `cargo publish` (only `cargo publish --dry-run` is allowed), or re-running workflows (`gh run rerun`).
+```
