@@ -121,7 +121,7 @@ doc/
 `doc/release-notes/v{版}.md` はリリースのたびに Release Skill が作る実行時の成果物であり、本フィーチャーの実装では作らない。
 
 ### Modified Files
-- `Cargo.toml` — `[package]` に `include = ["src/**/*.rs", "Cargo.toml", "Cargo.lock", "README.md", "LICENSE"]` を足す（要件 16。確定: 設計判断 6）。他の行は変えない。
+- `Cargo.toml` — `[package]` に `include = ["src/**/*.rs", "Cargo.toml", "Cargo.lock", "/README.md", "LICENSE"]` を足す（要件 16。確定: 設計判断 6）。他の行は変えない。
 - `RELEASE.md` — 1 行目の `# Release Notes` の直後に、英語の凍結の注記（引用ブロック 1 つ）を足す。既存の本文は 1 字も変えない（要件 15.1, 15.2）。
 - `README.md` — 199 行目の `RELEASE.md` の案内 1 行を、英語で「v0.8.0 までは `RELEASE.md`、以後は `doc/release-notes/` と GitHub Releases」に直す（要件 15.3）。
 - `README.ja-jp.md` — 213 行目の同じ案内 1 行を日本語で直す（要件 15.3）。
@@ -479,7 +479,7 @@ graph TB
 | Intent | crates.io に包む対象をビルドと利用に要るファイルだけにする |
 | Requirements | 16.1, 16.2, 16.3 |
 
-- `[package]` に `include = ["src/**/*.rs", "Cargo.toml", "Cargo.lock", "README.md", "LICENSE"]` を足す（確定: 設計判断 6）。許す方式（`include`）にするのは、今後 `.claude/` 等に何が足されても包みに混ざらないため。
+- `[package]` に `include = ["src/**/*.rs", "Cargo.toml", "Cargo.lock", "/README.md", "LICENSE"]` を足す（確定: 設計判断 6）。許す方式（`include`）にするのは、今後 `.claude/` 等に何が足されても包みに混ざらないため。
 - `tests/` は含めない。cargo は包みに無い test ターゲットを包みの `Cargo.toml` から外して警告するだけで、ビルドと利用には影響しない。
 - 確かめ（16.3）: `cargo package --list --locked --allow-dirty` が上の 5 種だけを（`Cargo.toml.orig`・`.cargo_vcs_info.json` 等の cargo が足す物を除いて）返し、`.claude/`・`.kiro/`・`.github/`・`CLAUDE.md` を含まないこと。`cargo publish --dry-run --locked --allow-dirty` が終了コード 0。
 - 版上げ PR はこの行を触らない（Release Skill 段 3.1 の差分の範囲の判定が保証する）。
@@ -568,7 +568,7 @@ graph TB
 3. **判定の置き場**: ワークフローの `run:` と `procedure.md` のコマンドに直接書き、スクリプトを足さない。退けた案: 共有スクリプト 1 本。
 4. **見どころの参照の書き方**: PR 番号 `(#N)`、PR の無い直接コミットは 7 桁の短い SHA、複数は `, ` 区切り。退けた案: PR を持つ変更だけを見出しにする。
 5. **見どころの形の機械の確かめ**: `grep` で 4 つ（`### ` が 1 以上・`#`/`##` が 0・見出し末尾の参照・非 ASCII が 0）。退けた案: ASCII の確かめを外す、読み直しだけにする。
-6. **包みの範囲**: `include = ["src/**/*.rs", "Cargo.toml", "Cargo.lock", "README.md", "LICENSE"]`（`tests/` を含めない）。退けた案: `tests/**` も含める、`exclude` 方式。
+6. **包みの範囲**: `include = ["src/**/*.rs", "Cargo.toml", "Cargo.lock", "/README.md", "LICENSE"]`（`tests/` を含めない）。`include` は gitignore 風の照合なので、`README.md` は先頭に `/` を付けて根に固定する（付けないと `doc/release-notes/README.md` も包みに入る）。退けた案: `tests/**` も含める、`exclude` 方式。
 7. **版上げのやり方**: `Cargo.toml` の 1 行を Edit し `cargo update --workspace`。退けた案: `cargo set-version` を主とする。
 8. **待ちの上限**: 走りの特定・緑の判定・「記録」の索引の読み直しは、いずれも 30 秒ごと最長 5 分。退けた案: 「記録」は読み直さず Re-run に任せる。
 9. **dependabot の開いた PR**: 作者が `dependabot[bot]`（`gh` の `author.login` は `app/dependabot`）の PR は段 1.2 で数えない。要件 2.5 をそのように直した。dependabot は `gtd-mcp` 自身の版を変えず、`rebase-strategy: auto` で衝突も自分で直す。退けた案: 止めて運用で片づける。

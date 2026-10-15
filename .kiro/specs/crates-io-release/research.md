@@ -171,7 +171,7 @@
 ### Decision: 包みの範囲
 - **Context**: 要件 16（OQ-7 で「絞る」に確定。一覧は設計で決める）。
 - **Alternatives Considered**: 1. `include`（許す一覧）、2. `exclude`（外す一覧）。
-- **Selected Approach**: 1、`include = ["src/**/*.rs", "Cargo.toml", "Cargo.lock", "README.md", "LICENSE"]`（確定。design.md 設計判断 6）。
+- **Selected Approach**: 1、`include = ["src/**/*.rs", "Cargo.toml", "Cargo.lock", "/README.md", "LICENSE"]`（確定。design.md 設計判断 6）。
 - **Rationale**: 今後 `.claude/` 等に何が足されても包みに混ざらない。`tests/` は利用に要らない。
 - **Trade-offs**: 新しい種類のファイル（`build.rs`・`include_str!` の対象）を足すときは `include` も直す必要がある（Revalidation Triggers）。
 

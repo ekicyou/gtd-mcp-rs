@@ -88,7 +88,7 @@
   - _Requirements: 7.1, 7.2, 7.3, 7.4, 7.5, 7.6, 7.7, 8.1, 8.2, 8.3, 8.4, 8.5, 9.10, 10.1, 10.2_
 
 - [ ] 5. 実装の確かめ
-- [ ] 5.1 実装 PR の中で回す確かめを通す
+- [x] 5.1 実装 PR の中で回す確かめを通す
   - steering の CI チェック 5 種・包みの一覧・公開前の確かめを回し直す
   - `crates-io.yml` の静的な確かめ（`secrets.` 無し・式の直接埋め込み無し・権限 2 つだけ・`workflow_run` 無し）を grep で回す
   - 変更が設計の File Structure Plan の 5 新設・4 修正だけで、`ci.yml`・`release.yml`・`security-audit.yml`・Rust のソースに差分が無いことを確かめる（`.kiro/specs/` の spec の書類は数えない）
@@ -105,3 +105,4 @@
 - Windows では `cargo package --list` の区切りが `\`（例 `src\lib.rs`）になる。包みの一覧を grep で確かめる手順は `[/\]` の両方を受ける形にする
 - 手順書・文書の公開済み判定は jq を使わず `curl -fsS https://index.crates.io/gt/d-/gtd-mcp | grep -cF '"vers":"{版}"'` に揃える（手元の Windows に jq が無い）。sed の置換で後方参照（バックスラッシュ 1）を書くと制御文字に化けることがあるので、編集後に制御文字の grep で確かめる
 - 申し送り（仕様側）: タグの push の走りが一度も起きず Run workflow で出し直した場合、`/release` 再開は段 6.1 で「走りが見つからない」で止まる（要件 7.7 は push の走りが赤の場合だけを想定）。Publishing Guide 5 節の再開の約束と隙間があり、7.7 の拡張を検討する
+- Cargo の `include` は gitignore 風の照合。`/` を含まない名前（例 `"README.md"`）はどの階層にも当たるので、根のファイルは `"/README.md"` のように根に固定する（5.1 で `doc/release-notes/README.md` の混入を検出して修正）
