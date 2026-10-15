@@ -8,6 +8,7 @@ repository = "https://github.com/ekicyou/gtd-mcp-rs"
 documentation = "https://docs.rs/gtd-mcp"
 keywords = ["mcp", "gtd", "task-management", "productivity"]
 categories = ["command-line-utilities", "development-tools"]
+include = ["src/**/*.rs", "Cargo.toml", "Cargo.lock", "/README.md", "LICENSE"]
 
 [lib]
 name = "gtd_mcp"

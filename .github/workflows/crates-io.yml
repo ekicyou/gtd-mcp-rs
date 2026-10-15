@@ -1,0 +1,152 @@
+name: crates-io
+
+run-name: crates-io ${{ inputs.version && format('v{0}', inputs.version) || github.ref_name }}
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 出す版（v を付けない。例 0.8.4）
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: crates-io
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+    - name: 版の形
+      env:
+        EVENT_NAME: ${{ github.event_name }}
+        REF_NAME: ${{ github.ref_name }}
+        INPUT_VERSION: ${{ inputs.version }}
+      run: |
+        if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+          pattern='^[0-9]+\.[0-9]+\.[0-9]+$'
+          value="$INPUT_VERSION"
+        else
+          pattern='^v[0-9]+\.[0-9]+\.[0-9]+$'
+          value="$REF_NAME"
+        fi
+        if [[ ! "$value" =~ $pattern ]]; then
+          echo "::error::版の形が外れている。受け付ける形: ${pattern} 受け取った値: $(jq -cn --arg v "$value" '$v')"
+          exit 1
+        fi
+        echo "VERSION=${value#v}" >> "$GITHUB_ENV"
+
+    - name: タグの確かめ
+      if: github.event_name == 'workflow_dispatch'
+      run: |
+        if ! git ls-remote --exit-code --tags "https://github.com/${GITHUB_REPOSITORY}.git" "refs/tags/v${VERSION}" > /dev/null; then
+          echo "::error::タグ v${VERSION} が無い"
+          exit 1
+        fi
+
+    - name: 取り出し
+      uses: actions/checkout@v5
+      with:
+        ref: refs/tags/v${{ env.VERSION }}
+        persist-credentials: false
+
+    - name: 版の一致
+      run: |
+        rustup update stable --no-self-update
+        actual="$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[0].version')"
+        if [[ "$actual" != "$VERSION" ]]; then
+          echo "::error::版が一致しない。Cargo.toml の版: ${actual} タグ（または入力）の版: ${VERSION}"
+          exit 1
+        fi
+
+    - name: 公開済み判定
+      id: check
+      run: |
+        if curl -fsS https://index.crates.io/gt/d-/gtd-mcp -o "$RUNNER_TEMP/index.jsonl"; then
+          found="$(jq -s --arg v "$VERSION" 'any(.[]; .vers == $v)' "$RUNNER_TEMP/index.jsonl")"
+          if [[ "$found" == true ]]; then state=present; else state=absent; fi
+        else
+          state=unreadable
+        fi
+        echo "state=${state}" >> "$GITHUB_OUTPUT"
+        echo "crates.io gtd-mcp ${VERSION}: ${state}"
+        if [[ "$state" == unreadable ]]; then
+          echo "::error::crates.io の索引を読めない"
+          exit 1
+        fi
+
+    - name: 包む確かめ
+      id: package
+      if: steps.check.outputs.state == 'absent'
+      run: cargo publish --dry-run --locked
+
+    - name: 鍵
+      id: auth
+      if: steps.check.outputs.state == 'absent'
+      uses: rust-lang/crates-io-auth-action@v1
+
+    - name: 公開
+      id: publish
+      if: steps.check.outputs.state == 'absent'
+      env:
+        CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+      run: cargo publish --locked --no-verify
+
+    - name: 記録
+      if: always()
+      env:
+        CHECK_STATE: ${{ steps.check.outputs.state }}
+        CHECK_OUTCOME: ${{ steps.check.outcome }}
+        PACKAGE_OUTCOME: ${{ steps.package.outcome }}
+        AUTH_OUTCOME: ${{ steps.auth.outcome }}
+        PUBLISH_OUTCOME: ${{ steps.publish.outcome }}
+      run: |
+        if [[ -z "${VERSION:-}" ]]; then
+          echo "## crates.io gtd-mcp" >> "$GITHUB_STEP_SUMMARY"
+          echo "版を確かめる前に止まった" >> "$GITHUB_STEP_SUMMARY"
+          exit 0
+        fi
+        judge() {
+          if curl -fsS https://index.crates.io/gt/d-/gtd-mcp -o "$RUNNER_TEMP/index.jsonl"; then
+            found="$(jq -s --arg v "$VERSION" 'any(.[]; .vers == $v)' "$RUNNER_TEMP/index.jsonl")"
+            if [[ "$found" == true ]]; then state=present; else state=absent; fi
+          else
+            state=unreadable
+          fi
+        }
+        judge
+        if [[ "$CHECK_STATE" == absent && "$PUBLISH_OUTCOME" == success ]]; then
+          # 公開直後は索引の反映が遅れる（設計判断 8: 30 秒ごと最長 5 分）
+          for _ in $(seq 10); do
+            [[ "$state" == present ]] && break
+            sleep 30
+            judge
+          done
+        fi
+        {
+          echo "## crates.io gtd-mcp ${VERSION}"
+          echo
+          echo "${state}"
+          echo
+          echo "| 段 | 結果 |"
+          echo "|---|---|"
+          echo "| 公開済み判定 | ${CHECK_OUTCOME:-skipped} (${CHECK_STATE:-none}) |"
+          echo "| 包む確かめ | ${PACKAGE_OUTCOME:-skipped} |"
+          echo "| 鍵 | ${AUTH_OUTCOME:-skipped} |"
+          echo "| 公開 | ${PUBLISH_OUTCOME:-skipped} |"
+        } >> "$GITHUB_STEP_SUMMARY"
+        if [[ "$state" != present ]]; then
+          echo "::error::crates.io に gtd-mcp ${VERSION} が無い（${state}）"
+          exit 1
+        fi

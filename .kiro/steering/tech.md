@@ -81,6 +81,11 @@ cargo build --release --verbose                           # 5. リリースビ�
 - フォーマットエラーは `cargo fmt --all` で自動修正
 - CI 失敗はマージブロックとなる
 
+### リリース
+- `/release [X.Y.Z]`（`.claude/skills/release/`）が版上げ PR・squash マージ・タグ `v*` の push までを行い、`.github/workflows/crates-io.yml` が Trusted Publishing で crates.io へ公開する
+- 版ごとの見どころは `doc/release-notes/v{version}.md`（英語。書き方は `doc/release-notes/README.md`）。`RELEASE.md` は v0.8.0 で凍結
+- 公開の設定とやり直しは `doc/crates-io-publish.md`。crates.io の包みは `Cargo.toml` の `include` で絞っている（根のファイルは `/README.md` のように根に固定）
+
 ## Key Technical Decisions
 
 1. **Edition 2024**: `Cargo.toml` は `edition = "2024"`（2021 と誤認しない）
