@@ -61,7 +61,7 @@ gtd-mcp の開発者（ekicyou）は、リリースのたびに版上げ・タ�
 5. If 版の置き場（`Cargo.toml` の `[package] version`、`Cargo.lock`）を変更する開いた PR が 1 本以上ある, the Release Skill shall その PR の番号と題を示して止まる
 6. If リモートにタグ `v{版}` が既に在る, the Release Skill shall 同じ版を出し直さずに止まる
 7. If リモートにタグ `v{旧版}` が無く、題が `chore(release): v{旧版}` のマージ済みの PR が在る, the Release Skill shall 前の回が「マージの後・タグの前」で止まっていると示し、版を上げずに止まる
-8. While タグ `v{旧版}` が無く、題が `chore(release): v{旧版}` のマージ済みの PR も無く、crates.io に {旧版} が公開済みである（`/release` 導入前に手作業で出した版）, the Release Skill shall 止まらずに先へ進み、前のタグが無かったことを最終報告に書く（仮置き: OQ-1）
+8. While タグ `v{旧版}` が無く、題が `chore(release): v{旧版}` のマージ済みの PR も無く、crates.io に {旧版} が公開済みである（`/release` 導入前に手作業で出した版）, the Release Skill shall タグを後から作らずに止まらず先へ進み、前のタグが無かったことを最終報告に書く
 9. If 上の 7・8 のどちらにも当たらない形でタグ `v{旧版}` が無い, the Release Skill shall 止まって事実を報告する
 
 ### Requirement 3: 版上げと見どころファイル
@@ -70,7 +70,7 @@ gtd-mcp の開発者（ekicyou）は、リリースのたびに版上げ・タ�
 #### Acceptance Criteria
 1. When 版を上げる, the Release Skill shall `Cargo.toml` の `[package] version` と `Cargo.lock` の `gtd-mcp` の版だけを {旧版} から {版} に変える
 2. When 版を上げる, the Release Skill shall {旧版} のリリース以後に main に入った変更の一覧を読み、Highlights Guide の決まりに従って `doc/release-notes/v{版}.md` を新しく書く
-3. While タグ `v{旧版}` が無い初回の回（要件 2.8 に当たる回）である, the Release Skill shall 変更の一覧の起点を設計で定める「{旧版} が出た時点」に置き、起点を最終報告に書く（仮置き: OQ-1）
+3. While タグ `v{旧版}` が無い初回の回（要件 2.8 に当たる回）である, the Release Skill shall `Cargo.toml` の `[package] version` を {旧版} にしたコミット（初回は `fe9dcab`）を変更の一覧の起点とし、その次のコミットから数え、起点を最終報告に書く
 4. The Release Skill shall 他の版の見どころファイルと `RELEASE.md` の本文を変更しない
 5. When 見どころファイルを書き終えた, the Release Skill shall Highlights Guide の「必ず載せるもの」に当たる変更がすべて載っているかを読み直す
 
@@ -221,10 +221,7 @@ gtd-mcp の開発者（ekicyou）は、リリースのたびに版上げ・タ�
 ## 未決事項と仮置き (Open Questions)
 要件ディスカッションで確定させる。各項目の「仮置き」は、上の受け入れ基準に反映済みの暫定案である。
 
-- **OQ-1: 初回の `/release` の前のタグ（`v0.8.3`）が無い問題**
-  - 事実: crates.io には 0.8.1〜0.8.3 が公開済み、リモートのタグは `v0.2.0`・`v0.3.0`・`v0.8.0` だけ。brief の Out of scope は「過去の版のタグの後追い作成」を除外している。
-  - 仮置き: タグを後付けせず、「`v{旧版}` が無い・`chore(release): v{旧版}` のマージ済み PR も無い・crates.io に {旧版} が在る」ときだけ前のタグの確かめを緩めて進む（要件 2.8）。見どころの変更の一覧の起点は「{旧版} が出た時点」とし、具体的な起点（例: 版を 0.8.3 にしたコミット）は設計で決める（要件 3.3）。
-  - 代案: 初回の前に開発者が `v0.8.3` を手で後付けする。ただし押したタグで既存の `release.yml` が走り、GitHub Release `v0.8.3` が作られる副作用がある。
+- **OQ-1: 初回の `/release` の前のタグ（`v0.8.3`）が無い問題** — **確定（個別議論・推奨案）**: タグを後付けせず、「`v{旧版}` が無い・`chore(release): v{旧版}` のマージ済み PR も無い・crates.io に {旧版} が在る」ときだけ前のタグの確かめを緩めて進む（要件 2.8）。変更の一覧の起点は `Cargo.toml` の版を {旧版} にしたコミット（初回は `fe9dcab`）とし、その次から数える（要件 3.3）。退けた案: 初回の前に `v0.8.3` を手で打つ（既存の `release.yml` が走り GitHub Release が作られる副作用）、`v0.8.0` を起点にする（公開済みの 0.8.1〜0.8.3 の変更が混ざる）。
 - **OQ-2: 版上げ PR の CI を待ってからマージするか**
   - 事実: main はブランチ保護されておらず必須チェックも無いため、`gh pr merge` は CI の結果を待たずに通る。CI は 3 つの OS で回るが、手元の確かめは Windows の 1 つだけ。
   - 仮置き: PR の CI のチェックが全部緑になるのを待ってからマージし、赤ならマージせずに止まる（要件 5.5・5.6）。

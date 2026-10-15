@@ -153,7 +153,7 @@
 ### Decision: 初回の変更一覧の起点
 - **Context**: 要件 3.3（OQ-1 の決定に従う）。
 - **Alternatives Considered**: 5 節の (i)〜(iii)。
-- **Selected Approach**: OQ-1 の確定後に設計で決める。
+- **Selected Approach**: 要件ディスカッションで (i) に確定（`Cargo.toml` の版を {旧版} にしたコミット＝初回は `fe9dcab` の次から数える。要件 3.3）。設計では、そのコミットを手順の中でどう見つけるか（例: `git log -S` で版の行を追う）を決める。
 
 ## Implementation Complexity & Risk
 - **Effort: M（3〜7 日）** — 新設が 4 ファイル＋スキル 2 ファイルで、どれも雛形（areka）が在る。ただし手順書（`procedure.md`）の縮約と再開の表の作り直し、初回の扱いの分岐、見どころの形の決まりの英語化に手間がかかる。
