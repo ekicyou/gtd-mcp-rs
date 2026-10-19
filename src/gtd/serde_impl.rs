@@ -7,141 +7,64 @@
 use super::gtd_data::GtdData;
 use super::nota::{Nota, NotaStatus};
 use crate::migration::{
-    // Helper type for migration
-    GtdDataMigrationHelper,
-    // Migration functions
-    migrate_projects_to_latest,
-    // Normalization functions
-    normalize_context_line_endings,
-    normalize_project_line_endings,
-    normalize_task_line_endings,
-    // Conversion functions
-    nota_from_context,
-    nota_from_project,
-    nota_from_task,
-    // Populate functions
-    populate_context_names,
-    populate_project_ids,
+    GtdDataMigrationHelper, migrate_projects_to_latest, normalize_string_line_endings,
+    nota_from_context, nota_from_project, populate_context_names, populate_project_ids,
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::collections::HashMap;
+
+/// TOML array key for each status, in the order the arrays are written to the file
+const STATUS_ARRAYS: [(NotaStatus, &str); 11] = [
+    (NotaStatus::inbox, "inbox"),
+    (NotaStatus::next_action, "next_action"),
+    (NotaStatus::waiting_for, "waiting_for"),
+    (NotaStatus::later, "later"),
+    (NotaStatus::calendar, "calendar"),
+    (NotaStatus::someday, "someday"),
+    (NotaStatus::done, "done"),
+    (NotaStatus::reference, "reference"),
+    (NotaStatus::context, "context"),
+    (NotaStatus::project, "project"),
+    (NotaStatus::trash, "trash"),
+];
 
 impl<'de> Deserialize<'de> for GtdData {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
-        let helper = GtdDataMigrationHelper::deserialize(deserializer)?;
+        let mut helper = GtdDataMigrationHelper::deserialize(deserializer)?;
 
-        // Start with notas from Version 4/5 format if available
-        let mut notas = helper.notas;
+        // Legacy unified [[notas]] array takes precedence over status arrays
+        let mut notas = std::mem::take(&mut helper.notas);
 
-        // If notas is empty, we need to migrate from older formats or Version 3 status-based arrays
         if notas.is_empty() {
-            // Initialize collections for migration
-            let mut inbox = helper.inbox;
-            let mut next_action = helper.next_action;
-            let mut waiting_for = helper.waiting_for;
-            let mut later = helper.later;
-            let mut calendar = helper.calendar;
-            let mut someday = helper.someday;
-            let mut done = helper.done;
-            let mut reference = helper.reference;
-            let mut trash = helper.trash;
+            // Current format: the status comes from the array the nota is stored in
+            for (status, _) in &STATUS_ARRAYS {
+                for mut nota in helper.take_status_array(status) {
+                    nota.status = status.clone();
+                    // Legacy [[context]] entries had only `name` (read into id), no title
+                    if nota.status == NotaStatus::context && nota.title.is_empty() {
+                        nota.title = nota.id.clone();
+                    }
+                    notas.push(nota);
+                }
+            }
+
+            // Legacy formats: [projects.id] / [[projects]] and [contexts.name]
             let mut projects = migrate_projects_to_latest(helper.projects);
-            let mut contexts = helper.contexts;
-
-            // If this is Version 3 format with Vec arrays for projects/contexts, convert to HashMap
-            if !helper.project.is_empty() {
-                for project in helper.project {
-                    projects.insert(project.id.clone(), project);
-                }
-            }
-            if !helper.context.is_empty() {
-                for context in helper.context {
-                    contexts.insert(context.name.clone(), context);
-                }
-            }
-
-            // Populate the name/id fields
-            populate_context_names(&mut contexts);
             populate_project_ids(&mut projects);
+            notas.extend(projects.into_values().map(nota_from_project));
 
-            // Normalize line endings in all string fields
-            normalize_task_line_endings(&mut inbox);
-            normalize_task_line_endings(&mut next_action);
-            normalize_task_line_endings(&mut waiting_for);
-            normalize_task_line_endings(&mut later);
-            normalize_task_line_endings(&mut calendar);
-            normalize_task_line_endings(&mut someday);
-            normalize_task_line_endings(&mut done);
-            normalize_task_line_endings(&mut reference);
-            normalize_task_line_endings(&mut trash);
-            normalize_project_line_endings(&mut projects);
-            normalize_context_line_endings(&mut contexts);
+            let mut contexts = helper.contexts;
+            populate_context_names(&mut contexts);
+            notas.extend(contexts.into_values().map(nota_from_context));
+        }
 
-            // Set the status field for each task based on which collection it's in
-            for task in &mut inbox {
-                task.status = NotaStatus::inbox;
-            }
-            for task in &mut next_action {
-                task.status = NotaStatus::next_action;
-            }
-            for task in &mut waiting_for {
-                task.status = NotaStatus::waiting_for;
-            }
-            for task in &mut later {
-                task.status = NotaStatus::later;
-            }
-            for task in &mut calendar {
-                task.status = NotaStatus::calendar;
-            }
-            for task in &mut someday {
-                task.status = NotaStatus::someday;
-            }
-            for task in &mut done {
-                task.status = NotaStatus::done;
-            }
-            for task in &mut reference {
-                task.status = NotaStatus::reference;
-            }
-            for task in &mut trash {
-                task.status = NotaStatus::trash;
-            }
-
-            // Convert all old structures to Nota
-            for task in inbox {
-                notas.push(nota_from_task(task));
-            }
-            for task in next_action {
-                notas.push(nota_from_task(task));
-            }
-            for task in waiting_for {
-                notas.push(nota_from_task(task));
-            }
-            for task in later {
-                notas.push(nota_from_task(task));
-            }
-            for task in calendar {
-                notas.push(nota_from_task(task));
-            }
-            for task in someday {
-                notas.push(nota_from_task(task));
-            }
-            for task in done {
-                notas.push(nota_from_task(task));
-            }
-            for task in reference {
-                notas.push(nota_from_task(task));
-            }
-            for task in trash {
-                notas.push(nota_from_task(task));
-            }
-            for project in projects.into_values() {
-                notas.push(nota_from_project(project));
-            }
-            for context in contexts.into_values() {
-                notas.push(nota_from_context(context));
+        // Normalize \r / \r\n in notes to \n so they can be written back OS-natively
+        for nota in &mut notas {
+            if let Some(notes) = &nota.notes {
+                nota.notes = Some(normalize_string_line_endings(notes));
             }
         }
 
@@ -167,53 +90,16 @@ impl Serialize for GtdData {
         S: Serializer,
     {
         use serde::ser::SerializeStruct;
-        use std::collections::HashMap;
 
         let mut state = serializer.serialize_struct("GtdData", 13)?;
         state.serialize_field("format_version", &self.format_version)?;
 
-        // Separate notas by status in a single pass (Version 3 format)
-        let mut status_map: HashMap<NotaStatus, Vec<&Nota>> = HashMap::new();
-        for nota in &self.notas {
-            status_map
-                .entry(nota.status.clone())
-                .or_default()
-                .push(nota);
-        }
-
-        // Serialize each status array (only if non-empty), in the order they appear in the enum
-        if let Some(inbox) = status_map.get(&NotaStatus::inbox) {
-            state.serialize_field("inbox", inbox)?;
-        }
-        if let Some(next_action) = status_map.get(&NotaStatus::next_action) {
-            state.serialize_field("next_action", next_action)?;
-        }
-        if let Some(waiting_for) = status_map.get(&NotaStatus::waiting_for) {
-            state.serialize_field("waiting_for", waiting_for)?;
-        }
-        if let Some(later) = status_map.get(&NotaStatus::later) {
-            state.serialize_field("later", later)?;
-        }
-        if let Some(calendar) = status_map.get(&NotaStatus::calendar) {
-            state.serialize_field("calendar", calendar)?;
-        }
-        if let Some(someday) = status_map.get(&NotaStatus::someday) {
-            state.serialize_field("someday", someday)?;
-        }
-        if let Some(done) = status_map.get(&NotaStatus::done) {
-            state.serialize_field("done", done)?;
-        }
-        if let Some(reference) = status_map.get(&NotaStatus::reference) {
-            state.serialize_field("reference", reference)?;
-        }
-        if let Some(context) = status_map.get(&NotaStatus::context) {
-            state.serialize_field("context", context)?;
-        }
-        if let Some(project) = status_map.get(&NotaStatus::project) {
-            state.serialize_field("project", project)?;
-        }
-        if let Some(trash) = status_map.get(&NotaStatus::trash) {
-            state.serialize_field("trash", trash)?;
+        // Serialize each status array (only if non-empty)
+        for (status, key) in &STATUS_ARRAYS {
+            let notas: Vec<&Nota> = self.notas.iter().filter(|n| &n.status == status).collect();
+            if !notas.is_empty() {
+                state.serialize_field(key, &notas)?;
+            }
         }
 
         if self.task_counter != 0 {

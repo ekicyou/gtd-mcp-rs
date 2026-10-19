@@ -3031,3 +3031,51 @@ updated_at = "2025-10-31"
     assert!(nota.recurrence_config.is_none());
     assert!(!nota.is_recurring());
 }
+
+// 繰り返し設定がGtdDataの保存→読み直しで失われないことを確認
+#[test]
+fn test_recurrence_survives_gtd_data_round_trip() {
+    let mut data = GtdData::new();
+    data.add(Nota {
+        id: "weekly-review".to_string(),
+        title: "Weekly Review".to_string(),
+        status: NotaStatus::calendar,
+        recurrence_pattern: Some(RecurrencePattern::weekly),
+        recurrence_config: Some("Monday,Friday".to_string()),
+        ..Default::default()
+    });
+    data.add(Nota {
+        id: "monthly-project".to_string(),
+        title: "Monthly Project".to_string(),
+        status: NotaStatus::project,
+        recurrence_pattern: Some(RecurrencePattern::monthly),
+        recurrence_config: Some("1,15".to_string()),
+        ..Default::default()
+    });
+
+    let toml_str = toml::to_string_pretty(&data).unwrap();
+    let reloaded: GtdData = toml::from_str(&toml_str).unwrap();
+
+    for id in ["weekly-review", "monthly-project"] {
+        let before = data.find_by_id(id).unwrap();
+        let after = reloaded.find_by_id(id).unwrap();
+        assert_eq!(after.status, before.status, "{id}");
+        assert_eq!(after.recurrence_pattern, before.recurrence_pattern, "{id}");
+        assert_eq!(after.recurrence_config, before.recurrence_config, "{id}");
+    }
+}
+
+// 旧Version 3形式の[[context]]配列（idの代わりにnameを持つ）を読めることを確認
+#[test]
+fn test_legacy_context_array_with_name_field() {
+    let toml_str = r#"
+[[context]]
+name = "Office"
+notes = "Desk"
+"#;
+    let data: GtdData = toml::from_str(toml_str).unwrap();
+    let office = data.find_context_by_name("Office").unwrap();
+    assert_eq!(office.id, "Office");
+    assert_eq!(office.title, "Office");
+    assert_eq!(office.notes, Some("Desk".to_string()));
+}

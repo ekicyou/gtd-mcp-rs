@@ -92,6 +92,8 @@ impl FromStr for NotaStatus {
 #[serde(default)]
 pub struct Nota {
     /// Unique identifier (e.g., "meeting-prep", "website-redesign", "Office")
+    /// `name` is accepted for legacy `[[context]]` arrays that stored the ID as `name`
+    #[serde(alias = "name")]
     pub id: String,
     /// Title describing the nota
     pub title: String,
