@@ -1,15 +1,9 @@
 use crate::git_ops::GitOps;
-#[allow(unused_imports)]
-use crate::gtd::{GtdData, local_date_today};
+use crate::gtd::GtdData;
+use crate::migration::normalize_string_line_endings as normalize_line_endings;
 use anyhow::Result;
 use std::fs;
 use std::path::{Path, PathBuf};
-
-/// Normalize line endings to LF (\n) for internal use
-/// This ensures consistent behavior when deserializing
-fn normalize_line_endings(content: &str) -> String {
-    content.replace("\r\n", "\n").replace('\r', "\n")
-}
 
 /// Convert line endings to OS-native format for file output
 /// On Windows: LF (\n) -> CRLF (\r\n)

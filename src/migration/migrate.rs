@@ -2,9 +2,8 @@
 //!
 //! This module handles migrations between different versions of the GTD data format.
 
-use super::conversions::{nota_to_context, nota_to_project, nota_to_task};
 use super::legacy_types::{Context, Project, ProjectsFormat, Task};
-use crate::gtd::{Nota, NotaStatus};
+use crate::gtd::Nota;
 use serde::Deserialize;
 use std::collections::HashMap;
 
@@ -120,100 +119,5 @@ pub fn populate_project_ids(projects: &mut HashMap<String, Project>) {
 pub fn populate_context_names(contexts: &mut HashMap<String, Context>) {
     for (key, context) in contexts.iter_mut() {
         context.name = key.clone();
-    }
-}
-
-/// Convert unified notas from legacy format to separate arrays (internal format)
-///
-/// Some legacy files may have stored all items (tasks, projects, contexts) in a single `[[notas]]` array.
-/// This function separates them into the internal format for easier processing.
-///
-/// # Arguments
-///
-/// * `notas` - Vector of notas from legacy format
-/// * `inbox` - Output vector for inbox tasks
-/// * `next_action` - Output vector for next_action tasks
-/// * `waiting_for` - Output vector for waiting_for tasks
-/// * `later` - Output vector for later tasks
-/// * `calendar` - Output vector for calendar tasks
-/// * `someday` - Output vector for someday tasks
-/// * `done` - Output vector for done tasks
-/// * `reference` - Output vector for reference tasks
-/// * `trash` - Output vector for trash tasks
-/// * `projects` - Output HashMap for projects
-/// * `contexts` - Output HashMap for contexts
-#[allow(clippy::too_many_arguments)]
-pub fn migrate_notas_v3_to_internal(
-    notas: Vec<Nota>,
-    inbox: &mut Vec<Task>,
-    next_action: &mut Vec<Task>,
-    waiting_for: &mut Vec<Task>,
-    later: &mut Vec<Task>,
-    calendar: &mut Vec<Task>,
-    someday: &mut Vec<Task>,
-    done: &mut Vec<Task>,
-    reference: &mut Vec<Task>,
-    trash: &mut Vec<Task>,
-    projects: &mut HashMap<String, Project>,
-    contexts: &mut HashMap<String, Context>,
-) {
-    for nota in notas {
-        match nota.status {
-            NotaStatus::inbox => {
-                if let Some(task) = nota_to_task(&nota) {
-                    inbox.push(task);
-                }
-            }
-            NotaStatus::next_action => {
-                if let Some(task) = nota_to_task(&nota) {
-                    next_action.push(task);
-                }
-            }
-            NotaStatus::waiting_for => {
-                if let Some(task) = nota_to_task(&nota) {
-                    waiting_for.push(task);
-                }
-            }
-            NotaStatus::later => {
-                if let Some(task) = nota_to_task(&nota) {
-                    later.push(task);
-                }
-            }
-            NotaStatus::calendar => {
-                if let Some(task) = nota_to_task(&nota) {
-                    calendar.push(task);
-                }
-            }
-            NotaStatus::someday => {
-                if let Some(task) = nota_to_task(&nota) {
-                    someday.push(task);
-                }
-            }
-            NotaStatus::done => {
-                if let Some(task) = nota_to_task(&nota) {
-                    done.push(task);
-                }
-            }
-            NotaStatus::reference => {
-                if let Some(task) = nota_to_task(&nota) {
-                    reference.push(task);
-                }
-            }
-            NotaStatus::trash => {
-                if let Some(task) = nota_to_task(&nota) {
-                    trash.push(task);
-                }
-            }
-            NotaStatus::project => {
-                if let Some(project) = nota_to_project(&nota) {
-                    projects.insert(project.id.clone(), project);
-                }
-            }
-            NotaStatus::context => {
-                if let Some(context) = nota_to_context(&nota) {
-                    contexts.insert(context.name.clone(), context);
-                }
-            }
-        }
     }
 }

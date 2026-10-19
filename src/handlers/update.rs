@@ -3,7 +3,6 @@
 use crate::GtdServerHandler;
 use crate::gtd::{self, NotaStatus};
 use crate::validation;
-use chrono::NaiveDate;
 use mcp_attr::{Result as McpResult, bail_public};
 
 impl GtdServerHandler {
@@ -25,7 +24,6 @@ impl GtdServerHandler {
         let mut nota = match data.find_by_id(&id) {
             Some(n) => n,
             None => {
-                drop(data);
                 bail_public!(
                     _,
                     "Item not found: Item '{}' does not exist. Use list() to see available items.",
@@ -40,17 +38,7 @@ impl GtdServerHandler {
         }
 
         if let Some(new_status_str) = status {
-            let new_status: NotaStatus = match new_status_str.parse() {
-                Ok(s) => s,
-                Err(_) => {
-                    drop(data);
-                    bail_public!(
-                        _,
-                        "Invalid status '{}'. Valid statuses: inbox, next_action, waiting_for, later, calendar, someday, done, reference, trash, project, context",
-                        new_status_str
-                    );
-                }
-            };
+            let new_status = validation::parse_status_filter(&new_status_str)?;
             nota.status = new_status;
         }
 
@@ -62,7 +50,6 @@ impl GtdServerHandler {
                 // Validate project exists
                 if data.find_project_by_id(&proj).is_none() {
                     let error_msg = validation::format_invalid_project_error(&proj, &data);
-                    drop(data);
                     bail_public!(_, "{}", error_msg);
                 }
                 Some(proj)
@@ -76,7 +63,6 @@ impl GtdServerHandler {
                 // Validate context exists
                 if data.find_context_by_name(&ctx).is_none() {
                     let error_msg = validation::format_invalid_context_error(&ctx, &data);
-                    drop(data);
                     bail_public!(_, "{}", error_msg);
                 }
                 Some(ctx)
@@ -91,23 +77,12 @@ impl GtdServerHandler {
             nota.start_date = if date_str.is_empty() {
                 None
             } else {
-                match NaiveDate::parse_from_str(&date_str, "%Y-%m-%d") {
-                    Ok(d) => Some(d),
-                    Err(_) => {
-                        drop(data);
-                        bail_public!(
-                            _,
-                            "Invalid date format '{}'. Use YYYY-MM-DD (e.g., '2025-03-15')",
-                            date_str
-                        );
-                    }
-                }
+                Some(validation::parse_date_filter(&date_str)?)
             };
         }
 
         // Validate calendar status has start_date
         if nota.status == NotaStatus::calendar && nota.start_date.is_none() {
-            drop(data);
             bail_public!(
                 _,
                 "Calendar status validation failed: status=calendar requires start_date. Please provide a start_date or change to a different status."
@@ -118,7 +93,6 @@ impl GtdServerHandler {
 
         // Update the nota
         if data.update(&id, nota).is_none() {
-            drop(data);
             bail_public!(_, "Failed to update item '{}'", id);
         }
         drop(data);

@@ -1,8 +1,7 @@
 use chrono::{Datelike, NaiveDate};
 use gtd_mcp::gtd::{GtdData, Nota, NotaStatus, RecurrencePattern, local_date_today};
 use gtd_mcp::migration::{
-    Context, Project, Task, nota_from_context, nota_from_project, nota_from_task, nota_to_context,
-    nota_to_project, nota_to_task,
+    Context, Project, Task, nota_from_context, nota_from_project, nota_from_task, nota_to_task,
 };
 use std::str::FromStr;
 
@@ -2372,50 +2371,6 @@ fn test_nota_to_task_fails_for_project() {
     };
 
     assert!(nota_to_task(&nota).is_none());
-}
-
-#[test]
-fn test_nota_to_project() {
-    let nota = Nota {
-        id: "proj-1".to_string(),
-        title: "Test Project".to_string(),
-        status: NotaStatus::project,
-        project: None,
-        context: Some("Office".to_string()),
-        notes: Some("Project notes".to_string()),
-        start_date: None,
-        created_at: local_date_today(),
-        updated_at: local_date_today(),
-        ..Default::default()
-    };
-
-    let project = nota_to_project(&nota).unwrap();
-
-    assert_eq!(project.id, nota.id);
-    assert_eq!(project.title, nota.title);
-    assert_eq!(project.context, nota.context);
-}
-
-#[test]
-fn test_nota_to_context() {
-    let nota = Nota {
-        id: "Office".to_string(),
-        title: "Office Context".to_string(),
-        status: NotaStatus::context,
-        project: None,
-        context: None,
-        notes: Some("Office location".to_string()),
-        start_date: None,
-        created_at: local_date_today(),
-        updated_at: local_date_today(),
-        ..Default::default()
-    };
-
-    let context = nota_to_context(&nota).unwrap();
-
-    assert_eq!(context.name, nota.id);
-    assert_eq!(context.title, Some(nota.title));
-    assert_eq!(context.notes, nota.notes);
 }
 
 // Nota追加テスト - タスクとして追加
