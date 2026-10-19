@@ -34,8 +34,7 @@ This version uses `mcp-attr` v0.0.7 for declarative server building and implemen
 
 3. **Git Operations** (`src/git_ops.rs`)
    - Automatic git repository detection
-   - Pull, commit, and push operations using git2 crate
-   - Thread-safe implementation with `Arc<Mutex<Repository>>`
+   - Pull, commit, and push operations by running the git CLI on PATH
    - Graceful degradation when git operations fail
 
 4. **MCP Server** (`src/main.rs`)
@@ -252,7 +251,6 @@ Or with the release build:
 - `toml` (0.9): TOML parsing and generation
 - `anyhow` (1.x): Error handling
 - `chrono` (0.4): Date and time handling for task start dates
-- `git2` (0.20): Git operations for automatic version control
 - `clap` (4.x): Command-line argument parsing
 
 ## Client-Provided ID System
@@ -299,7 +297,7 @@ This is a basic implementation. Potential enhancements include:
 
 ## Git Integration
 
-The `gtd.toml` file features automatic git synchronization using the git2 crate:
+The `gtd.toml` file features automatic git synchronization using the git CLI (`git` must be on PATH):
 
 ### Automatic Version Control
 
@@ -317,7 +315,7 @@ This provides:
 ### Implementation Details
 
 The git integration is implemented in `src/git_ops.rs`:
-- Thread-safe using `Arc<Mutex<Repository>>` for async compatibility
+- Runs `git -C <dir> ...` with terminal prompts disabled; authentication follows the user's git configuration
 - **Error propagation**: Git operation failures are now properly returned to the MCP client instead of being silently ignored
 - Only activates when storage file is in a git repository and `--sync-git` is enabled
 - Uses configured `user.name` and `user.email`, falls back to defaults

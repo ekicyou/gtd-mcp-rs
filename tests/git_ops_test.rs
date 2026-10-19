@@ -3,50 +3,49 @@
 //! These tests verify the Git integration functionality,
 //! including commit and sync operations.
 
-use git2::{Repository, Signature, Time};
 use gtd_mcp::GitOps;
 use std::fs;
 use std::path::Path;
+use std::process::Command;
 use tempfile::TempDir;
 
+// git コマンドを実行して標準出力を返す
+fn git(dir: &Path, args: &[&str]) -> String {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(dir)
+        .args(args)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "git {:?} failed: {}",
+        args,
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8_lossy(&output.stdout).trim().to_string()
+}
+
 // git リポジトリの初期化とテスト用ファイルの作成
-fn setup_test_repo() -> (TempDir, Repository) {
+fn setup_test_repo() -> TempDir {
     let temp_dir = TempDir::new().unwrap();
-    let repo = Repository::init(temp_dir.path()).unwrap();
+    git(temp_dir.path(), &["init", "-b", "main"]);
 
     // Configure git user for the test repo
-    let mut config = repo.config().unwrap();
-    config.set_str("user.name", "Test User").unwrap();
-    config.set_str("user.email", "test@example.com").unwrap();
+    git(temp_dir.path(), &["config", "user.name", "Test User"]);
+    git(
+        temp_dir.path(),
+        &["config", "user.email", "test@example.com"],
+    );
 
-    (temp_dir, repo)
+    temp_dir
 }
 
 // 初期コミットを作成
-fn create_initial_commit(repo: &Repository, temp_dir: &TempDir) {
-    let file_path = temp_dir.path().join("test.txt");
-    fs::write(&file_path, "initial content").unwrap();
-
-    let mut index = repo.index().unwrap();
-    index.add_path(Path::new("test.txt")).unwrap();
-    index.write().unwrap();
-
-    let tree_id = index.write_tree().unwrap();
-    let tree = repo.find_tree(tree_id).unwrap();
-
-    // Use a fixed time for signature to avoid CI issues
-    let time = Time::new(1_700_000_000, 0);
-    let signature = Signature::new("Test User", "test@example.com", &time).unwrap();
-
-    repo.commit(
-        Some("HEAD"),
-        &signature,
-        &signature,
-        "Initial commit",
-        &tree,
-        &[],
-    )
-    .unwrap();
+fn create_initial_commit(temp_dir: &TempDir) {
+    fs::write(temp_dir.path().join("test.txt"), "initial content").unwrap();
+    git(temp_dir.path(), &["add", "test.txt"]);
+    git(temp_dir.path(), &["commit", "-m", "Initial commit"]);
 }
 
 // git管理されていないディレクトリの検出テスト
@@ -62,7 +61,7 @@ fn test_non_git_directory() {
 // git管理されているディレクトリの検出テスト
 #[test]
 fn test_git_managed_directory() {
-    let (temp_dir, _repo) = setup_test_repo();
+    let temp_dir = setup_test_repo();
 
     // Create an actual file in the repo so discover can work
     let file_path = temp_dir.path().join("test.toml");
@@ -75,8 +74,8 @@ fn test_git_managed_directory() {
 // コミット機能のテスト
 #[test]
 fn test_commit() {
-    let (temp_dir, repo) = setup_test_repo();
-    create_initial_commit(&repo, &temp_dir);
+    let temp_dir = setup_test_repo();
+    create_initial_commit(&temp_dir);
 
     let file_path = temp_dir.path().join("gtd.toml");
     fs::write(&file_path, "test content").unwrap();
@@ -89,9 +88,10 @@ fn test_commit() {
     assert!(result.is_ok(), "Commit should succeed");
 
     // Verify commit was created
-    let head = repo.head().unwrap();
-    let commit = repo.find_commit(head.target().unwrap()).unwrap();
-    assert_eq!(commit.message().unwrap(), "Update gtd.toml");
+    assert_eq!(
+        git(temp_dir.path(), &["log", "-1", "--format=%s"]),
+        "Update gtd.toml"
+    );
 }
 
 // git管理されていないファイルでのsync操作テスト
@@ -105,4 +105,35 @@ fn test_sync_non_git_file() {
     let result = git_ops.sync(&file_path, "Test commit");
     // Should succeed but do nothing
     assert!(result.is_ok());
+}
+
+// ベアリモートに対する pull → commit → push の同期テスト
+#[test]
+fn test_sync_with_remote() {
+    let remote = TempDir::new().unwrap();
+    git(remote.path(), &["init", "--bare", "-b", "main"]);
+
+    let temp_dir = setup_test_repo();
+    create_initial_commit(&temp_dir);
+    let remote_path = remote.path().to_str().unwrap();
+    git(temp_dir.path(), &["remote", "add", "origin", remote_path]);
+    git(temp_dir.path(), &["push", "origin", "main"]);
+
+    let file_path = temp_dir.path().join("gtd.toml");
+    fs::write(&file_path, "synced").unwrap();
+
+    let git_ops = GitOps::new(&file_path);
+    git_ops.sync(&file_path, "Sync gtd.toml").unwrap();
+
+    assert_eq!(
+        git(remote.path(), &["log", "-1", "--format=%s", "main"]),
+        "Sync gtd.toml"
+    );
+
+    // 変更なしで再同期してもエラーにならず、空コミットも作らない
+    git_ops.sync(&file_path, "No change").unwrap();
+    assert_eq!(
+        git(remote.path(), &["log", "-1", "--format=%s", "main"]),
+        "Sync gtd.toml"
+    );
 }
