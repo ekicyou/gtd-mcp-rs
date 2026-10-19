@@ -6,6 +6,7 @@
 mod common;
 
 use chrono::NaiveDate;
+use common::GtdDataTestExt;
 use gtd_mcp::gtd::{self, local_date_today};
 use gtd_mcp::migration::{self, Task, nota_from_context, nota_from_task};
 use gtd_mcp::{GtdServerHandler, NotaStatus};
@@ -48,7 +49,9 @@ fn test_custom_file_path() {
     drop(data);
 
     // 保存
-    let save_result = handler.save_data();
+    let save_result = handler
+        .storage
+        .save_with_message(&handler.data.lock().unwrap(), "Update GTD data");
     assert!(save_result.is_ok());
 
     // ファイルが作成されていることを確認
@@ -726,7 +729,9 @@ async fn test_update_task_project_and_context() {
             updated_at: None,
         }));
         drop(data);
-        let _ = handler.save_data();
+        let _ = handler
+            .storage
+            .save_with_message(&handler.data.lock().unwrap(), "Update GTD data");
     }
 
     // Add a task
@@ -1358,7 +1363,9 @@ async fn test_update_multiple_fields_simultaneously() {
             updated_at: None,
         }));
         drop(data);
-        let _ = handler.save_data();
+        let _ = handler
+            .storage
+            .save_with_message(&handler.data.lock().unwrap(), "Update GTD data");
     }
 
     // Add a task

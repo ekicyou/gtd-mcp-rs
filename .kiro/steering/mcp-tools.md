@@ -7,7 +7,7 @@
 1. Mutex をロック: `let mut data = self.data.lock().unwrap();`
 2. `GtdData` に対する操作を実行
 3. ロックを解放: `drop(data);`
-4. ディスクに保存: `self.save_data()?`（コミットメッセージを変えたい場合は `save_data_with_message`）
+4. ディスクに保存: `self.save_data_with_message("<コミットメッセージ>")`
 5. エラーには `bail!()` を使用（`mcp_attr::bail`）
 
 ```rust
@@ -15,14 +15,14 @@ pub async fn handle_inbox(&self, id: String, title: String, ...) -> McpResult<St
     let mut data = self.data.lock().unwrap();
     data.add_nota(nota);
     drop(data);
-    if let Err(e) = self.save_data() {
+    if let Err(e) = self.save_data_with_message(&format!("Add item {}", id)) {
         bail!("Failed to save: {}", e);
     }
     Ok(format!("Created: {}", id))
 }
 ```
 
-保存前に必ずロックを解放すること（`save_data` は内部で再ロックするため、解放しないとデッドロックする）。
+保存前に必ずロックを解放すること（`save_data_with_message` は内部で再ロックするため、解放しないとデッドロックする）。
 
 ## doc comment の公開範囲
 

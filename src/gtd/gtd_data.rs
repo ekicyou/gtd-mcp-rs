@@ -1,4 +1,4 @@
-use crate::gtd::nota::{Nota, NotaStatus, local_date_today};
+use crate::gtd::nota::{Nota, NotaStatus};
 use std::collections::HashMap;
 
 pub struct GtdData {
@@ -24,16 +24,10 @@ pub struct GtdData {
     /// The map is kept in sync with the Vec during all mutating operations:
     /// - add_nota: inserts into both Vec and HashMap
     /// - remove_nota: removes from both Vec and HashMap
-    /// - move_status: updates status in both Vec and HashMap
+    /// - update: updates status in both Vec and HashMap
     ///
     /// This is NOT serialized to TOML - it's rebuilt from notas during deserialization.
     pub(crate) nota_map: HashMap<String, NotaStatus>,
-
-    /// Counter for generating unique task IDs
-    pub task_counter: u32,
-
-    /// Counter for generating unique project IDs
-    pub project_counter: u32,
 }
 
 impl Default for GtdData {
@@ -42,8 +36,6 @@ impl Default for GtdData {
             format_version: 3,
             notas: Vec::new(),
             nota_map: HashMap::new(),
-            task_counter: 0,
-            project_counter: 0,
         }
     }
 }
@@ -56,17 +48,6 @@ impl GtdData {
         Self::default()
     }
 
-    /// Generate a new unique task ID
-    pub fn generate_task_id(&mut self) -> String {
-        self.task_counter += 1;
-        format!("#{}", self.task_counter)
-    }
-
-    /// Count total number of task notas across all task statuses
-    pub fn task_count(&self) -> usize {
-        self.notas.iter().filter(|n| n.is_task()).count()
-    }
-
     /// Find a nota by its ID
     ///
     /// # Arguments
@@ -76,39 +57,6 @@ impl GtdData {
     /// An optional reference to the nota if found
     fn find_nota_by_id(&self, id: &str) -> Option<&Nota> {
         self.notas.iter().find(|n| n.id == id)
-    }
-
-    /// Find a nota by its ID and return a mutable reference
-    ///
-    /// # Arguments
-    /// * `id` - The nota ID to search for
-    ///
-    /// # Returns
-    /// An optional mutable reference to the nota if found
-    fn find_nota_by_id_mut(&mut self, id: &str) -> Option<&mut Nota> {
-        self.notas.iter_mut().find(|n| n.id == id)
-    }
-
-    /// Find a task by its ID (for compatibility)
-    ///
-    /// # Arguments
-    /// * `id` - The task ID to search for (e.g., "#1")
-    ///
-    /// # Returns
-    /// An optional Nota reference if found and it's a task
-    pub fn find_task_by_id(&self, id: &str) -> Option<&Nota> {
-        self.notas.iter().find(|n| n.id == id && n.is_task())
-    }
-
-    /// Find a task by its ID and return a mutable reference (for compatibility)
-    ///
-    /// # Arguments
-    /// * `id` - The task ID to search for (e.g., "#1")
-    ///
-    /// # Returns
-    /// An optional mutable Nota reference if found and it's a task
-    pub fn find_task_by_id_mut(&mut self, id: &str) -> Option<&mut Nota> {
-        self.notas.iter_mut().find(|n| n.id == id && n.is_task())
     }
 
     /// Add a nota to the collection
@@ -139,27 +87,6 @@ impl GtdData {
             let nota = self.notas.remove(pos);
             self.nota_map.remove(id);
             Some(nota)
-        } else {
-            None
-        }
-    }
-
-    /// Move a nota to a different status
-    ///
-    /// This method updates the status of the nota.
-    ///
-    /// # Arguments
-    /// * `id` - The nota ID to move
-    /// * `new_status` - The target status
-    ///
-    /// # Returns
-    /// `Some(())` if the nota was found and moved, `None` otherwise
-    pub fn move_status(&mut self, id: &str, new_status: NotaStatus) -> Option<()> {
-        if let Some(nota) = self.find_nota_by_id_mut(id) {
-            nota.status = new_status.clone();
-            nota.updated_at = local_date_today();
-            self.nota_map.insert(id.to_string(), new_status);
-            Some(())
         } else {
             None
         }
@@ -269,7 +196,8 @@ impl GtdData {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::migration::Task;
+    use crate::gtd::nota::local_date_today;
+    use crate::migration::{Task, nota_from_task};
     use chrono::NaiveDate;
 
     // Tests for task_map HashMap functionality
@@ -289,7 +217,7 @@ mod tests {
             created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
             updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
         };
-        data.add_task(task1);
+        data.add(nota_from_task(task1));
 
         // Verify task is in map
         assert!(data.nota_map.contains_key("test-task"));
@@ -309,9 +237,9 @@ mod tests {
         };
 
         // This would add a duplicate - the application layer (lib.rs) should check
-        // the task_map before calling add_task
+        // the task_map before calling add
         // Here we just verify that task_map gets updated
-        data.add_task(task2);
+        data.add(nota_from_task(task2));
 
         // The task_map should now show the new status (last one wins)
         assert_eq!(
@@ -321,8 +249,8 @@ mod tests {
 
         // But there are actually TWO tasks with same ID (one in inbox, one in next_action)
         // This demonstrates why the application layer MUST check task_map before adding
-        assert_eq!(data.inbox().len(), 1);
-        assert_eq!(data.next_action().len(), 1);
+        assert_eq!(data.list_all(Some(NotaStatus::inbox)).len(), 1);
+        assert_eq!(data.list_all(Some(NotaStatus::next_action)).len(), 1);
     }
 
     #[test]
@@ -340,13 +268,13 @@ mod tests {
             created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
             updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
         };
-        data.add_task(task);
+        data.add(nota_from_task(task));
 
         // Verify task is in map
         assert!(data.nota_map.contains_key("remove-test"));
 
         // Remove task
-        let removed = data.remove_task("remove-test");
+        let removed = data.remove_nota("remove-test");
         assert!(removed.is_some());
 
         // Verify task is removed from map
@@ -368,13 +296,15 @@ mod tests {
             created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
             updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
         };
-        data.add_task(task);
+        data.add(nota_from_task(task));
 
         // Verify initial status
         assert_eq!(data.nota_map.get("status-test"), Some(&NotaStatus::inbox));
 
-        // Move to next_action
-        data.move_status("status-test", NotaStatus::next_action);
+        // Move to next_action via update()
+        let mut moved = data.find_by_id("status-test").unwrap();
+        moved.status = NotaStatus::next_action;
+        data.update("status-test", moved);
 
         // Verify status updated in map
         assert_eq!(
@@ -478,7 +408,9 @@ mod tests {
         assert_eq!(data.nota_map.get("Office"), Some(&NotaStatus::context));
 
         // Move status and verify map is updated
-        data.move_status("task-1", NotaStatus::next_action);
+        let mut moved = data.find_by_id("task-1").unwrap();
+        moved.status = NotaStatus::next_action;
+        data.update("task-1", moved);
         assert_eq!(data.nota_map.get("task-1"), Some(&NotaStatus::next_action));
 
         // Remove nota and verify map is updated

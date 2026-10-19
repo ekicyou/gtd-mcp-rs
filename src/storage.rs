@@ -84,17 +84,6 @@ impl Storage {
         Ok(data)
     }
 
-    /// Save GTD data to the storage file with a default commit message
-    ///
-    /// # Arguments
-    /// * `data` - The GtdData to save
-    ///
-    /// # Returns
-    /// Result indicating success or an error
-    pub fn save(&self, data: &GtdData) -> Result<()> {
-        self.save_with_message(data, "Update GTD data")
-    }
-
     /// Save GTD data to the storage file with a custom commit message
     ///
     /// Serializes the data to TOML format with OS-native line endings.

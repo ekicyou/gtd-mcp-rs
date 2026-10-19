@@ -81,18 +81,6 @@ impl GtdServerHandler {
         Ok(Self { data, storage })
     }
 
-    /// Save GTD data with a default commit message.
-    ///
-    /// Persists the current in-memory GTD data to disk using the default commit message
-    /// defined in `Storage::save()`, which is "Update GTD data".
-    /// This is typically called by handler modules after modifying GTD data,
-    /// following the MCP tool implementation pattern.
-    pub fn save_data(&self) -> Result<()> {
-        let data = self.data.lock().unwrap();
-        self.storage.save(&data)?;
-        Ok(())
-    }
-
     /// Save GTD data with a custom commit message.
     ///
     /// Persists the current GTD data to disk and creates a Git commit using the provided message.
