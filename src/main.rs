@@ -4,13 +4,13 @@
 //! The actual implementation is in the `gtd_mcp` library.
 
 use anyhow::Result;
-use clap::{CommandFactory, Parser};
+use clap::Parser;
 use gtd_mcp::GtdServerHandler;
 use mcp_attr::server::serve_stdio;
 
 /// GTD MCP Server - Getting Things Done task management via Model Context Protocol
 #[derive(Parser, Debug)]
-#[command(author, version, about, long_about = None)]
+#[command(author, version, about, long_about = None, arg_required_else_help = true)]
 struct Args {
     /// Path to the GTD data file
     file: String,
@@ -22,15 +22,6 @@ struct Args {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Check if no arguments were provided (except the program name)
-    if std::env::args().len() == 1 {
-        // No arguments provided, show help and exit with error code
-        let mut cmd = Args::command();
-        cmd.print_help().ok();
-        println!(); // Add a newline after help
-        std::process::exit(2);
-    }
-
     let args = Args::parse();
     let handler = GtdServerHandler::new(&args.file, args.sync_git)?;
     serve_stdio(handler).await?;

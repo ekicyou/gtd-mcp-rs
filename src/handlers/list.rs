@@ -17,18 +17,16 @@ impl GtdServerHandler {
         context: Option<String>,
     ) -> McpResult<String> {
         // Parse and validate status filter
-        let status_filter = if let Some(ref status_str) = status {
-            Some(validation::parse_status_filter(status_str)?)
-        } else {
-            None
-        };
+        let status_filter = status
+            .as_deref()
+            .map(validation::parse_status_filter)
+            .transpose()?;
 
         // Parse and validate date filter
-        let date_filter = if let Some(ref date_str) = date {
-            Some(validation::parse_date_filter(date_str)?)
-        } else {
-            None
-        };
+        let date_filter = date
+            .as_deref()
+            .map(validation::parse_date_filter)
+            .transpose()?;
 
         // Get initial list of notas filtered by status
         let data = self.data.lock().unwrap();

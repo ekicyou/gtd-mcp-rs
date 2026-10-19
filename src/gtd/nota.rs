@@ -180,16 +180,7 @@ impl Nota {
                 let weekdays = config?;
                 let target_weekdays: Vec<Weekday> = weekdays
                     .split(',')
-                    .filter_map(|day| match day.trim() {
-                        "Monday" => Some(Weekday::Mon),
-                        "Tuesday" => Some(Weekday::Tue),
-                        "Wednesday" => Some(Weekday::Wed),
-                        "Thursday" => Some(Weekday::Thu),
-                        "Friday" => Some(Weekday::Fri),
-                        "Saturday" => Some(Weekday::Sat),
-                        "Sunday" => Some(Weekday::Sun),
-                        _ => None,
-                    })
+                    .filter_map(|day| day.trim().parse::<Weekday>().ok())
                     .collect();
 
                 if target_weekdays.is_empty() {

@@ -115,31 +115,3 @@ pub fn format_invalid_context_error(context_name: &str, data: &GtdData) -> Strin
 pub fn normalize_task_id(task_id: &str) -> String {
     task_id.trim().to_string()
 }
-
-#[cfg(test)]
-/// Extract ID from response message
-///
-/// Helper function for tests to extract ID from response messages.
-/// Response format: "Item created with ID: <id> (type: task)"
-///
-/// # Arguments
-/// * `response` - The response message from inbox() or similar operations
-///
-/// # Returns
-/// The extracted ID
-pub fn extract_id_from_response(response: &str) -> String {
-    // Parse "Item created with ID: <id> (type: ...)"
-    if let Some(start) = response.find("ID: ") {
-        let id_part = &response[start + 4..];
-        if let Some(end) = id_part.find(" (") {
-            return id_part[..end].trim().to_string();
-        }
-    }
-    // Fallback: try to get last whitespace-separated token without parentheses
-    response
-        .split_whitespace()
-        .last()
-        .unwrap_or("")
-        .trim_end_matches(')')
-        .to_string()
-}

@@ -191,42 +191,6 @@ impl GtdData {
             .find(|n| n.id == name && n.status == NotaStatus::context)
     }
 
-    /// Validate that a nota's project reference exists (if specified)
-    /// Returns true if the nota has no project reference or if the reference is valid
-    pub fn validate_nota_project(&self, nota: &Nota) -> bool {
-        match &nota.project {
-            None => true,
-            Some(project_id) => self.find_project_by_id(project_id).is_some(),
-        }
-    }
-
-    /// Validate that a nota's context reference exists (if specified)
-    /// Returns true if the nota has no context reference or if the reference is valid
-    pub fn validate_nota_context(&self, nota: &Nota) -> bool {
-        match &nota.context {
-            None => true,
-            Some(context_name) => self.find_context_by_name(context_name).is_some(),
-        }
-    }
-
-    /// Update project ID references in all notas
-    ///
-    /// When a project ID changes, this method updates all nota references
-    /// from the old ID to the new ID.
-    ///
-    /// # Arguments
-    /// * `old_id` - The old project ID
-    /// * `new_id` - The new project ID
-    pub fn update_project_id_in_notas(&mut self, old_id: &str, new_id: &str) {
-        for nota in self.notas.iter_mut() {
-            if let Some(ref project_id) = nota.project
-                && project_id == old_id
-            {
-                nota.project = Some(new_id.to_string());
-            }
-        }
-    }
-
     /// Add a nota (unified task/project/context)
     ///
     /// # Arguments

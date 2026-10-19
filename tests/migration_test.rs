@@ -3,7 +3,7 @@
 //! These tests verify the migration functions for upgrading data structures
 //! between different schema versions.
 
-use gtd_mcp::migration::local_date_today;
+use gtd_mcp::gtd::local_date_today;
 use gtd_mcp::migration::{
     Project, migrate_projects_v1_to_v2, normalize_string_line_endings, populate_project_ids,
 };

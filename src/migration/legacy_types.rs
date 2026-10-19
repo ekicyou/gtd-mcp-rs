@@ -4,15 +4,10 @@
 //! that are used for backward compatibility with old TOML formats.
 //! New code should use the Nota structure from the gtd module.
 
-use crate::gtd::NotaStatus;
-use chrono::{Local, NaiveDate};
+use crate::gtd::{NotaStatus, local_date_today};
+use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-
-/// Get the current date in local timezone
-pub fn local_date_today() -> NaiveDate {
-    Local::now().date_naive()
-}
 
 /// Default task status for deserialization
 fn default_task_status() -> NotaStatus {
@@ -106,36 +101,6 @@ pub struct Project {
     /// Defaults to None if not specified in the TOML file.
     #[serde(skip_serializing, default)]
     pub status: Option<String>,
-}
-
-impl Project {
-    /// Create a new Project with all required fields, status defaults to None
-    ///
-    /// This helper method is used during migration from legacy formats to ensure
-    /// the status field is always set to None (it's not persisted in new format).
-    #[allow(clippy::too_many_arguments)]
-    pub fn new(
-        id: String,
-        title: String,
-        notes: Option<String>,
-        project: Option<String>,
-        context: Option<String>,
-        start_date: Option<NaiveDate>,
-        created_at: NaiveDate,
-        updated_at: NaiveDate,
-    ) -> Self {
-        Self {
-            id,
-            title,
-            notes,
-            project,
-            context,
-            start_date,
-            created_at,
-            updated_at,
-            status: None,
-        }
-    }
 }
 
 /// A GTD context (legacy, used for migration only)

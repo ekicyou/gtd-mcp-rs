@@ -3,7 +3,6 @@
 use crate::GtdServerHandler;
 use crate::gtd::{self, NotaStatus};
 use crate::validation;
-use chrono::NaiveDate;
 use mcp_attr::{Result as McpResult, bail_public};
 
 impl GtdServerHandler {
@@ -22,36 +21,15 @@ impl GtdServerHandler {
         let mut data = self.data.lock().unwrap();
 
         // Parse new status once
-        let nota_status: NotaStatus = match new_status.parse() {
-            Ok(s) => s,
-            Err(_) => {
-                drop(data);
-                bail_public!(
-                    _,
-                    "Invalid status '{}'. Valid statuses: inbox, next_action, waiting_for, later, calendar, someday, done, reference, trash, project, context",
-                    new_status
-                );
-            }
-        };
+        let nota_status = validation::parse_status_filter(&new_status)?;
 
         let is_trash = nota_status == NotaStatus::trash;
 
         // Parse start_date once if provided
-        let parsed_start_date = if let Some(date_str) = &start_date {
-            match NaiveDate::parse_from_str(date_str, "%Y-%m-%d") {
-                Ok(d) => Some(d),
-                Err(_) => {
-                    drop(data);
-                    bail_public!(
-                        _,
-                        "Invalid date format '{}'. Use YYYY-MM-DD (e.g., '2025-03-15')",
-                        date_str
-                    );
-                }
-            }
-        } else {
-            None
-        };
+        let parsed_start_date = start_date
+            .as_deref()
+            .map(validation::parse_date_filter)
+            .transpose()?;
 
         // Track successes and failures
         let mut successes = Vec::new();
