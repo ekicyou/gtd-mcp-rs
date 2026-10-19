@@ -1,4 +1,7 @@
+mod common;
+
 use chrono::{Datelike, NaiveDate};
+use common::GtdDataTestExt;
 use gtd_mcp::gtd::{GtdData, Nota, NotaStatus, RecurrencePattern, local_date_today};
 use gtd_mcp::migration::{
     Context, Project, Task, nota_from_context, nota_from_project, nota_from_task, nota_to_task,
@@ -124,7 +127,7 @@ fn test_gtd_data_remove_task() {
     assert_eq!(data.task_count(), 1);
     assert_eq!(data.inbox().len(), 1);
 
-    data.remove_task(&task_id);
+    data.remove_nota(&task_id);
     assert_eq!(data.task_count(), 0);
     assert_eq!(data.inbox().len(), 0);
 }
@@ -1315,288 +1318,6 @@ name = "Home"
     );
 }
 
-// 参照整合性検証テスト - プロジェクト参照が有効
-// タスクのプロジェクト参照が存在するプロジェクトを指している場合、検証が成功することを確認
-#[test]
-fn test_validate_task_project_valid() {
-    let mut data = GtdData::new();
-
-    data.add_project(Project {
-        status: None,
-        id: "project-1".to_string(),
-        title: "Test Project".to_string(),
-        notes: None,
-        project: None,
-        start_date: None,
-        created_at: local_date_today(),
-        updated_at: local_date_today(),
-        context: None,
-    });
-
-    let task = Task {
-        id: "task-1".to_string(),
-        title: "Test Task".to_string(),
-        status: NotaStatus::inbox,
-        project: Some("project-1".to_string()),
-        context: None,
-        notes: None,
-        start_date: None,
-        created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
-        updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
-    };
-
-    assert!(data.validate_task_project(&task));
-}
-
-// 参照整合性検証テスト - プロジェクト参照が無効
-// タスクのプロジェクト参照が存在しないプロジェクトを指している場合、検証が失敗することを確認
-#[test]
-fn test_validate_task_project_invalid() {
-    let data = GtdData::new();
-
-    let task = Task {
-        id: "task-1".to_string(),
-        title: "Test Task".to_string(),
-        status: NotaStatus::inbox,
-        project: Some("non-existent-project".to_string()),
-        context: None,
-        notes: None,
-        start_date: None,
-        created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
-        updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
-    };
-
-    assert!(!data.validate_task_project(&task));
-}
-
-// 参照整合性検証テスト - プロジェクト参照がNone
-// タスクのプロジェクト参照がNoneの場合、検証が成功することを確認
-#[test]
-fn test_validate_task_project_none() {
-    let data = GtdData::new();
-
-    let task = Task {
-        id: "task-1".to_string(),
-        title: "Test Task".to_string(),
-        status: NotaStatus::inbox,
-        project: None,
-        context: None,
-        notes: None,
-        start_date: None,
-        created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
-        updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
-    };
-
-    assert!(data.validate_task_project(&task));
-}
-
-// 参照整合性検証テスト - コンテキスト参照が有効
-// タスクのコンテキスト参照が存在するコンテキストを指している場合、検証が成功することを確認
-#[test]
-fn test_validate_task_context_valid() {
-    let mut data = GtdData::new();
-
-    data.add_context(Context {
-        name: "Office".to_string(),
-        notes: None,
-        title: None,
-        status: NotaStatus::context,
-        project: None,
-        context: None,
-        start_date: None,
-        created_at: None,
-        updated_at: None,
-    });
-
-    let task = Task {
-        id: "task-1".to_string(),
-        title: "Test Task".to_string(),
-        status: NotaStatus::inbox,
-        project: None,
-        context: Some("Office".to_string()),
-        notes: None,
-        start_date: None,
-        created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
-        updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
-    };
-
-    assert!(data.validate_task_context(&task));
-}
-
-// 参照整合性検証テスト - コンテキスト参照が無効
-// タスクのコンテキスト参照が存在しないコンテキストを指している場合、検証が失敗することを確認
-#[test]
-fn test_validate_task_context_invalid() {
-    let data = GtdData::new();
-
-    let task = Task {
-        id: "task-1".to_string(),
-        title: "Test Task".to_string(),
-        status: NotaStatus::inbox,
-        project: None,
-        context: Some("NonExistent".to_string()),
-        notes: None,
-        start_date: None,
-        created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
-        updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
-    };
-
-    assert!(!data.validate_task_context(&task));
-}
-
-// 参照整合性検証テスト - コンテキスト参照がNone
-// タスクのコンテキスト参照がNoneの場合、検証が成功することを確認
-#[test]
-fn test_validate_task_context_none() {
-    let data = GtdData::new();
-
-    let task = Task {
-        id: "task-1".to_string(),
-        title: "Test Task".to_string(),
-        status: NotaStatus::inbox,
-        project: None,
-        context: None,
-        notes: None,
-        start_date: None,
-        created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
-        updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
-    };
-
-    assert!(data.validate_task_context(&task));
-}
-
-// 参照整合性検証テスト - 全ての参照が有効
-// タスクのプロジェクトとコンテキストの両方の参照が有効な場合、検証が成功することを確認
-#[test]
-fn test_validate_task_references_all_valid() {
-    let mut data = GtdData::new();
-
-    data.add_project(Project {
-        status: None,
-        id: "project-1".to_string(),
-        title: "Test Project".to_string(),
-        notes: None,
-        project: None,
-        start_date: None,
-        created_at: local_date_today(),
-        updated_at: local_date_today(),
-        context: None,
-    });
-
-    data.add_context(Context {
-        name: "Office".to_string(),
-        notes: None,
-        title: None,
-        status: NotaStatus::context,
-        project: None,
-        context: None,
-        start_date: None,
-        created_at: None,
-        updated_at: None,
-    });
-
-    let task = Task {
-        id: "task-1".to_string(),
-        title: "Test Task".to_string(),
-        status: NotaStatus::inbox,
-        project: Some("project-1".to_string()),
-        context: Some("Office".to_string()),
-        notes: None,
-        start_date: None,
-        created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
-        updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
-    };
-
-    assert!(data.validate_task_references(&task));
-}
-
-// 参照整合性検証テスト - プロジェクト参照のみ無効
-// プロジェクト参照が無効でコンテキスト参照が有効な場合、検証が失敗することを確認
-#[test]
-fn test_validate_task_references_invalid_project() {
-    let mut data = GtdData::new();
-
-    data.add_context(Context {
-        name: "Office".to_string(),
-        notes: None,
-        title: None,
-        status: NotaStatus::context,
-        project: None,
-        context: None,
-        start_date: None,
-        created_at: None,
-        updated_at: None,
-    });
-
-    let task = Task {
-        id: "task-1".to_string(),
-        title: "Test Task".to_string(),
-        status: NotaStatus::inbox,
-        project: Some("non-existent-project".to_string()),
-        context: Some("Office".to_string()),
-        notes: None,
-        start_date: None,
-        created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
-        updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
-    };
-
-    assert!(!data.validate_task_references(&task));
-}
-
-// 参照整合性検証テスト - コンテキスト参照のみ無効
-// コンテキスト参照が無効でプロジェクト参照が有効な場合、検証が失敗することを確認
-#[test]
-fn test_validate_task_references_invalid_context() {
-    let mut data = GtdData::new();
-
-    data.add_project(Project {
-        status: None,
-        id: "project-1".to_string(),
-        title: "Test Project".to_string(),
-        notes: None,
-        project: None,
-        start_date: None,
-        created_at: local_date_today(),
-        updated_at: local_date_today(),
-        context: None,
-    });
-
-    let task = Task {
-        id: "task-1".to_string(),
-        title: "Test Task".to_string(),
-        status: NotaStatus::inbox,
-        project: Some("project-1".to_string()),
-        context: Some("NonExistent".to_string()),
-        notes: None,
-        start_date: None,
-        created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
-        updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
-    };
-
-    assert!(!data.validate_task_references(&task));
-}
-
-// 参照整合性検証テスト - 両方の参照が無効
-// プロジェクトとコンテキストの両方の参照が無効な場合、検証が失敗することを確認
-#[test]
-fn test_validate_task_references_both_invalid() {
-    let data = GtdData::new();
-
-    let task = Task {
-        id: "task-1".to_string(),
-        title: "Test Task".to_string(),
-        status: NotaStatus::inbox,
-        project: Some("non-existent-project".to_string()),
-        context: Some("NonExistent".to_string()),
-        notes: None,
-        start_date: None,
-        created_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
-        updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
-    };
-
-    assert!(!data.validate_task_references(&task));
-}
-
 // 作成日と更新日のテスト
 // タスクが作成されたとき、created_atとupdated_atが同じ日付に設定されることを確認
 #[test]
@@ -1670,10 +1391,10 @@ fn test_task_created_at_immutable() {
     data.add_task(task);
 
     // タスクのステータスを更新
-    if let Some(task) = data.find_task_by_id_mut(&task_id) {
-        task.status = NotaStatus::next_action;
-        task.updated_at = NaiveDate::from_ymd_opt(2024, 3, 20).unwrap();
-    }
+    let mut task = data.find_task_by_id(&task_id).unwrap();
+    task.status = NotaStatus::next_action;
+    task.updated_at = NaiveDate::from_ymd_opt(2024, 3, 20).unwrap();
+    data.update(&task_id, task);
 
     // created_atは変更されていないことを確認
     let task = data.find_task_by_id(&task_id).unwrap();
@@ -1706,139 +1427,27 @@ fn test_task_dates_serialization() {
     assert_eq!(deserialized.updated_at, date);
 }
 
-// ID生成テスト - タスクIDが連番で生成されることを確認
+// 旧カウンタ互換テスト - task_counter/project_counter を含む旧TOMLを読み込めることを確認
+// カウンタは読み捨てられ、再保存時には出力されない
 #[test]
-fn test_generate_task_id() {
-    let mut data = GtdData::new();
+fn test_legacy_counters_ignored() {
+    let toml_str = r#"
+format_version = 3
+task_counter = 62
+project_counter = 4
 
-    let id1 = data.generate_task_id();
-    let id2 = data.generate_task_id();
-    let id3 = data.generate_task_id();
-
-    assert_eq!(id1, "#1");
-    assert_eq!(id2, "#2");
-    assert_eq!(id3, "#3");
-    assert_eq!(data.task_counter, 3);
-}
-
-// ID生成テスト - カウンターの永続化を確認
-#[test]
-fn test_counter_serialization() {
-    let mut data = GtdData::new();
-
-    // Generate some IDs
-    data.generate_task_id();
-    data.generate_task_id();
-
-    // Serialize
-    let serialized = toml::to_string_pretty(&data).unwrap();
-
-    // Check that counter is in the serialized output
-    assert!(
-        serialized.contains("task_counter = 2"),
-        "task_counter should be serialized"
-    );
-
-    // Deserialize
-    let deserialized: GtdData = toml::from_str(&serialized).unwrap();
-    assert_eq!(deserialized.task_counter, 2);
-
-    // Next ID should continue from where we left off
-    let mut data = deserialized;
-    assert_eq!(data.generate_task_id(), "#3");
-}
-
-// ID生成テスト - カウンターが0の場合はTOMLに含まれないことを確認
-#[test]
-fn test_counter_skip_serializing_if_zero() {
-    let data = GtdData::new();
+[[inbox]]
+id = "task-1"
+title = "Task"
+created_at = "2024-01-01"
+updated_at = "2024-01-01"
+"#;
+    let data: GtdData = toml::from_str(toml_str).unwrap();
+    assert_eq!(data.inbox().len(), 1);
 
     let serialized = toml::to_string_pretty(&data).unwrap();
-
-    // Counters should not appear in serialized output when they are 0
-    assert!(
-        !serialized.contains("task_counter"),
-        "task_counter should not be serialized when 0"
-    );
-    assert!(
-        !serialized.contains("project_counter"),
-        "project_counter should not be serialized when 0"
-    );
-}
-
-// プロジェクトのコンテキスト参照検証テスト - 有効な参照
-// プロジェクトのコンテキスト参照が存在するコンテキストを指している場合、検証が成功することを確認
-#[test]
-fn test_validate_project_context_valid() {
-    let mut data = GtdData::new();
-
-    data.add_context(Context {
-        name: "Office".to_string(),
-        notes: None,
-        title: None,
-        status: NotaStatus::context,
-        project: None,
-        context: None,
-        start_date: None,
-        created_at: None,
-        updated_at: None,
-    });
-
-    let project = Project {
-        status: None,
-        id: "project-1".to_string(),
-        title: "Test Project".to_string(),
-        notes: None,
-        project: None,
-        start_date: None,
-        created_at: local_date_today(),
-        updated_at: local_date_today(),
-        context: Some("Office".to_string()),
-    };
-
-    assert!(data.validate_project_context(&project));
-}
-
-// プロジェクトのコンテキスト参照検証テスト - 無効な参照
-// プロジェクトのコンテキスト参照が存在しないコンテキストを指している場合、検証が失敗することを確認
-#[test]
-fn test_validate_project_context_invalid() {
-    let data = GtdData::new();
-
-    let project = Project {
-        status: None,
-        id: "project-1".to_string(),
-        title: "Test Project".to_string(),
-        notes: None,
-        project: None,
-        start_date: None,
-        created_at: local_date_today(),
-        updated_at: local_date_today(),
-        context: Some("NonExistent".to_string()),
-    };
-
-    assert!(!data.validate_project_context(&project));
-}
-
-// プロジェクトのコンテキスト参照検証テスト - コンテキスト参照がNone
-// プロジェクトのコンテキスト参照がNoneの場合、検証が成功することを確認
-#[test]
-fn test_validate_project_context_none() {
-    let data = GtdData::new();
-
-    let project = Project {
-        status: None,
-        id: "project-1".to_string(),
-        title: "Test Project".to_string(),
-        notes: None,
-        project: None,
-        start_date: None,
-        created_at: local_date_today(),
-        updated_at: local_date_today(),
-        context: None,
-    };
-
-    assert!(data.validate_project_context(&project));
+    assert!(!serialized.contains("task_counter"));
+    assert!(!serialized.contains("project_counter"));
 }
 
 // プロジェクトとタスクの両方にコンテキストを設定するテスト
@@ -1884,8 +1493,8 @@ fn test_project_and_task_with_same_context() {
         updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
     };
 
-    assert!(data.validate_project_context(&project));
-    assert!(data.validate_task_context(&task));
+    assert!(data.find_context_by_name("Office").is_some());
+    assert!(data.find_project_by_id("project-1").is_some());
     assert_eq!(project.context, task.context);
 }
 

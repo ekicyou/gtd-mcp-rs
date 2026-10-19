@@ -78,8 +78,6 @@ impl<'de> Deserialize<'de> for GtdData {
             format_version: 3, // Use version 3 for in-memory representation
             notas,
             nota_map,
-            task_counter: helper.task_counter,
-            project_counter: helper.project_counter,
         })
     }
 }
@@ -100,13 +98,6 @@ impl Serialize for GtdData {
             if !notas.is_empty() {
                 state.serialize_field(key, &notas)?;
             }
-        }
-
-        if self.task_counter != 0 {
-            state.serialize_field("task_counter", &self.task_counter)?;
-        }
-        if self.project_counter != 0 {
-            state.serialize_field("project_counter", &self.project_counter)?;
         }
 
         state.end()

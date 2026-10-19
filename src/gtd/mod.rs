@@ -4,7 +4,7 @@
 //! It is split into submodules for better organization:
 //! - `nota`: Unified nota structure (tasks, projects, contexts)
 //! - `gtd_data`: Main data container with all GTD operations
-//! - `queries`: Query and compatibility methods for GtdData
+//! - `queries`: Query methods for GtdData
 //! - `serde_impl`: Serialization/deserialization implementations
 
 mod gtd_data;

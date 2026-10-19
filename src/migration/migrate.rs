@@ -45,10 +45,6 @@ pub struct GtdDataMigrationHelper {
     pub(crate) contexts: HashMap<String, Context>,
     #[serde(default)]
     pub(crate) notas: Vec<Nota>,
-    #[serde(default)]
-    pub(crate) task_counter: u32,
-    #[serde(default)]
-    pub(crate) project_counter: u32,
 }
 
 impl GtdDataMigrationHelper {

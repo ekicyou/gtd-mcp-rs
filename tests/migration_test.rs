@@ -3,6 +3,9 @@
 //! These tests verify the migration functions for upgrading data structures
 //! between different schema versions.
 
+mod common;
+
+use common::GtdDataTestExt;
 use gtd_mcp::gtd::local_date_today;
 use gtd_mcp::migration::{
     Project, migrate_projects_v1_to_v2, normalize_string_line_endings, populate_project_ids,
@@ -211,7 +214,7 @@ context = "仕事"
 
     // Verify the task was loaded
     assert_eq!(data.next_action().len(), 1);
-    let task = data.next_action()[0];
+    let task = &data.next_action()[0];
     assert_eq!(task.id, "#13");
     assert_eq!(task.title, "4章を攻略する");
 }

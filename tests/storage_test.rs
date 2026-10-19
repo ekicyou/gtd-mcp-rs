@@ -3,7 +3,10 @@
 //! These tests verify the file-based TOML storage functionality,
 //! including save/load operations and data integrity.
 
+mod common;
+
 use chrono::NaiveDate;
+use common::GtdDataTestExt;
 use gtd_mcp::gtd::local_date_today;
 use gtd_mcp::migration::{Context, Project, Task};
 use gtd_mcp::{GtdData, NotaStatus, Storage};
@@ -53,7 +56,7 @@ fn test_storage_save_and_load_empty_data() {
     let storage = Storage::new(&test_path, false);
     let data = GtdData::new();
 
-    let save_result = storage.save(&data);
+    let save_result = storage.save_with_message(&data, "Update GTD data");
     assert!(save_result.is_ok());
 
     let load_result = storage.load();
@@ -92,7 +95,7 @@ fn test_storage_save_and_load_with_tasks() {
     };
     data.add_task(task.clone());
 
-    let save_result = storage.save(&data);
+    let save_result = storage.save_with_message(&data, "Update GTD data");
     assert!(save_result.is_ok());
 
     let load_result = storage.load();
@@ -139,7 +142,7 @@ fn test_storage_save_and_load_with_projects() {
     };
     data.add_project(project.clone());
 
-    let save_result = storage.save(&data);
+    let save_result = storage.save_with_message(&data, "Update GTD data");
     assert!(save_result.is_ok());
 
     let load_result = storage.load();
@@ -180,7 +183,7 @@ fn test_storage_save_and_load_with_contexts() {
     };
     data.add_context(context.clone());
 
-    let save_result = storage.save(&data);
+    let save_result = storage.save_with_message(&data, "Update GTD data");
     assert!(save_result.is_ok());
 
     let load_result = storage.load();
@@ -255,7 +258,7 @@ fn test_storage_save_and_load_comprehensive() {
         data.add_context(context);
     }
 
-    let save_result = storage.save(&data);
+    let save_result = storage.save_with_message(&data, "Update GTD data");
     assert!(save_result.is_ok());
 
     let load_result = storage.load();
@@ -294,7 +297,9 @@ fn test_storage_overwrite_existing_file() {
         updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
     };
     data1.add_task(task1);
-    storage.save(&data1).unwrap();
+    storage
+        .save_with_message(&data1, "Update GTD data")
+        .unwrap();
 
     // Second save (overwrite)
     let mut data2 = GtdData::new();
@@ -310,7 +315,9 @@ fn test_storage_overwrite_existing_file() {
         updated_at: NaiveDate::from_ymd_opt(2024, 1, 1).unwrap(),
     };
     data2.add_task(task2);
-    storage.save(&data2).unwrap();
+    storage
+        .save_with_message(&data2, "Update GTD data")
+        .unwrap();
 
     // Load and verify
     let loaded_data = storage.load().unwrap();
@@ -376,7 +383,7 @@ fn test_storage_different_status_values() {
         data.add_task(task);
     }
 
-    storage.save(&data).unwrap();
+    storage.save_with_message(&data, "Update GTD data").unwrap();
     let loaded_data = storage.load().unwrap();
 
     assert_eq!(loaded_data.task_count(), 8);
@@ -396,7 +403,7 @@ fn test_storage_sync_git_flag_false() {
     let data = GtdData::new();
 
     // 保存が成功することを確認（git同期は行われない）
-    let save_result = storage.save(&data);
+    let save_result = storage.save_with_message(&data, "Update GTD data");
     assert!(save_result.is_ok());
 
     // ファイルが作成されていることを確認
@@ -417,7 +424,7 @@ fn test_storage_sync_git_flag_true_non_git() {
     let data = GtdData::new();
 
     // 保存が成功することを確認（git管理されていないので同期は行われない）
-    let save_result = storage.save(&data);
+    let save_result = storage.save_with_message(&data, "Update GTD data");
     assert!(save_result.is_ok());
 
     // ファイルが作成されていることを確認
@@ -443,7 +450,7 @@ fn test_storage_create_file_with_missing_parent_directory() {
     let data = GtdData::new();
 
     // 保存が成功することを確認（親ディレクトリが自動作成される）
-    let save_result = storage.save(&data);
+    let save_result = storage.save_with_message(&data, "Update GTD data");
     assert!(save_result.is_ok());
 
     // ファイルが作成されていることを確認
@@ -486,7 +493,7 @@ fn test_storage_save_creates_file() {
     data.add_task(task);
 
     // 保存が成功することを確認
-    let save_result = storage.save(&data);
+    let save_result = storage.save_with_message(&data, "Update GTD data");
     assert!(save_result.is_ok());
 
     // ファイルが作成されていることを確認
@@ -606,7 +613,7 @@ fn test_storage_git_sync_on_save() {
 
     // 保存を試みるが、git syncがremoteを探してエラーで失敗することを確認
     // (Before fix: git errors were silently ignored. After fix: errors are propagated)
-    let save_result = storage.save(&data);
+    let save_result = storage.save_with_message(&data, "Update GTD data");
     assert!(save_result.is_err());
 
     // ファイルは作成されているが、gitコミットは完了していない
@@ -715,7 +722,7 @@ fn test_storage_multiline_notes_line_endings() {
     data.add_task(task);
 
     // Save and load
-    storage.save(&data).unwrap();
+    storage.save_with_message(&data, "Update GTD data").unwrap();
     let loaded_data = storage.load().unwrap();
 
     // Verify notes are preserved with normalized line endings
@@ -751,7 +758,7 @@ fn test_storage_file_has_native_line_endings() {
     };
     data.add_task(task);
 
-    storage.save(&data).unwrap();
+    storage.save_with_message(&data, "Update GTD data").unwrap();
 
     // Read raw file content to check line endings
     let raw_content = fs::read_to_string(&test_path).unwrap();
@@ -809,7 +816,7 @@ fn test_storage_cr_in_notes_converted_to_native() {
     assert_eq!(task.notes, Some("Line 1\nLine 2\nLine 3\n".to_string()));
 
     // Save the data back
-    storage.save(&data).unwrap();
+    storage.save_with_message(&data, "Update GTD data").unwrap();
 
     // Read raw file to check line endings
     let raw_content = fs::read_to_string(&test_path).unwrap();
@@ -893,7 +900,7 @@ fn test_storage_toml_escaped_cr_normalized() {
     );
 
     // Save the data back
-    storage.save(&data).unwrap();
+    storage.save_with_message(&data, "Update GTD data").unwrap();
 
     // Read raw file to verify line endings
     let raw_content = fs::read_to_string(&test_path).unwrap();
