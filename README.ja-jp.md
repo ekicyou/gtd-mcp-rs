@@ -197,6 +197,8 @@ notes = "デスクとコンピュータがある作業環境"
 - 説明的なメッセージで変更をコミット
 - 保存後にリモートにpush
 
+PATH 上に `git` が必要です。認証は git の設定（`gh auth setup-git` などの credential helper や SSH エージェント）に従います。
+
 設定：
 ```bash
 git init

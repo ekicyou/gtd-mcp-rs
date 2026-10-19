@@ -507,40 +507,35 @@ fn test_storage_save_creates_file() {
     let _ = fs::remove_file(&test_path);
 }
 
+// git リポジトリを初期化し、HEAD が存在するよう初期コミットを作成
+fn init_repo_with_commit(dir: &Path) {
+    fs::write(dir.join("dummy.txt"), "dummy").unwrap();
+    for args in [
+        &["init"][..],
+        &["config", "user.name", "Test User"],
+        &["config", "user.email", "test@example.com"],
+        &["add", "dummy.txt"],
+        &["commit", "-m", "Initial commit"],
+    ] {
+        let status = std::process::Command::new("git")
+            .arg("-C")
+            .arg(dir)
+            .args(args)
+            .output()
+            .unwrap()
+            .status;
+        assert!(status.success(), "git {:?} failed", args);
+    }
+}
+
 // git管理下でのload時のpull動作テスト
 #[test]
 fn test_storage_git_pull_on_load() {
-    use git2::{Repository, Signature, Time};
     use tempfile::TempDir;
 
-    // テスト用のgitリポジトリを作成
+    // テスト用のgitリポジトリを作成（初期コミット済み）
     let temp_dir = TempDir::new().unwrap();
-    let repo = Repository::init(temp_dir.path()).unwrap();
-
-    // Configure git user
-    let mut config = repo.config().unwrap();
-    config.set_str("user.name", "Test User").unwrap();
-    config.set_str("user.email", "test@example.com").unwrap();
-
-    // Create an initial commit first so HEAD exists
-    let dummy_file = temp_dir.path().join("dummy.txt");
-    fs::write(&dummy_file, "dummy").unwrap();
-    let mut index = repo.index().unwrap();
-    index.add_path(Path::new("dummy.txt")).unwrap();
-    index.write().unwrap();
-    let tree_id = index.write_tree().unwrap();
-    let tree = repo.find_tree(tree_id).unwrap();
-    let time = Time::new(1_700_000_000, 0);
-    let signature = Signature::new("Test User", "test@example.com", &time).unwrap();
-    repo.commit(
-        Some("HEAD"),
-        &signature,
-        &signature,
-        "Initial commit",
-        &tree,
-        &[],
-    )
-    .unwrap();
+    init_repo_with_commit(temp_dir.path());
 
     // Now create gtd.toml
     let test_path = temp_dir.path().join("gtd.toml");
@@ -557,41 +552,11 @@ fn test_storage_git_pull_on_load() {
 // git管理下でのsave時のsync動作テスト
 #[test]
 fn test_storage_git_sync_on_save() {
-    use git2::{Repository, Signature, Time};
     use tempfile::TempDir;
 
-    // テスト用のgitリポジトリを作成
+    // テスト用のgitリポジトリを作成（初期コミット済み）
     let temp_dir = TempDir::new().unwrap();
-    let repo = Repository::init(temp_dir.path()).unwrap();
-
-    // Configure git user
-    let mut config = repo.config().unwrap();
-    config.set_str("user.name", "Test User").unwrap();
-    config.set_str("user.email", "test@example.com").unwrap();
-
-    // 初期コミットを作成
-    let dummy_file = temp_dir.path().join("dummy.txt");
-    fs::write(&dummy_file, "dummy").unwrap();
-
-    let mut index = repo.index().unwrap();
-    index.add_path(Path::new("dummy.txt")).unwrap();
-    index.write().unwrap();
-
-    let tree_id = index.write_tree().unwrap();
-    let tree = repo.find_tree(tree_id).unwrap();
-
-    let time = Time::new(1_700_000_000, 0);
-    let signature = Signature::new("Test User", "test@example.com", &time).unwrap();
-
-    repo.commit(
-        Some("HEAD"),
-        &signature,
-        &signature,
-        "Initial commit",
-        &tree,
-        &[],
-    )
-    .unwrap();
+    init_repo_with_commit(temp_dir.path());
 
     // gtd.tomlファイルを作成して保存
     let test_path = temp_dir.path().join("gtd.toml");
@@ -628,37 +593,11 @@ fn test_storage_git_sync_on_save() {
 // shutdown時のpush動作テスト
 #[test]
 fn test_storage_git_push_on_shutdown() {
-    use git2::Repository;
     use tempfile::TempDir;
 
-    // テスト用のgitリポジトリを作成
+    // テスト用のgitリポジトリを作成（初期コミット済み）
     let temp_dir = TempDir::new().unwrap();
-    let repo = Repository::init(temp_dir.path()).unwrap();
-
-    // Configure git user
-    let mut config = repo.config().unwrap();
-    config.set_str("user.name", "Test User").unwrap();
-    config.set_str("user.email", "test@example.com").unwrap();
-
-    // Create a commit so HEAD exists
-    let dummy_file = temp_dir.path().join("dummy.txt");
-    fs::write(&dummy_file, "dummy").unwrap();
-    let mut index = repo.index().unwrap();
-    index.add_path(Path::new("dummy.txt")).unwrap();
-    index.write().unwrap();
-    let tree_id = index.write_tree().unwrap();
-    let tree = repo.find_tree(tree_id).unwrap();
-    let time = git2::Time::new(1_700_000_000, 0);
-    let signature = git2::Signature::new("Test User", "test@example.com", &time).unwrap();
-    repo.commit(
-        Some("HEAD"),
-        &signature,
-        &signature,
-        "Initial commit",
-        &tree,
-        &[],
-    )
-    .unwrap();
+    init_repo_with_commit(temp_dir.path());
 
     let test_path = temp_dir.path().join("gtd.toml");
     let storage = Storage::new(&test_path, true);

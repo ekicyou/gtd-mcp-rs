@@ -183,6 +183,8 @@ Enable automatic Git synchronization with the `--sync-git` flag. The server will
 - Commit changes with descriptive messages
 - Push to remote after saving
 
+Requires `git` on PATH; authentication follows your git configuration (credential helpers such as `gh auth setup-git`, SSH agent).
+
 Setup:
 ```bash
 git init
